@@ -1,7 +1,7 @@
 import { describe, it, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { recordConversion, recordRefund } from '../../src/webhook.js';
-import { recordInvoicePayment, addMonths } from '../../src/invoice.js';
+import { recordConversion, recordRefund } from '../../src/webhook.ts';
+import { recordInvoicePayment, addMonths } from '../../src/invoice.ts';
 import { database } from './_db.js';
 
 const cleanups = [];

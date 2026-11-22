@@ -1,7 +1,7 @@
 import { describe, it, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { releaseHeldConversions } from '../../src/index.js';
-import { onRequestPost as reviewPost } from '../../functions/api/admin/affiliate-review.js';
+import { releaseHeldConversions } from '../../src/index.ts';
+import { onRequestPost as reviewPost } from '../../functions/api/admin/affiliate-review.ts';
 import { database, context } from './_db.js';
 
 const cleanups = [];

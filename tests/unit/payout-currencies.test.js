@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { database, context } from './_db.js';
-import { onRequestPost as payout } from '../../functions/api/admin/payouts-run.js';
+import { onRequestPost as payout } from '../../functions/api/admin/payouts-run.ts';
 
 let sql, env, stripe;
 const run = () => payout(context(env, '/api/admin/payouts-run', {}));

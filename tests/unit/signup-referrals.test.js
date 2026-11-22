@@ -1,8 +1,8 @@
 import { describe, it, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { recordSignupReferral } from '../../src/referral.js';
-import { attachAffiliateAttribution } from '../../src/checkout.js';
-import { recordConversion } from '../../src/webhook.js';
+import { recordSignupReferral } from '../../src/referral.ts';
+import { attachAffiliateAttribution } from '../../src/checkout.ts';
+import { recordConversion } from '../../src/webhook.ts';
 import { database } from './_db.js';
 
 const cleanups = [];

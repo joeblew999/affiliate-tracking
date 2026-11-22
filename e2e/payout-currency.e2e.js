@@ -4,7 +4,7 @@
 import { describe, it, beforeAll, afterAll } from 'vitest';
 import assert from 'node:assert/strict';
 import { database, context } from '../tests/unit/_db.js';
-import { onRequestPost as runPayouts } from '../functions/api/admin/payouts-run.js';
+import { onRequestPost as runPayouts } from '../functions/api/admin/payouts-run.ts';
 import { stripe, haveStripe, STRIPE_KEY } from './stripe.js';
 
 describe.skipIf(!haveStripe)('payout currency with a real Stripe payment', () => {

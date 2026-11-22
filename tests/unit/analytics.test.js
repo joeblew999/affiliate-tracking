@@ -1,9 +1,9 @@
 import { describe, it, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { applyAffiliateRef } from '../../src/ref.js';
-import { deviceClass } from '../../src/analytics.js';
-import { handleAffiliateApi } from '../../src/route.js';
-import { createSession } from '../../functions/api/_affiliate-auth.js';
+import { applyAffiliateRef } from '../../src/ref.ts';
+import { deviceClass } from '../../src/analytics.ts';
+import { handleAffiliateApi } from '../../src/route.ts';
+import { createSession } from '../../functions/api/_affiliate-auth.ts';
 import { database } from './_db.js';
 
 const cleanups = [];

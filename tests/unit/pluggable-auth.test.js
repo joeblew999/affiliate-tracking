@@ -1,7 +1,7 @@
 import { describe, it, afterEach, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { handleAffiliateApi } from '../../src/route.js';
-import { createSession } from '../../functions/api/_affiliate-auth.js';
+import { handleAffiliateApi } from '../../src/route.ts';
+import { createSession } from '../../functions/api/_affiliate-auth.ts';
 import { database } from './_db.js';
 
 const cleanups = [];

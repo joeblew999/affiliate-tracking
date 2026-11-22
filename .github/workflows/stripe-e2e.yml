@@ -1,7 +1,6 @@
 # Runs the end-to-end tests against Stripe's test mode, on demand only.
 # Needs a repository secret STRIPE_TEST_SECRET_KEY holding a test-mode key
 # (sk_test_…); the tests refuse a live key and clean up what they create.
-# Each PR branch that has e2e tests is checked out and run on its own.
 name: Stripe end-to-end
 
 on:
@@ -13,15 +12,8 @@ permissions:
 jobs:
   e2e:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        branch: [issue-1-recurring-commissions, issue-6-payout-currencies]
-    name: ${{ matrix.branch }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          ref: ${{ matrix.branch }}
 
       - uses: pnpm/action-setup@v4
         with:

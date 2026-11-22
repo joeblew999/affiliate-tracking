@@ -1,11 +1,11 @@
 import { describe, it, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { applyAffiliateRef } from '../../src/ref.js';
-import { attachAffiliateAttribution } from '../../src/checkout.js';
-import { recordConversion } from '../../src/webhook.js';
-import { releaseHeldConversions } from '../../src/hold.js';
-import { hashIp } from '../../src/ip.js';
-import { onRequestGet as adminConversions } from '../../functions/api/admin/conversions.js';
+import { applyAffiliateRef } from '../../src/ref.ts';
+import { attachAffiliateAttribution } from '../../src/checkout.ts';
+import { recordConversion } from '../../src/webhook.ts';
+import { releaseHeldConversions } from '../../src/hold.ts';
+import { hashIp } from '../../src/ip.ts';
+import { onRequestGet as adminConversions } from '../../functions/api/admin/conversions.ts';
 import { database } from './_db.js';
 
 const cleanups = [];

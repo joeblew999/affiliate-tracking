@@ -4,8 +4,8 @@
 import { describe, it, beforeAll, afterAll } from 'vitest';
 import assert from 'node:assert/strict';
 import { database } from '../tests/unit/_db.js';
-import { recordConversion, recordRefund } from '../src/webhook.js';
-import { recordInvoicePayment, addMonths } from '../src/invoice.js';
+import { recordConversion, recordRefund } from '../src/webhook.ts';
+import { recordInvoicePayment, addMonths } from '../src/invoice.ts';
 import { stripe, advanceClock, haveStripe, STRIPE_KEY } from './stripe.js';
 
 describe.skipIf(!haveStripe)('renewal commissions with a real Stripe subscription', () => {

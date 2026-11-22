@@ -1,9 +1,9 @@
 // Cases that only exist once several features are in together.
 import { describe, it, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
-import { recordConversion } from '../../src/webhook.js';
-import { recordInvoicePayment } from '../../src/invoice.js';
-import { releaseHeldConversions } from '../../src/hold.js';
+import { recordConversion } from '../../src/webhook.ts';
+import { recordInvoicePayment } from '../../src/invoice.ts';
+import { releaseHeldConversions } from '../../src/hold.ts';
 import { database } from './_db.js';
 
 const cleanups = [];
