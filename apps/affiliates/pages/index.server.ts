@@ -67,7 +67,8 @@ function codeFor(name: string): string {
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
       .slice(0, 20) || "partner";
-  return `${base}-${crypto.randomUUID().slice(0, 4)}`;
+  // 8 hex characters: about 4 billion codes per name, so two partners with one name never clash.
+  return `${base}-${crypto.randomUUID().slice(0, 8)}`;
 }
 
 // What the partner page does (Void's page actions: each re-runs the loader after).

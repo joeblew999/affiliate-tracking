@@ -26,41 +26,11 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { date, messageOf, minorUnits, money } from "@/format";
+import { date, minorUnits, money } from "@/format";
+import { useAction } from "@/components/use-action";
 import type { Props } from "./index.server";
 
 type Allowed = Extract<Props, { allowed: true }>;
-
-/** An action's answer: { ok: false, error } when it was refused (Void's action()). */
-function failure(result: unknown): string | null {
-  if (typeof result !== "object" || result === null || !("ok" in result) || result.ok) return null;
-  return "error" in result ? messageOf(result.error) : "That didn't work.";
-}
-
-function useAction() {
-  const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
-  const [busy, setBusy] = useState(false);
-  // The page's data comes back by itself: Void re-runs the loader after an action.
-  async function run(call: () => Promise<unknown>, done?: string) {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const refused = failure(await call());
-      if (refused) setMessage({ text: refused, error: true });
-      else if (done) setMessage({ text: done, error: false });
-    } catch (err) {
-      setMessage({ text: messageOf(err), error: true });
-    } finally {
-      setBusy(false);
-    }
-  }
-  const feedback = message ? (
-    <p className={message.error ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
-      {message.text}
-    </p>
-  ) : null;
-  return { run, busy, feedback };
-}
 
 function field(form: FormData, name: string): string {
   const value = form.get(name);

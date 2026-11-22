@@ -1,7 +1,7 @@
 // The partner's page (signed out: the shop's sign-in first, middleware/01.user.ts). Signed in: apply; then wait for approval;
 // then the dashboard: their link and buyer code, totals, short links, and the last 30 days.
-import { action } from "@void/react";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { action, Form, useForm } from "@void/react";
+import { useState, type ReactNode } from "react";
 import { AppHeader } from "@/components/app-header";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
 import { CopyButton } from "@/components/copy-button";
@@ -19,38 +19,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { messageOf, money } from "@/format";
+import { money } from "@/format";
+import { useAction } from "@/components/use-action";
 import type { Props } from "./index.server";
-
-/** An action's answer: { ok: false, error } when it was refused (Void's action()). */
-function failure(result: unknown): string | null {
-  if (typeof result !== "object" || result === null || !("ok" in result) || result.ok) return null;
-  return "error" in result ? messageOf(result.error) : "That didn't work.";
-}
-
-function useAction() {
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  // The page's data comes back by itself: Void re-runs the loader after an action.
-  async function run(call: () => Promise<unknown>) {
-    setBusy(true);
-    setError("");
-    try {
-      const refused = failure(await call());
-      if (refused) setError(refused);
-    } catch (err) {
-      setError(messageOf(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return { run, error, busy };
-}
-
-function field(form: FormData, name: string): string {
-  const value = form.get(name);
-  return typeof value === "string" ? value : "";
-}
 
 export default function PartnerPage(props: Props) {
   const { user, partner } = props;
@@ -94,21 +65,12 @@ function Notice({ title, text, children }: { title: string; text: string; childr
 }
 
 function Apply() {
-  const { run, error, busy } = useAction();
+  const form = useForm(
+    "/?apply",
+    { name: "", application: "", acceptTerms: true },
+    { throwOnError: false },
+  );
   const [terms, setTerms] = useState(false);
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    void run(() =>
-      action("/?apply", {
-        data: {
-          name: field(form, "name"),
-          application: field(form, "application") || null,
-          acceptTerms: true,
-        },
-      }),
-    );
-  }
   return (
     <Card className="mx-auto max-w-lg">
       <CardHeader>
@@ -118,31 +80,64 @@ function Apply() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={submit} className="grid gap-4">
+        <Form form={form} className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="name">Name</Label>
-            <Input id="name" name="name" required maxLength={100} />
+            <Input
+              id="name"
+              required
+              maxLength={100}
+              value={form.data.name}
+              onChange={(e) => form.setData("name", e.target.value)}
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="application">How will you promote us?</Label>
-            <Textarea id="application" name="application" maxLength={2000} />
+            <Textarea
+              id="application"
+              maxLength={2000}
+              value={form.data.application ?? ""}
+              onChange={(e) => form.setData("application", e.target.value)}
+            />
           </div>
           <Label className="flex items-center gap-2 font-normal">
             <Checkbox checked={terms} onCheckedChange={(checked) => setTerms(checked === true)} />I
             accept the partner terms
           </Label>
-          <Button type="submit" disabled={!terms || busy}>
+          <Button type="submit" disabled={!terms || form.pending}>
             Apply
           </Button>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-        </form>
+        </Form>
       </CardContent>
     </Card>
   );
 }
 
+/** A new short link: empty fields are left out (a link to the home page, a made-up name). */
+function NewLink() {
+  const form = useForm("/?createLink", {}, { throwOnError: false, resetOnSuccess: true });
+  const text = (name: "destination" | "campaign" | "slug") => ({
+    value: form.data[name] ?? "",
+    onChange: (e: { target: { value: string } }) =>
+      form.setData(
+        name,
+        (name === "slug" ? e.target.value.toLowerCase() : e.target.value) || undefined,
+      ),
+  });
+  return (
+    <Form form={form} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+      <Input {...text("destination")} placeholder="Page, e.g. /pricing" aria-label="Goes to" />
+      <Input {...text("campaign")} placeholder="Campaign" aria-label="Campaign" />
+      <Input {...text("slug")} placeholder="Short name (optional)" aria-label="Short name" />
+      <Button type="submit" disabled={form.pending}>
+        Create link
+      </Button>
+    </Form>
+  );
+}
+
 function Dashboard({ partner, links, stats, earnings, program }: Props) {
-  const { run, error, busy } = useAction();
+  const { run, busy, feedback } = useAction();
   if (!partner || !stats) return null;
   const funnel = stats.funnel[0];
   const totals = earnings.length
@@ -150,22 +145,6 @@ function Dashboard({ partner, links, stats, earnings, program }: Props) {
     : [{ currency: "usd", onHoldCents: 0, readyCents: 0, paidCents: 0 }];
   const sum = (key: "onHoldCents" | "readyCents" | "paidCents") =>
     totals.map((m) => money(m[key], m.currency)).join(" + ");
-  function createLink(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const formEl = event.currentTarget;
-    void run(async () => {
-      const result = await action("/?createLink", {
-        data: {
-          destination: field(form, "destination") || "/",
-          campaign: field(form, "campaign") || null,
-          slug: field(form, "slug").toLowerCase() || undefined,
-        },
-      });
-      if (result.ok) formEl.reset();
-      return result;
-    });
-  }
   const activeLinks = links.filter((link) => link.status === "active");
   return (
     <>
@@ -240,15 +219,8 @@ function Dashboard({ partner, links, stats, earnings, program }: Props) {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <form onSubmit={createLink} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
-            <Input name="destination" placeholder="Page, e.g. /pricing" aria-label="Goes to" />
-            <Input name="campaign" placeholder="Campaign" aria-label="Campaign" />
-            <Input name="slug" placeholder="Short name (optional)" aria-label="Short name" />
-            <Button type="submit" disabled={busy}>
-              Create link
-            </Button>
-          </form>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          <NewLink />
+          {feedback}
           {activeLinks.length > 0 && (
             <Table>
               <TableHeader>
