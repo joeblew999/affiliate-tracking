@@ -1,9 +1,9 @@
-// The partner's page. Signed out: sign in on the shop. Signed in: apply; then wait for approval;
+// The partner's page. Signed out: signed in with the shop straight away. Signed in: apply; then wait for approval;
 // then the dashboard: their link and buyer code, totals, short links, and the last 30 days.
 import { useRouter } from "@void/react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { fetch } from "void/client";
-import { signInWithHost } from "@/auth-client";
+import { SignInWithHost } from "@/auth-client";
 import { AppHeader } from "@/components/app-header";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
 import { CopyButton } from "@/components/copy-button";
@@ -64,14 +64,7 @@ export default function PartnerPage(props: Props) {
         )}
       </AppHeader>
       <main className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
-        {!user && (
-          <Notice
-            title="Partner program"
-            text="Recommend the shop and earn commission on every sale your link brings. Sign in with your shop account to apply."
-          >
-            <Button onClick={() => void signInWithHost()}>Sign in with the shop</Button>
-          </Notice>
-        )}
+        {!user && <SignInWithHost />}
         {user && !partner && <Apply />}
         {partner?.status === "pending" && (
           <Notice title="Application received" text="An admin will review it soon." />

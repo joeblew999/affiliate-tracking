@@ -1,6 +1,7 @@
 // The example shop: sign up, sign in and out with the shop's own Better Auth (void/client). The
 // affiliate program is its own app on its own address; it sees this sign-in.
 import { useState, type FormEvent } from "react";
+import { DEMO_PASSWORD } from "affiliates/demo";
 import { auth } from "@/auth-client";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,7 +27,14 @@ export default function Shop({ user, affiliatesUrl }: Props) {
     <main className="flex min-h-svh items-start justify-center bg-muted/40 px-4 py-10 sm:items-center">
       <div className="w-full max-w-sm space-y-4">
         <h1 className="text-center text-2xl font-semibold">Example shop</h1>
-        {user ? <Account user={user} affiliatesUrl={affiliatesUrl} /> : <SignIn />}
+        {user ? (
+          <Account user={user} affiliatesUrl={affiliatesUrl} />
+        ) : (
+          <>
+            <Demo affiliatesUrl={affiliatesUrl} />
+            <SignIn />
+          </>
+        )}
       </div>
     </main>
   );
@@ -78,6 +86,52 @@ function Account({
   );
 }
 
+/** The demo accounts (affiliates/demo, loaded by `vp run demo`), one tap each. */
+const demoAccounts = [
+  { label: "Sign in as the admin", email: "admin@demo.test", path: "/admin" },
+  { label: "Sign in as Maya, a partner", email: "maya@demo.test", path: "/" },
+];
+
+function Demo({ affiliatesUrl }: { affiliatesUrl: string }) {
+  const [busy, setBusy] = useState(false);
+  async function signInAs(email: string, path: string) {
+    setBusy(true);
+    const result = await auth.signIn.email({ email, password: DEMO_PASSWORD });
+    if (result.error) {
+      setBusy(false);
+      return;
+    }
+    // Signing in for the partner program: Better Auth's client follows the answer back there itself.
+    if (!Reflect.get(result.data ?? {}, "redirect"))
+      window.location.href = new URL(path, affiliatesUrl).toString();
+  }
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Try the partner program</CardTitle>
+        <CardDescription>
+          This is an example shop with an affiliate program. Partners share links and earn
+          commission on the sales they bring; the admin approves partners, sets commission and pays
+          them. See it as either:
+        </CardDescription>
+      </CardHeader>
+      <CardFooter className="flex flex-col gap-2">
+        {demoAccounts.map((a) => (
+          <Button
+            key={a.email}
+            className="w-full"
+            variant="outline"
+            disabled={busy}
+            onClick={() => void signInAs(a.email, a.path)}
+          >
+            {a.label}
+          </Button>
+        ))}
+      </CardFooter>
+    </Card>
+  );
+}
+
 function SignIn() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -111,7 +165,7 @@ function SignIn() {
             <TabsTrigger value="up">Create account</TabsTrigger>
           </TabsList>
           <TabsContent value="in">
-            <form onSubmit={(e) => void submit(e, "in")} className="grid gap-4">
+            <form method="post" onSubmit={(e) => void submit(e, "in")} className="grid gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="in-email">Email</Label>
                 <Input id="in-email" name="email" type="email" autoComplete="email" required />
@@ -132,7 +186,7 @@ function SignIn() {
             </form>
           </TabsContent>
           <TabsContent value="up">
-            <form onSubmit={(e) => void submit(e, "up")} className="grid gap-4">
+            <form method="post" onSubmit={(e) => void submit(e, "up")} className="grid gap-4">
               <div className="grid gap-2">
                 <Label htmlFor="up-name">Name</Label>
                 <Input id="up-name" name="name" autoComplete="name" />

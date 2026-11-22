@@ -5,6 +5,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { fetch } from "void/client";
 import { MoreHorizontal } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
+import { SignInWithHost } from "@/auth-client";
 import { viewAs } from "@/components/view-as";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +65,7 @@ function field(form: FormData, name: string): string {
 const selectClass = "h-9 rounded-md border bg-transparent px-2 text-sm";
 
 export default function AdminPage(props: Props) {
+  if (!props.allowed && !props.signedIn) return <SignInWithHost />;
   if (!props.allowed) {
     return (
       <>
@@ -73,9 +75,9 @@ export default function AdminPage(props: Props) {
             <CardHeader>
               <CardTitle>Admins only</CardTitle>
               <CardDescription>
-                Sign in on the shop with an admin account.{" "}
+                Your shop account isn't an admin.{" "}
                 <a className="underline" href="/">
-                  Back
+                  Your partner page
                 </a>
               </CardDescription>
             </CardHeader>

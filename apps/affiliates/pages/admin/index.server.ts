@@ -15,6 +15,7 @@ export const loader = defineHandler(async () => {
   if (user?.role !== "admin")
     return {
       allowed: false as const,
+      signedIn: Boolean(user),
       shopUrl,
       // An admin viewing as someone: the way back is in the bar.
       viewingAs: user?.impersonatedBy ? user.name : null,
