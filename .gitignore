@@ -1,4 +1,10 @@
 node_modules/
-build/
+dist/
+.void/
+.void-wrangler.jsonc
+.cloudflare/
+.wrangler/
+.vitest/
+package-lock.json
+.env
 .dev.vars
-.tina/

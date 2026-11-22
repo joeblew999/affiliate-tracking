@@ -1,4 +1,40 @@
-# Keep PostCSS's transitive dependencies above their security fix versions.
+packages:
+  - apps/*
+
+allowBuilds:
+  better-sqlite3: false
+  esbuild: true
+  sharp: true
+  workerd: true
+
+# vp manages Node (.node-version) and pnpm (package.json); stop pnpm from switching versions itself.
+runtimeOnFail: ignore
+pmOnFail: ignore
+
 overrides:
-  'nanoid@<3.3.18': '^3.3.18'
-  'source-map-js@<1.2.2': '^1.2.2'
+  vite@*: "catalog:"
+  vitest@*: "catalog:"
+
+# One version each for both apps. The same set joeblew999/void-fbtee runs (its pnpm-workspace.yaml,
+# read 2026-11-22): Void 1.8.0 with Vite+ 1.6.0, which that repo found Vite+ 1.7.0 breaks.
+catalog:
+  vite: npm:@voidzero-dev/vite-plus-core@1.6.0
+  vite-plus: 1.6.0
+  vitest: 5.1.0
+  void: 1.8.0
+  "@void/react": 1.8.0
+  "@cloudflare/workers-types": 5.20261117.1
+  typescript: 7.0.2
+  react: 19.3.1
+  react-dom: 19.3.1
+  "@types/react": 19.3.0
+  "@types/react-dom": 19.3.0
+  zod: 4.6.7
+
+peerDependencyRules:
+  allowAny:
+    - vite
+    - vitest
+  allowedVersions:
+    vite: "*"
+    vitest: "*"

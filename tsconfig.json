@@ -1,14 +1,14 @@
 {
   "compilerOptions": {
-    "target": "es2022",
-    "module": "esnext",
+    "target": "ES2024",
+    "module": "ESNext",
     "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "noEmit": true,
+    "lib": ["ES2025", "DOM"],
+    "types": ["node"],
     "strict": true,
-    "skipLibCheck": true,
-    "lib": ["es2023"],
-    "types": ["@cloudflare/workers-types"]
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true
   },
-  "include": ["src", "functions"]
+  "include": ["*.ts", "scripts", "e2e"]
 }

@@ -1,0 +1,26 @@
+{
+  "extends": "./.void/tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "types": ["void/env"],
+    "jsx": "react-jsx",
+    "lib": ["ES2025", "DOM", "DOM.Iterable"],
+    "paths": {
+      "void/routes": ["./.void/routes.d.ts"],
+      "void/queues": ["./.void/queues.d.ts"]
+    }
+  },
+  "include": ["pages", "routes", "queues", "*.ts"],
+  "files": [
+    "./.void/routes.d.ts",
+    "./.void/bindings.d.ts",
+    "./.void/queues.d.ts",
+    "./.void/env.d.ts",
+    "./.void/auth.d.ts"
+  ]
+}

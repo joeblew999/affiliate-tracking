@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "source": {
+    "name": "affiliates",
+    "services": [
+      {
+        "binding": "HOST",
+        "service": "shop"
+      }
+    ]
+  },
+  "resolved": {
+    "name": "affiliates",
+    "services": [
+      {
+        "binding": "HOST",
+        "service": "shop"
+      }
+    ],
+    "compatibility_date": "2026-02-24"
+  },
+  "text": "{\n  \"name\": \"affiliates\",\n  \"services\": [\n    {\n      \"binding\": \"HOST\",\n      \"service\": \"shop\"\n    }\n  ],\n  \"compatibility_date\": \"2026-02-24\"\n}\n"
+}

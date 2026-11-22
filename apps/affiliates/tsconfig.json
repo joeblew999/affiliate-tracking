@@ -1,0 +1,20 @@
+{
+  "extends": "./.void/tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "types": ["void/env"],
+    "jsx": "react-jsx",
+    "lib": ["ES2025", "DOM", "DOM.Iterable"],
+    "paths": {
+      "@/*": ["./src/*"],
+      "void/routes": ["./.void/routes.d.ts"]
+    }
+  },
+  "include": ["src", "pages", "routes", "middleware", "*.ts"],
+  "files": ["./.void/routes.d.ts", "./.void/bindings.d.ts", "./.void/env.d.ts"]
+}
