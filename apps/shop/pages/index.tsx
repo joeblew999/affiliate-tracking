@@ -56,6 +56,16 @@ function Account({
         >
           Partner program
         </Button>
+        {user.isAdmin && (
+          <Button
+            variant="outline"
+            className="w-full sm:w-auto"
+            nativeButton={false}
+            render={<a href={new URL("/admin", affiliatesUrl).toString()} />}
+          >
+            Admin
+          </Button>
+        )}
         <Button
           variant="outline"
           className="w-full sm:w-auto"

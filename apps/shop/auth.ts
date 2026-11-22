@@ -38,8 +38,14 @@ export default defineAuth(({ defaults, env }) => {
   );
   const hostToken = text(env.AFFILIATES_HOST_TOKEN);
   const cookieDomain = text(env.AUTH_COOKIE_DOMAIN);
+  const affiliatesOrigin = new URL(text(env.AFFILIATES_SITE_URL) || "http://localhost:5174").origin;
   return {
     ...defaults,
+    // The affiliate service's pages post to this app (routes/api/view-as/): trust their origin.
+    trustedOrigins: [
+      ...(Array.isArray(defaults.trustedOrigins) ? defaults.trustedOrigins : []),
+      affiliatesOrigin,
+    ],
     // The session cookie for the parent domain, so the affiliate service receives it (README).
     ...(cookieDomain
       ? {
@@ -62,7 +68,6 @@ export default defineAuth(({ defaults, env }) => {
       },
     },
     plugins: [
-      ...(defaults.plugins ?? []),
       admin(),
       stripe({
         stripeClient: stripeClient(text(env.STRIPE_SECRET_KEY)),

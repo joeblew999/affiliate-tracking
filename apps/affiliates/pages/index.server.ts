@@ -1,3 +1,4 @@
+import { HTTPException } from "hono/http-exception";
 import { defineHandler, type InferProps } from "void";
 import { env } from "void/env";
 import { notePartnerIp } from "@/fraud";
@@ -16,11 +17,19 @@ export const loader = defineHandler(async (c) => {
   if (!user)
     return { user: null, shopUrl, program, partner: null, links: [], stats: null, earnings: [] };
   const record = await partnerForUser(user.id);
+  // An admin who isn't a partner has nothing here: the admin page.
+  if (user.role === "admin" && !record && !user.impersonatedBy)
+    throw new HTTPException(302, { res: c.redirect("/admin") });
   const active = record?.status === "active";
   if (record && active) await notePartnerIp(record.id, await requestIpHash(c.req.raw));
   const origin = new URL(c.req.url).origin;
   return {
-    user: { email: user.email, name: user.name, isAdmin: user.role === "admin" },
+    user: {
+      email: user.email,
+      name: user.name,
+      isAdmin: user.role === "admin",
+      viewedBy: user.impersonatedBy,
+    },
     shopUrl,
     program,
     partner: record

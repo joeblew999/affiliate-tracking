@@ -10,7 +10,7 @@ const me = (cookie?: string) =>
 test("the service knows who is signed in only by asking the shop", async () => {
   const alice = await signUp("Alice");
   expect(await me(alice.cookie)).toEqual({
-    user: { id: alice.id, email: alice.email, name: "Alice", role: "user" },
+    user: { id: alice.id, email: alice.email, name: "Alice", role: "user", impersonatedBy: null },
   });
   expect(await me()).toEqual({ user: null });
   expect(await me("better-auth.session_token=made-up")).toEqual({ user: null });

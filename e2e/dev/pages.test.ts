@@ -3,7 +3,15 @@
 // an admin uses every tab. Any error on a page fails the test.
 import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
-import { eventually, paidSession, signInAdmin, signUp, stripeEvent, type Account } from "./helpers";
+import {
+  activePartner,
+  eventually,
+  paidSession,
+  signInAdmin,
+  signUp,
+  stripeEvent,
+  type Account,
+} from "./helpers";
 import { AFFILIATES } from "./setup";
 
 // Headless Chrome says "HeadlessChrome", which the service treats as a link preview (src/visitor.ts).
@@ -135,6 +143,28 @@ test("an admin uses every tab: sales, payouts, rules, bonuses, performance", asy
     expect(await admin.page.getByRole("img", { name: "Clicks per day" }).count()).toBe(1),
   );
 
+  expect(admin.errors).toEqual([]);
+  await admin.context.close();
+});
+
+test("an admin lands on the admin page, views the program as a partner, and comes back", async () => {
+  const pat = await activePartner("Pat Viewed");
+  const admin = await as(await signInAdmin());
+  await open(admin.page, `${AFFILIATES}/`);
+  await eventually(async () => expect(admin.page.url()).toBe(`${AFFILIATES}/admin`));
+
+  const row = admin.page.getByRole("row").filter({ hasText: pat.email });
+  await row.getByRole("button", { name: `More for ${pat.email}` }).click();
+  await admin.page.getByRole("menuitem", { name: "View as Pat Viewed" }).click();
+  await admin.page.waitForURL(`${AFFILIATES}/`);
+  await eventually(async () =>
+    expect(await admin.page.getByText("Viewing as Pat Viewed").count()).toBe(1),
+  );
+  expect(await admin.page.getByText("Your link", { exact: true }).count()).toBe(1);
+
+  await admin.page.getByRole("button", { name: "Back to admin" }).click();
+  await admin.page.waitForURL(`${AFFILIATES}/admin`);
+  await eventually(async () => expect(await admin.page.getByText("Viewing as").count()).toBe(0));
   expect(admin.errors).toEqual([]);
   await admin.context.close();
 });

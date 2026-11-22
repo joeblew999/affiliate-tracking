@@ -5,7 +5,7 @@ import { env } from "void/env";
 export const loader = defineHandler(() => {
   const user = getUser();
   return {
-    user: user ? { email: user.email, name: user.name } : null,
+    user: user ? { email: user.email, name: user.name, isAdmin: user.role === "admin" } : null,
     affiliatesUrl: env.AFFILIATES_SITE_URL,
   };
 });

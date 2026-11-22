@@ -5,6 +5,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { fetch } from "void/client";
 import { MoreHorizontal } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
+import { postToHost } from "@/components/view-as";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,7 @@ export default function AdminPage(props: Props) {
   if (!props.allowed) {
     return (
       <>
-        <AppHeader shopUrl={props.shopUrl} />
+        <AppHeader shopUrl={props.shopUrl} viewingAs={props.viewingAs} />
         <main className="mx-auto max-w-lg px-4 py-6">
           <Card>
             <CardHeader>
@@ -159,7 +160,7 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{status}</Badge>;
 }
 
-function Partners({ partners }: Allowed) {
+function Partners({ partners, shopUrl }: Allowed) {
   const { run, busy, feedback } = useAction();
   const [linksFor, setLinksFor] = useState<{
     name: string;
@@ -254,6 +255,11 @@ function Partners({ partners }: Allowed) {
                     <MoreHorizontal />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => postToHost(shopUrl, "/api/view-as", { userId: p.userId })}
+                    >
+                      View as {p.name ?? p.email}
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       disabled={busy}
                       onClick={() => void update(p.id, { reviewRequired: !p.reviewRequired })}

@@ -51,7 +51,11 @@ export default function PartnerPage(props: Props) {
   const { user, partner } = props;
   return (
     <>
-      <AppHeader email={user?.email} shopUrl={props.shopUrl}>
+      <AppHeader
+        email={user?.email}
+        shopUrl={props.shopUrl}
+        viewingAs={user?.viewedBy ? user.name : null}
+      >
         {user?.isAdmin && (
           <a className="hover:text-foreground" href="/admin">
             Admin

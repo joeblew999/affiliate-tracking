@@ -90,14 +90,14 @@ clawback, commission rules and bonuses. The people are in `apps/affiliates/demo.
 both apps' seeds (`apps/shop/db/seed.ts` makes them shop accounts, `apps/affiliates/db/seed.ts`
 makes the program), and dates count back from the day it's run.
 
-Every demo account signs in on the shop with the password `demo-password-2026`. These logins are
-public, for demos only:
-
-- `admin@demo.test`: the admin, at `/admin` on the service;
-- `maya@demo.test`: the busiest partner (also `leo@`, `priya@`, `tom@`, `ana@`; `ken@` is
-  suspended);
-- `sam@demo.test`: waiting for approval (also `lena@`);
-- `chris@demo.test`: a customer who hasn't applied, so sees the application form.
+To show it: sign in on the shop as `admin@demo.test`, password `demo-password-2026` (public, for
+demos only), and press Admin. To see the program as one of the partners, choose "View as" in their
+menu on the Partners tab, and "Back to admin" in the bar at the top when done. That's Better Auth's
+admin plugin impersonating them (`apps/shop/routes/api/view-as/`), the same as an admin would on a
+real shop. Who's who: Maya is the busiest partner (then Leo, Priya, Tom, who has every sale
+reviewed, and Ana); Ken is suspended; Sam and Lena are waiting for approval. Every demo account
+also signs in on its own with that password (`maya@demo.test` and so on, `chris@demo.test` for a
+customer who hasn't applied).
 
 `vp run demo` puts it in the local databases (`void db seed` in each app). `vp run
 demo:production` replaces everything in the deployed databases with it (`void db export`, then

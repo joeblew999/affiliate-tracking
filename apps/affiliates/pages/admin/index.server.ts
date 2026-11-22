@@ -9,7 +9,13 @@ import { currentUser } from "@/user";
 export const loader = defineHandler(async (c) => {
   const user = await currentUser(c);
   const shopUrl = env.HOST_SITE_URL;
-  if (user?.role !== "admin") return { allowed: false as const, shopUrl };
+  if (user?.role !== "admin")
+    return {
+      allowed: false as const,
+      shopUrl,
+      // An admin viewing as someone: the way back is in the bar.
+      viewingAs: user?.impersonatedBy ? user.name : null,
+    };
   const [partnerRows, saleRows, payoutRows, ruleRows, performance] = await Promise.all([
     db.select().from(partners).orderBy(desc(partners.createdAt)),
     db

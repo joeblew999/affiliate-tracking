@@ -12,6 +12,8 @@ export interface HostUser {
   name: string;
   /** From the host's Better Auth admin plugin, when it has one. */
   role: string | null;
+  /** The admin's user id, when an admin is viewing as this user (the admin plugin's impersonation). */
+  impersonatedBy: string | null;
 }
 
 export async function currentUser(c: CloudContext): Promise<HostUser | null> {
@@ -27,6 +29,7 @@ export async function currentUser(c: CloudContext): Promise<HostUser | null> {
   if (!res.ok) return null;
   const body = (await res.json()) as {
     user?: Partial<HostUser> & { id: string; email: string; name: string };
+    session?: { impersonatedBy?: string | null };
   } | null;
   const user = body?.user;
   if (!user) return null;
@@ -35,5 +38,6 @@ export async function currentUser(c: CloudContext): Promise<HostUser | null> {
     email: user.email,
     name: user.name,
     role: typeof user.role === "string" ? user.role : null,
+    impersonatedBy: body?.session?.impersonatedBy ?? null,
   };
 }
