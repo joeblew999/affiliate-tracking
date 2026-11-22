@@ -1,4 +1,4 @@
-// Refunds and disputes (routes/api/stripe/webhook.ts), and what they take back from commission.
+// Refunds and disputes (routes/api/host/stripe-event.ts, from the host's Stripe webhook), and what they take back from commission.
 //
 // Stripe sends running totals, so each event sets the payment's refunded and disputed amounts in
 // refunded_payments (whether its sale has arrived yet or not), then brings each of its sales in line:

@@ -5,7 +5,7 @@ import { requireAdmin } from "@/access";
 
 // The latest 200 payouts, with their partner's name.
 export const GET = defineHandler(async (c) => {
-  await requireAdmin(c);
+  requireAdmin(c);
   const rows = await db
     .select({ payout: payouts, partnerName: partners.name, partnerCode: partners.code })
     .from(payouts)

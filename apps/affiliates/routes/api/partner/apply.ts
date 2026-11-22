@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { defineHandler } from "void";
 import { db } from "void/db";
 import { z } from "zod";
-import { requireUser } from "@/access";
+import { requireAuth } from "void/auth";
 import { partnerForUser } from "@/partners";
 
 /** The terms a partner accepts when applying; bump when they change. */
@@ -27,7 +27,7 @@ export const POST = defineHandler.withValidator({
     acceptTerms: z.literal(true),
   }),
 })(async (c, { body }) => {
-  const user = await requireUser(c);
+  const user = requireAuth(c);
   if (await partnerForUser(user.id)) throw new HTTPException(409, { message: "Already applied" });
   const [partner] = await db
     .insert(partners)

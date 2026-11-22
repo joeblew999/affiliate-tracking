@@ -46,19 +46,21 @@ export function startDev(env: Record<string, string> = {}): Promise<ChildProcess
 }
 
 /**
- * Ready means a request through both apps works, not just two printed addresses: on its first
+ * Ready means a sign-in through both apps can start, not just two printed addresses: on its first
  * requests Vite pre-bundles dependencies and reloads, which drops calls in flight (seen
- * 2026-11-22). /api/me with a cookie makes the service ask the shop through the binding. The test
- * runner's hook timeout ends the wait.
+ * 2026-11-22), and the service reads the shop's OAuth metadata before it can send anyone there. The
+ * test runner's hook timeout ends the wait.
  */
 export async function untilReady(): Promise<void> {
   for (;;) {
     try {
-      const res = await fetch(`${AFFILIATES}/api/me`, {
-        headers: { cookie: "better-auth.session_token=warm-up" },
+      const res = await fetch(`${AFFILIATES}/api/auth/sign-in/social`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: AFFILIATES },
+        body: JSON.stringify({ provider: "host", callbackURL: "/" }),
         signal: AbortSignal.timeout(30_000),
       });
-      if (res.ok && ((await res.json()) as { user: unknown }).user === null) return;
+      if (res.ok && ((await res.json()) as { url?: string }).url?.startsWith(SHOP)) return;
     } catch {
       // not up yet
     }
@@ -66,11 +68,11 @@ export async function untilReady(): Promise<void> {
   }
 }
 
-/** A value from the affiliate service's local .env (written by `vp run setup`). */
-export function serviceEnv(key: string): string {
-  const env = readFileSync("apps/affiliates/.env", "utf8");
+/** A value from an app's local .env (written by `vp run setup`). */
+export function appEnv(app: "affiliates" | "shop", key: string): string {
+  const env = readFileSync(`apps/${app}/.env`, "utf8");
   const found = env.match(new RegExp(`^${key}=(.+)$`, "m"))?.[1];
-  if (!found) throw new Error(`apps/affiliates/.env has no ${key}: run \`vp run setup\``);
+  if (!found) throw new Error(`apps/${app}/.env has no ${key}: run \`vp run setup\``);
   return found;
 }
 

@@ -1,7 +1,7 @@
 // The example shop: sign up, sign in and out with the shop's own Better Auth (void/client). The
 // affiliate program is its own app on its own address; it sees this sign-in.
 import { useState, type FormEvent } from "react";
-import { auth } from "void/client";
+import { auth } from "@/auth-client";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -94,8 +94,12 @@ function SignIn() {
         ? await auth.signUp.email({ email, password, name: text(form, "name") || email })
         : await auth.signIn.email({ email, password });
     setBusy(false);
-    if (result.error) setError(result.error.message ?? "That didn't work. Try again.");
-    else window.location.reload();
+    if (result.error) {
+      setError(result.error.message ?? "That didn't work. Try again.");
+      return;
+    }
+    // Signing in for the partner program: Better Auth's client follows the answer back there itself.
+    if (!Reflect.get(result.data ?? {}, "redirect")) window.location.reload();
   }
 
   return (

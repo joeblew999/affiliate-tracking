@@ -5,7 +5,7 @@ import { useState, type FormEvent, type ReactNode } from "react";
 import { fetch } from "void/client";
 import { MoreHorizontal } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
-import { postToHost } from "@/components/view-as";
+import { viewAs } from "@/components/view-as";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -160,7 +160,7 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{status}</Badge>;
 }
 
-function Partners({ partners, shopUrl }: Allowed) {
+function Partners({ partners }: Allowed) {
   const { run, busy, feedback } = useAction();
   const [linksFor, setLinksFor] = useState<{
     name: string;
@@ -255,9 +255,7 @@ function Partners({ partners, shopUrl }: Allowed) {
                     <MoreHorizontal />
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => postToHost(shopUrl, "/api/view-as", { userId: p.userId })}
-                    >
+                    <DropdownMenuItem onClick={() => void run(() => viewAs(p.userId))}>
                       View as {p.name ?? p.email}
                     </DropdownMenuItem>
                     <DropdownMenuItem

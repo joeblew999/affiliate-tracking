@@ -9,7 +9,7 @@ import { partnersToPay } from "@/payouts";
 export const POST = defineHandler.withValidator({
   body: z.object({ partnerId: z.uuid().optional() }),
 })(async (c, { body }) => {
-  await requireAdmin(c);
+  requireAdmin(c);
   const partnerIds = body.partnerId ? [body.partnerId] : await partnersToPay();
   for (const partnerId of partnerIds) await queues.payouts.send({ partnerId });
   return { queued: partnerIds.length };

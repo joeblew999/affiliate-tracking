@@ -11,7 +11,7 @@ import { ensurePromotionCode } from "@/approval";
 export const POST = defineHandler.withValidator({
   body: z.object({ id: z.uuid(), status: z.enum(["active", "suspended"]) }),
 })(async (c, { body }) => {
-  await requireAdmin(c);
+  requireAdmin(c);
   const [row] = await db
     .update(partners)
     .set({ status: body.status })

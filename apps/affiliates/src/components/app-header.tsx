@@ -17,7 +17,7 @@ export function AppHeader({
 }) {
   return (
     <>
-      {viewingAs && <ViewingAsBar name={viewingAs} hostUrl={shopUrl} />}
+      {viewingAs && <ViewingAsBar name={viewingAs} />}
       <header className="border-b bg-card">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between gap-4 px-4 sm:px-6">
           <a href="/" className="font-semibold">

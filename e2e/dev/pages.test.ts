@@ -58,6 +58,7 @@ test("an admin lands on the admin page, views the program as a partner, and come
   );
   expect(await admin.page.getByText("Your link", { exact: true }).count()).toBe(1);
 
+  await admin.page.waitForLoadState("networkidle"); // the button works once the page's script has loaded
   await admin.page.getByRole("button", { name: "Back to admin" }).click();
   await admin.page.waitForURL(`${AFFILIATES}/admin`);
   await eventually(async () => expect(await admin.page.getByText("Viewing as").count()).toBe(0));

@@ -16,7 +16,7 @@ export const POST = defineHandler.withValidator({
     note: z.string().trim().min(1).max(200),
   }),
 })(async (c, { body }) => {
-  await requireAdmin(c);
+  requireAdmin(c);
   if (!(await activePartner(body.partnerId)))
     throw new HTTPException(404, { message: "No such active partner" });
   const currency = env.AFFILIATES_PAYOUT_CURRENCY.toLowerCase();

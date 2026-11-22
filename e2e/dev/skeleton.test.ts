@@ -1,20 +1,7 @@
-// Step 1 of plans/2026-11-22-01-void-service.md: the two apps, the bindings both ways, sign-in only
-// in the shop, and the host-only API closed to everyone else.
+// The host-only API (the shop's calls through its binding) is closed to everyone without the shop's
+// token: the service also has a public address.
 import { expect, inject, test } from "vite-plus/test";
-import { signUp } from "./helpers";
 import { AFFILIATES } from "./setup";
-
-const me = (cookie?: string) =>
-  fetch(`${AFFILIATES}/api/me`, { headers: cookie ? { cookie } : {} }).then((r) => r.json());
-
-test("the service knows who is signed in only by asking the shop", async () => {
-  const alice = await signUp("Alice");
-  expect(await me(alice.cookie)).toEqual({
-    user: { id: alice.id, email: alice.email, name: "Alice", role: "user", impersonatedBy: null },
-  });
-  expect(await me()).toEqual({ user: null });
-  expect(await me("better-auth.session_token=made-up")).toEqual({ user: null });
-});
 
 test("the host-only API needs the shop's token", async () => {
   const call = (token?: string) =>

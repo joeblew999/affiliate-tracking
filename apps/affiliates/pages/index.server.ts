@@ -5,13 +5,16 @@ import { notePartnerIp } from "@/fraud";
 import { linksOf } from "@/links";
 import { partnerForUser } from "@/partners";
 import { earnings, stats } from "@/stats";
-import { currentUser } from "@/user";
+import { getSession } from "void/auth";
 import { requestIpHash } from "@/visitor";
 
 // The partner's page: who's signed in (through the host), their partner record, and for an active
 // partner their links and the last 30 days.
 export const loader = defineHandler(async (c) => {
-  const user = await currentUser(c);
+  const session = getSession();
+  const user = session
+    ? { ...session.user, impersonatedBy: session.session.impersonatedBy ?? null }
+    : null;
   const shopUrl = env.HOST_SITE_URL;
   const program = { holdDays: env.AFFILIATES_HOLD_DAYS ?? null };
   if (!user)

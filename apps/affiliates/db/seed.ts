@@ -1,6 +1,6 @@
 // `vp run demo` (both apps) or `vp run affiliates#db:seed`: resets the service's local database and
 // fills it with 90 days of a believable program, for demos. The people are in ../demo.ts, shared
-// with the shop's seed, so every partner here can sign in on the shop. The numbers come from a
+// with the shop's seed: users in both apps, with the same ids, signing in here with the shop. The numbers come from a
 // fixed random seed: every run makes the same program, dated back from today.
 //
 // What it makes: partners in every state (active, review-required, suspended, waiting for
@@ -8,6 +8,7 @@
 // of three products (some renewals, some refunded in full or in part, some flagged), the monthly
 // payouts that paid the older ones, commission rules and bonuses.
 import type { SaleItem } from "./schema";
+import { accountTable, userTable } from "../.void/better-auth-schema";
 import { defineSeed } from "void/seed";
 import { demoPeople } from "../demo";
 
@@ -41,6 +42,28 @@ function random(seed: number) {
 
 export default defineSeed<typeof import("./schema")>(async ({ db, schema }) => {
   const now = Date.now();
+  // Each demo person as a user here, signed in with the shop before (an account linking them to
+  // their shop user): their ids are the same in both apps, so View as works for every partner.
+  for (const person of demoPeople) {
+    const createdAt = new Date(now - (person.partner?.joinedDaysAgo ?? 150) * DAY);
+    await db.insert(userTable).values({
+      id: person.userId,
+      name: person.name,
+      email: person.email,
+      emailVerified: true,
+      role: person.role,
+      createdAt,
+      updatedAt: createdAt,
+    });
+    await db.insert(accountTable).values({
+      id: `${person.userId}-host`,
+      accountId: person.userId,
+      providerId: "host",
+      userId: person.userId,
+      createdAt,
+      updatedAt: createdAt,
+    });
+  }
   const rand = random(2026);
   const uuid = () => crypto.randomUUID();
   const at = (daysAgo: number) => now - daysAgo * DAY - Math.floor(rand.next() * DAY * 0.9);

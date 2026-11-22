@@ -15,7 +15,7 @@ export const POST = defineHandler.withValidator({
     reviewRequired: z.boolean().optional(),
   }),
 })(async (c, { body }) => {
-  await requireAdmin(c);
+  requireAdmin(c);
   const { id, ...changes } = body;
   const [row] = await db.update(partners).set(changes).where(eq(partners.id, id)).returning();
   if (!row) throw new HTTPException(404, { message: "No such partner" });

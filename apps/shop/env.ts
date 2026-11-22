@@ -13,10 +13,6 @@ export default defineEnv({
   STRIPE_WEBHOOK_SECRET: string().optional(),
   // The price of the shop's one plan, "pro".
   STRIPE_PRO_PRICE_ID: string().optional(),
-  // The domain the sign-in cookie is set for, so the affiliate service on a subdomain of it gets the
-  // cookie too: e.g. shop.example.com, with the service at affiliates.shop.example.com. Unset (local
-  // dev, where both are on localhost): the cookie is the shop's own.
-  AUTH_COOKIE_DOMAIN: string().optional(),
   // Where the affiliate service's pages are, for the shop's "Partner program" link.
   AFFILIATES_SITE_URL: url().default("http://localhost:5174"),
 });

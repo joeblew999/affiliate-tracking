@@ -10,7 +10,7 @@ export const POST = defineHandler.withValidator({ body: z.object({ id: z.uuid() 
   c,
   { body },
 ) => {
-  await requireAdmin(c);
+  requireAdmin(c);
   const [row] = await db
     .update(commissionRules)
     .set({ active: false })

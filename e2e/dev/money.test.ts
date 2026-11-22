@@ -28,31 +28,20 @@ async function commissionsOf(
 
 async function sell(partnerId: string, overrides: Record<string, unknown> = {}, daysAgo = 0) {
   const session = paidSession({ affiliate_partner_id: partnerId }, overrides);
-  const res = await stripeEvent("checkout.session.completed", session, { daysAgo });
-  expect(await res.json()).toMatchObject({ sale: { recorded: true } });
+  await stripeEvent("checkout.session.completed", session, { daysAgo });
+  expect((await salesOf(partnerId)).some((sale) => sale.stripeSessionId === session.id)).toBe(true);
   return session;
 }
 
-test("a partner's rules: percent, the monthly tier, and a cap per customer", async () => {
+test("a partner's rules: percent and the monthly tier", async () => {
   const nick = await activePartner();
   const admin = await signInAdmin();
   const rule = (body: Record<string, unknown>) =>
     service("/api/admin/rules", admin.cookie, { partnerId: nick.partnerId, ...body });
   expect((await rule({ kind: "percent", percent: 30 })).status).toBe(200);
   expect((await rule({ kind: "percent", percent: 40, minMonthlySales: 2 })).status).toBe(200);
-  expect(
-    (
-      await rule({
-        kind: "percent",
-        percent: 10,
-        capPerCustomerCents: 700,
-        productId: null,
-        minMonthlySales: 0,
-      })
-    ).status,
-  ).toBe(200);
 
-  // All three are for this partner and any product, so equally specific: the highest tier reached
+  // Both are for this partner and any product, so equally specific: the highest tier reached
   // wins, then the oldest rule. Sales 1 and 2 (0 and 1 before them this month): the 30% rule.
   // Sale 3 (2 before it): the 40% tier.
   const sold = [
@@ -139,7 +128,8 @@ test("renewals pay the first sale's partner for their recurring months, once per
   await sell(
     nick.partnerId,
     {
-      mode: "subscription",
+      // No `mode: "subscription"`: with it, the shop's Better Auth Stripe plugin fetches the
+      // subscription from Stripe, which this made-up one isn't in. The service reads only its id.
       subscription,
       customer: "cus_renew",
       amount_total: 2000,
@@ -162,24 +152,17 @@ test("renewals pay the first sale's partner for their recurring months, once per
     lines: { data: [] },
     payments: { data: [] },
   });
-  const renew = async (body: Record<string, unknown>) =>
-    (await (await stripeEvent("invoice.paid", body)).json()) as {
-      renewal: { recorded: boolean; reason?: string };
-    };
-  expect((await renew(invoice(0, 70, "subscription_create"))).renewal).toMatchObject({
-    recorded: false,
-  });
-  expect((await renew(invoice(1, 40))).renewal).toMatchObject({ recorded: true });
-  expect((await renew(invoice(1, 40))).renewal).toMatchObject({
-    recorded: false,
-    reason: "already recorded",
-  });
-  expect((await renew(invoice(2, 5))).renewal).toMatchObject({
-    recorded: false,
-    reason: "past the partner's recurring months",
-  });
-  const renewals = (await salesOf(nick.partnerId)).filter((s) => s.kind === "renewal");
-  expect(renewals.map((s) => s.commissionCents)).toEqual([400]);
+  /** The partner's renewals' commissions after the invoice is paid. */
+  const renew = async (body: Record<string, unknown>) => {
+    await stripeEvent("invoice.paid", body);
+    return (await salesOf(nick.partnerId))
+      .filter((s) => s.kind === "renewal")
+      .map((s) => s.commissionCents);
+  };
+  expect(await renew(invoice(0, 70, "subscription_create"))).toEqual([]); // the checkout sale
+  expect(await renew(invoice(1, 40))).toEqual([400]);
+  expect(await renew(invoice(1, 40))).toEqual([400]); // the same invoice again
+  expect(await renew(invoice(2, 5))).toEqual([400]); // past the partner's 2 recurring months
 });
 
 test("a payout run pays each partner's approved sales and bonuses, through the queue", async () => {

@@ -51,22 +51,24 @@ Found on the way (Void 1.8.0, read in `node_modules/void/dist`):
   - `apps/service`: the affiliate service.
   - `apps/host`: an example host, the service's docs and proving ground. A tiny shop: Void's
     Better Auth, the Better Auth Stripe plugin, a checkout, wired to the service.
-- **Users:** only the host's. The service stores the host's user id where it needs one (a
-  partner, a referral), never a password or session.
+- **Sign-in (changed 2026-11-22, replacing the `get-session` calls of spike step 3):** each app
+  runs its own Better Auth. The host is an OAuth provider (`@better-auth/oauth-provider`) with the
+  service as its one trusted client; the service signs people in with it (`genericOAuth`), so
+  `requireAuth`, roles and "View as" are all Better Auth's own, with no calls to the host per
+  request. The service's users are the host's (the same ids), made at their first sign-in.
 - **Partners and admins:** a partner is a host user the service has approved. An admin is a role
-  in the host's Better Auth (its `admin()` plugin); the service asks the host, as for sign-in.
-- **The service's address:** its own subdomain, e.g. `affiliates.example.com`. The host's
-  Better Auth sets its cookie for the parent domain (`advanced.crossSubDomainCookies`), so the
-  subdomain gets it.
-  - On `*.gedw99.workers.dev` this works too: `workers.dev` is on the Public Suffix List (checked
-    2026-11-22), so `gedw99.workers.dev` counts as one site. But every Worker on the account would
-    then receive the session cookie, so production uses a real domain.
+  in the host's Better Auth (its `admin()` plugin), carried to the service in the ID token's `role`
+  claim and copied onto the service's user at every sign-in.
+- **The service's address:** its own subdomain, e.g. `affiliates.example.com`. The referral
+  cookie is set for the parent domain so the host receives it; no session cookie is shared.
 - **Host → service:** the service binding and `client.ts`, for: a user signed up (with the
   referral cookie), add attribution to a checkout, and whatever else a host needs.
 - **Stripe:**
   - The host keeps customers and subscriptions with the Better Auth Stripe plugin.
-  - The service has its own Stripe webhook endpoint (Stripe allows several per account) for
-    sales, renewals, refunds and disputes, and sends partner payouts through Stripe Connect.
+  - The host's Better Auth Stripe webhook passes every event to the service (the plugin's
+    `onEvent`, through the binding), which records sales, renewals, refunds and disputes, and
+    sends partner payouts through Stripe Connect. (Changed 2026-11-22: the service had its own
+    webhook endpoint.)
   - The host's only jobs: add the service's attribution when it creates a checkout, and tell the
     service when a user signs up (Better Auth's new-user hook).
 - **Database:** D1 through Drizzle (`void/db`). The fork's 14 SQL migrations become one Drizzle

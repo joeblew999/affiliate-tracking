@@ -1,19 +1,21 @@
 // The shop's sign-in: Void's Better Auth, with
 // - the admin plugin: emails in ADMIN_EMAILS are admins, who run the affiliate program;
+// - the OAuth provider (with the JWT plugin it signs with): the affiliate service signs people in
+//   with the shop, as a trusted client that skips the consent screen, and gets their role;
 // - the Stripe plugin: the "pro" subscription, its checkout carrying the affiliate service's
-//   attribution and the partner's buyer discount;
+//   attribution, and every Stripe event passed on to the service (onEvent);
 // - a new-user hook telling the affiliate service, through a queue (queues/affiliate-signups.ts).
-// The affiliate service keeps no users: it asks this app who a session cookie belongs to.
 //
 // `void prepare` runs this file in plain Node, with no Worker env, to build the auth schema. So the
 // plugins don't depend on the env (the Stripe plugin adds tables, and the schema must be the same
 // with or without a key), and values are read from the config's `env` or inside the hooks.
 import { stripe } from "@better-auth/stripe";
-import { admin } from "better-auth/plugins";
+import { oauthProvider } from "@better-auth/oauth-provider";
+import { admin, jwt } from "better-auth/plugins";
 import Stripe from "stripe";
 import { defineAuth } from "void/auth";
 import { queues } from "void/queues";
-import { HOST_TOKEN_HEADER, referralFrom } from "affiliates/client";
+import { OAUTH_CLIENT_ID, referralFrom } from "affiliates/client";
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 
@@ -36,43 +38,33 @@ export default defineAuth(({ defaults, env }) => {
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean),
   );
-  const hostToken = text(env.AFFILIATES_HOST_TOKEN);
-  const cookieDomain = text(env.AUTH_COOKIE_DOMAIN);
-  const affiliatesOrigin = new URL(text(env.AFFILIATES_SITE_URL) || "http://localhost:5174").origin;
   return {
     ...defaults,
-    // The affiliate service's pages post to this app (routes/api/view-as/): trust their origin.
-    trustedOrigins: [
-      ...(Array.isArray(defaults.trustedOrigins) ? defaults.trustedOrigins : []),
-      affiliatesOrigin,
-    ],
-    // The session cookie for the parent domain, so the affiliate service receives it (README).
-    ...(cookieDomain
-      ? {
-          advanced: {
-            ...defaults.advanced,
-            crossSubDomainCookies: { enabled: true, domain: cookieDomain },
-          },
-        }
-      : {}),
-    // The affiliate service asks who is signed in on every request it serves, always from its own
-    // Worker, so per-IP limits would make all its users share one. Its calls to get-session carry
-    // the shared AFFILIATES_HOST_TOKEN and skip the limit; everything else keeps it (Void's
-    // guide/auth.md, "Rate limits").
-    rateLimit: {
-      ...defaults.rateLimit,
-      customRules: {
-        ...defaults.rateLimit?.customRules,
-        "/get-session": (request, rule) =>
-          hostToken && request.headers.get(HOST_TOKEN_HEADER) === hostToken ? false : rule,
-      },
-    },
+    // The OAuth provider issues its own tokens at /oauth2/token (Better Auth's setup).
+    disabledPaths: ["/token"],
     plugins: [
       admin(),
+      jwt({ disableSettingJwtHeader: true }),
+      oauthProvider({
+        // Sign-in happens on the shop's own page; trusted clients never see a consent page.
+        loginPage: "/",
+        consentPage: "/",
+        // The affiliate service: registered once per database (scripts/setup.ts locally,
+        // README "Deploy" in production), trusted, skipping consent.
+        cachedTrustedClients: new Set([OAUTH_CLIENT_ID]),
+        // Admins here are admins of the affiliate program too.
+        customIdTokenClaims: ({ user }) => ({ role: text(user.role) || "user" }),
+        customUserInfoClaims: ({ user }) => ({ role: text(user.role) || "user" }),
+      }),
       stripe({
         stripeClient: stripeClient(text(env.STRIPE_SECRET_KEY)),
         stripeWebhookSecret: text(env.STRIPE_WEBHOOK_SECRET),
         createCustomerOnSignUp: Boolean(text(env.STRIPE_SECRET_KEY)),
+        // Sales, renewals, refunds and disputes are the affiliate service's to count.
+        onEvent: async (event) => {
+          const { affiliatesService } = await import("./src/affiliates");
+          await affiliatesService().stripeEvent(event);
+        },
         subscription: {
           enabled: true,
           plans: [{ name: "pro", priceId: text(env.STRIPE_PRO_PRICE_ID) }],

@@ -16,7 +16,7 @@
       "void/queues": ["./.void/queues.d.ts"]
     }
   },
-  "include": ["src", "pages", "routes", "queues", "*.ts"],
+  "include": ["src", "pages", "routes", "queues", "db", "*.ts"],
   "files": [
     "./.void/routes.d.ts",
     "./.void/bindings.d.ts",

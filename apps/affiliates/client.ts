@@ -2,17 +2,21 @@
 // carry AFFILIATES_HOST_TOKEN. Their input and output types come from src/host-contract.ts, which the
 // service's routes also validate against, so nothing is written twice and the host's type check never
 // pulls in the service's code.
+import type Stripe from "stripe";
 import type { z } from "zod";
 import {
   CheckoutInput,
   CheckoutOutput,
   HOST_TOKEN_HEADER,
+  OAUTH_CLIENT_ID,
   REF_COOKIE,
   SignupInput,
   SignupOutput,
+  StripeEventInput,
+  StripeEventOutput,
 } from "./src/host-contract";
 
-export { HOST_TOKEN_HEADER, REF_COOKIE };
+export { HOST_TOKEN_HEADER, OAUTH_CLIENT_ID, REF_COOKIE };
 
 /** The referral cookie's value from a Cookie header, or null. Pass only this, never the whole header. */
 export function referralFrom(cookieHeader: string | null | undefined): string | null {
@@ -50,5 +54,8 @@ export function affiliates(binding: Fetcher, token: string) {
     /** Before creating a Stripe Checkout Session: the metadata to add, and the partner's buyer discount. */
     checkout: (body: z.input<typeof CheckoutInput>) =>
       call("/api/host/checkout", CheckoutInput, CheckoutOutput, body),
+    /** Every Stripe event the host's Better Auth Stripe plugin receives (its onEvent). */
+    stripeEvent: (event: Stripe.Event) =>
+      call("/api/host/stripe-event", StripeEventInput, StripeEventOutput, event),
   };
 }

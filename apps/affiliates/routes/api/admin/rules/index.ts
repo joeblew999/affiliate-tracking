@@ -8,7 +8,7 @@ import { partnerById } from "@/partners";
 
 // The commission rules (src/commission.ts): all of them, newest first; and adding one.
 export const GET = defineHandler(async (c) => {
-  await requireAdmin(c);
+  requireAdmin(c);
   return {
     rules: await db
       .select()
@@ -39,7 +39,7 @@ export const POST = defineHandler.withValidator({
     }),
   ]),
 })(async (c, { body }) => {
-  await requireAdmin(c);
+  requireAdmin(c);
   if (body.partnerId && !(await partnerById(body.partnerId)))
     throw new HTTPException(404, { message: "No such partner" });
   const [rule] = await db.insert(commissionRules).values(body).returning();

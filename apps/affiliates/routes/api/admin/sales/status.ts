@@ -10,7 +10,7 @@ import { requireAdmin } from "@/access";
 export const POST = defineHandler.withValidator({
   body: z.object({ id: z.uuid(), status: z.enum(["approved", "rejected", "pending"]) }),
 })(async (c, { body }) => {
-  await requireAdmin(c);
+  requireAdmin(c);
   const [row] = await db
     .update(sales)
     .set({ status: body.status, approvedAt: body.status === "approved" ? Date.now() : null })

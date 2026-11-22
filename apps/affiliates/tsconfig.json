@@ -22,9 +22,9 @@
   "include": ["src", "pages", "routes", "middleware", "*.ts", "crons", "queues", "db"],
   "files": [
     "./.void/routes.d.ts",
-    "./.void/bindings.d.ts",
     "./.void/env.d.ts",
     "./.void/db.d.ts",
-    "./.void/queues.d.ts"
+    "./.void/queues.d.ts",
+    "./.void/auth.d.ts"
   ]
 }

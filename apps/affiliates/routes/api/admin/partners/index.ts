@@ -5,6 +5,6 @@ import { requireAdmin } from "@/access";
 
 // Every partner, newest first.
 export const GET = defineHandler(async (c) => {
-  await requireAdmin(c);
+  requireAdmin(c);
   return { partners: await db.select().from(partners).orderBy(desc(partners.createdAt)) };
 });

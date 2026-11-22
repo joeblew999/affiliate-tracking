@@ -3,6 +3,7 @@
 import { useRouter } from "@void/react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { fetch } from "void/client";
+import { signInWithHost } from "@/auth-client";
 import { AppHeader } from "@/components/app-header";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
 import { CopyButton } from "@/components/copy-button";
@@ -66,11 +67,9 @@ export default function PartnerPage(props: Props) {
         {!user && (
           <Notice
             title="Partner program"
-            text="Recommend the shop and earn commission on every sale your link brings. Sign in on the shop first, then come back here to apply."
+            text="Recommend the shop and earn commission on every sale your link brings. Sign in with your shop account to apply."
           >
-            <Button nativeButton={false} render={<a href={props.shopUrl} />}>
-              Sign in on the shop
-            </Button>
+            <Button onClick={() => void signInWithHost()}>Sign in with the shop</Button>
           </Notice>
         )}
         {user && !partner && <Apply />}

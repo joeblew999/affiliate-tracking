@@ -1,4 +1,4 @@
-// Sales from Stripe's webhook (routes/api/stripe/webhook.ts), after its signature is checked.
+// Sales from Stripe, through the host's Stripe webhook (routes/api/host/stripe-event.ts).
 //
 // Who gets a sale: a partner's promotion code the customer actually paid with, else the partner the
 // checkout carried (the user's referral, else the referral cookie: routes/api/host/checkout.ts).

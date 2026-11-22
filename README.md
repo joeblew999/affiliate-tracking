@@ -22,13 +22,16 @@ plan is `plans/2026-11-22-01-void-service.md`.
 
 ## How it fits together
 
-- **Sign-in is the host's alone.** The service has no users, passwords or sessions. It asks the host
-  who a session cookie belongs to (Better Auth's `get-session`, through a Cloudflare service
-  binding). Admins are the host's admin role (Better Auth's admin plugin). A partner is a host user
-  who applied.
+- **Sign-in is the host's.** Each app runs its own Better Auth (Void's). The host is an OAuth
+  provider (Better Auth's `oauthProvider` plugin) and the service is its one client, trusted, so
+  there's no consent screen: "Sign in with the shop" on the service (Better Auth's `genericOAuth`)
+  goes to the host's sign-in and comes back signed in. The service has no passwords of its own.
+  The host's admins are admins on the service (the `role` claim in the host's ID token, copied on
+  every sign-in, `apps/affiliates/auth.ts`), and "View as" is the service's own Better Auth admin
+  plugin. A partner is a host user who applied.
 - **Two addresses, one domain.** The host at e.g. `shop.example.com`, the service at
-  `affiliates.example.com`. The host's session cookie is set for the parent domain so the service
-  receives it, and so is the service's referral cookie, so the host receives that.
+  `affiliates.example.com`. The service's referral cookie is set for the parent domain, so the host
+  receives it.
 - **The host calls the service like a function,** through the service binding and
   `apps/affiliates/client.ts`. Each call's input and output are defined once, in
   `apps/affiliates/src/host-contract.ts`; the service's routes check against it and the client takes
@@ -36,9 +39,10 @@ plan is `plans/2026-11-22-01-void-service.md`.
   also has a public address.
 - **Referral links are the service's:** `affiliates.example.com/r/<partner code or short link>`
   counts the click, sets the referral cookie, and sends the visitor on to the host's site.
-- **Stripe is split.** The host keeps customers and subscriptions (Better Auth's Stripe plugin). The
-  service has its own Stripe webhook endpoint for sales, renewals, refunds and disputes, and pays
-  partners with Stripe Connect transfers.
+- **Stripe is the host's.** The host keeps customers and subscriptions, and the Stripe webhook
+  (Better Auth's Stripe plugin). Its `onEvent` hands every event to the service (`stripeEvent` in
+  the client), which records sales, renewals, refunds and disputes, and pays partners with Stripe
+  Connect transfers.
 - **Long-running work goes through queues:** sign-ups reach the service through the host's queue,
   and payouts run one partner per queue message. A daily cron approves sales past the hold period
   and queues again any payout left unfinished, so a crash never leaves one half done.
@@ -48,18 +52,24 @@ plan is `plans/2026-11-22-01-void-service.md`.
 What the example shop does, in `apps/shop`:
 
 1. Bind the service, in your `void.config.ts`: `cloudflare.services: [{ binding: "AFFILIATES",
-   service: "affiliates" }]`. The service binds back to you as `HOST` (its `void.config.ts`).
+   service: "affiliates" }]`.
 2. Give both apps the same `AFFILIATES_HOST_TOKEN` (`void secret put AFFILIATES_HOST_TOKEN` in each).
-3. In your `auth.ts`: the admin plugin; a new-user hook that queues the sign-up for the service with
-   the referral cookie's value (`referralFrom` in the client); and, with Better Auth's Stripe plugin,
-   `getCheckoutSessionParams` asking the service's `checkout` for the metadata and discount to add.
-   See `apps/shop/auth.ts`, `apps/shop/queues/affiliate-signups.ts` and `apps/shop/src/affiliates.ts`.
-4. Set your session cookie for the parent domain (Better Auth's `advanced.crossSubDomainCookies`),
-   and the service's `AFFILIATES_COOKIE_DOMAIN` to the same domain.
-5. In Stripe, add a webhook endpoint for the service, `https://affiliates.example.com/api/stripe/webhook`,
-   for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`,
-   `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`; its signing secret is the service's
-   `STRIPE_WEBHOOK_SECRET`.
+3. In your `auth.ts` (see `apps/shop/auth.ts`):
+   - the `admin` and `jwt` plugins, and `oauthProvider` with the service as a trusted client
+     (`cachedTrustedClients`) and the user's role as a claim (`customIdTokenClaims`);
+   - a new-user hook that queues the sign-up for the service with the referral cookie's value
+     (`referralFrom` in the client; `apps/shop/queues/affiliate-signups.ts`);
+   - with Better Auth's Stripe plugin, `getCheckoutSessionParams` asking the service's `checkout`
+     for the metadata and discount to add, and `onEvent` passing each event to `stripeEvent`
+     (`apps/shop/src/affiliates.ts`).
+4. Register the service as your OAuth client: `scripts/oauth-client.ts` (locally `vp run setup`
+   does it; for production, `AFFILIATES_OAUTH_SECRET=<the service's secret> vpx
+   scripts/oauth-client.ts --remote --service https://affiliates.example.com`).
+5. Set the service's `HOST_SITE_URL` to your site, and its `AFFILIATES_COOKIE_DOMAIN` to the
+   parent domain.
+6. In Stripe, your Better Auth Stripe webhook (`https://shop.example.com/api/auth/stripe/webhook`)
+   needs `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`,
+   `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed` too.
 
 The service's settings, each with a line saying what it does, are in `apps/affiliates/env.ts`; the
 shop's in `apps/shop/env.ts`.
@@ -92,9 +102,8 @@ makes the program), and dates count back from the day it's run.
 
 To show it: sign in on the shop as `admin@demo.test`, password `demo-password-2026` (public, for
 demos only), and press Admin. To see the program as one of the partners, choose "View as" in their
-menu on the Partners tab, and "Back to admin" in the bar at the top when done. That's Better Auth's
-admin plugin impersonating them (`apps/shop/routes/api/view-as/`), the same as an admin would on a
-real shop. Who's who: Maya is the busiest partner (then Leo, Priya, Tom, who has every sale
+menu on the Partners tab, and "Back to admin" in the bar at the top when done. That's the service's
+Better Auth admin plugin impersonating them. Who's who: Maya is the busiest partner (then Leo, Priya, Tom, who has every sale
 reviewed, and Ana); Ken is suspended; Sam and Lena are waiting for approval. Every demo account
 also signs in on its own with that password (`maya@demo.test` and so on, `chris@demo.test` for a
 customer who hasn't applied).
@@ -124,8 +133,8 @@ Deployed (2026-11-22) to Cloudflare account `7384af54e33b8a54ff240371ea368440`:
 - the shop at https://shop.ubuntusoftware.net (`apps/shop/void.config.ts`, `routes`);
 - the service at https://affiliates.shop.ubuntusoftware.net (`apps/affiliates/void.config.ts`).
 
-The service is on a subdomain of the shop's, and the shop sets its sign-in cookie for
-`shop.ubuntusoftware.net` (`AUTH_COOKIE_DOMAIN`), so the service receives it. Each app deploys
+The service is on a subdomain of the shop's, and sets its referral cookie for
+`shop.ubuntusoftware.net` (`AFFILIATES_COOKIE_DOMAIN`), so the shop receives it. Each app deploys
 with Void's own commands, run in its folder (`apps/affiliates`, `apps/shop`):
 
 ```sh
@@ -135,9 +144,9 @@ void deploy --platform cloudflare
 ```
 
 `void.lock.json` in each app records its database and other resource IDs: commit it after a
-deploy. Not set yet: Stripe (each app's `STRIPE_*` values, and the service's webhook endpoint in
-Stripe, step 5 of "Using it from your app"). Until then the service's `STRIPE_WEBHOOK_SECRET` is
-a random placeholder, so its webhook accepts nothing.
+deploy. The service is registered with the shop as its OAuth client (step 4 of "Using it from your
+app"), with the secret in the service's `AFFILIATES_OAUTH_SECRET`. Not set yet: Stripe (the
+`STRIPE_*` values, and the shop's webhook in Stripe, step 6).
 
 ## License
 

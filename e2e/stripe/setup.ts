@@ -6,7 +6,7 @@
 // Runs only when asked for by name: a plain `vp test run` skips it.
 import Stripe from "stripe";
 import type { TestProject } from "vite-plus/test/node";
-import { AFFILIATES, answers, SHOP, serviceEnv, startDev, stop, untilReady } from "../servers";
+import { AFFILIATES, answers, appEnv, SHOP, startDev, stop, untilReady } from "../servers";
 
 declare module "vite-plus/test" {
   interface ProvidedContext {
@@ -52,8 +52,9 @@ export default async function setup(project: TestProject) {
   project.provide("stripeKey", key);
   project.provide("payoutCurrency", payoutCurrency);
   project.provide("saleCurrency", saleCurrency);
-  project.provide("hostToken", serviceEnv("AFFILIATES_HOST_TOKEN"));
-  project.provide("webhookSecret", serviceEnv("STRIPE_WEBHOOK_SECRET"));
+  project.provide("hostToken", appEnv("affiliates", "AFFILIATES_HOST_TOKEN"));
+  // Stripe events go to the shop's Better Auth Stripe webhook, signed with its secret.
+  project.provide("webhookSecret", appEnv("shop", "STRIPE_WEBHOOK_SECRET"));
   return async () => {
     stop(dev);
     await stripe.coupons.del(coupon.id);

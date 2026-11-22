@@ -8,6 +8,6 @@ export const GET = defineHandler.withValidator({ query: z.object({ partnerId: z.
   c,
   { query },
 ) => {
-  await requireAdmin(c);
+  requireAdmin(c);
   return { links: await linksOf(query.partnerId, new URL(c.req.url).origin) };
 });

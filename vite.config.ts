@@ -6,12 +6,28 @@ export default defineConfig({
   lint: { options: { typeAware: true, typeCheck: true } },
   run: {
     tasks: {
-      // Each app's local .env, then the affiliate service's migrations on its local database. Once
-      // per clone, and after pulling a new migration; safe to rerun.
-      setup: { command: ["vpx scripts/setup.ts", "vp run affiliates#db:migrate"], cache: false },
+      // Each app's local .env, both apps' migrations on their local databases, and the service
+      // registered with the shop's sign-in (scripts/oauth-client.ts). Once per clone, and after
+      // pulling a new migration; safe to rerun.
+      setup: {
+        command: [
+          "vpx scripts/setup.ts",
+          "vp run affiliates#db:migrate",
+          "vp run shop#db:migrate",
+          "vpx scripts/oauth-client.ts",
+        ],
+        cache: false,
+      },
       // Demo data in both apps' local databases (it resets them): the people in
       // apps/affiliates/demo.ts as shop accounts, and 90 days of the program (README, "Demo data").
-      demo: { command: ["vp run shop#db:seed", "vp run affiliates#db:seed"], cache: false },
+      demo: {
+        command: [
+          "vp run shop#db:seed",
+          "vp run affiliates#db:seed",
+          "vpx scripts/oauth-client.ts",
+        ],
+        cache: false,
+      },
       // The same demo data in both deployed apps, replacing everything in their databases
       // (scripts/demo-production.ts). For the demo deployment only; needs `void cloudflare login`.
       "demo:production": { command: "vpx scripts/demo-production.ts", cache: false },

@@ -24,12 +24,15 @@ const wanted: Record<string, Record<string, string>> = {
     AFFILIATES_IP_SALT: random(),
     // Sales wait 30 days before they're approved (the tests date events back to check it).
     AFFILIATES_HOLD_DAYS: "30",
-    // A local signing secret: the dev-server tests sign their webhook events with it.
-    STRIPE_WEBHOOK_SECRET: `whsec_${random()}`,
+    // Its secret with the shop's OAuth provider (scripts/oauth-client.ts registers it there).
+    AFFILIATES_OAUTH_SECRET: random(),
   },
   "apps/shop": {
     AFFILIATES_HOST_TOKEN: shared,
     ADMIN_EMAILS: "admin@example.test",
+    // A local signing secret for the shop's Stripe webhook (Better Auth's Stripe plugin): the
+    // dev-server tests sign their Stripe events with it.
+    STRIPE_WEBHOOK_SECRET: `whsec_${random()}`,
   },
 };
 

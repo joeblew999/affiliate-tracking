@@ -10,33 +10,49 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 /**
- * Each app's tables, children before parents: deleted in this order, and their rows inserted in the
- * reverse, so every foreign key points at a row that's there. (A D1 import checks them statement by
- * statement, and the export lists tables alphabetically.)
+ * Each app's tables. `load`: replaced by the demo's rows. `clear`: emptied, nothing loaded (who's
+ * signed in, and the shop's tokens for the service). `keep`: left as they are, the demo's rows not
+ * loaded (the shop's signing keys, and the service registered as its OAuth client by
+ * `scripts/oauth-client.ts`). Deleted in the order listed, `clear` then `load`, children before
+ * parents; rows inserted in the reverse, so every foreign key points at a row that's there. (A D1
+ * import checks them statement by statement, and the export lists tables alphabetically.)
  */
 const APPS = {
-  shop: ["session", "account", "verification", "subscription", "user"],
-  affiliates: [
-    "clicks",
-    "sales",
-    "referrals",
-    "payouts",
-    "links",
-    "commission_rules",
-    "refunded_payments",
-    "partner_ip_hashes",
-    "partners",
-  ],
+  shop: {
+    clear: ["oauthAccessToken", "oauthRefreshToken", "oauthConsent", "session", "verification"],
+    load: ["account", "subscription", "user"],
+    keep: ["jwks", "oauthClientAssertion", "oauthClientResource", "oauthResource", "oauthClient"],
+  },
+  affiliates: {
+    clear: ["session", "verification"],
+    load: [
+      "clicks",
+      "sales",
+      "referrals",
+      "payouts",
+      "links",
+      "commission_rules",
+      "refunded_payments",
+      "partner_ip_hashes",
+      "partners",
+      "account",
+      "user",
+    ],
+    keep: [],
+  },
 } as const;
 
-/** The export's INSERT statements (one a line), regrouped so parent tables come first. */
-function parentsFirst(sql: string, tables: readonly string[]): string[] {
+type Tables = { clear: readonly string[]; load: readonly string[]; keep: readonly string[] };
+
+/** The export's INSERT statements (one a line) for the `load` tables, parent tables first. */
+function parentsFirst(sql: string, { clear, load, keep }: Tables): string[] {
   const statements = sql.split("\n").filter((line) => line.startsWith("INSERT INTO "));
   const tableOf = (line: string) => /^INSERT INTO "([^"]+)"/.exec(line)?.[1] ?? "";
-  const unknown = statements.filter((line) => !tables.includes(tableOf(line)));
+  const known = [...clear, ...load, ...keep];
+  const unknown = statements.filter((line) => !known.includes(tableOf(line)));
   if (unknown.length)
     throw new Error(`a table this script doesn't know: ${tableOf(unknown[0] ?? "")}`);
-  return [...tables]
+  return [...load]
     .reverse()
     .flatMap((table) => statements.filter((line) => tableOf(line) === table));
 }
@@ -55,7 +71,7 @@ for (const [app, tables] of Object.entries(APPS)) {
   writeFileSync(
     load,
     [
-      ...tables.map((table) => `DELETE FROM "${table}";`),
+      ...[...tables.clear, ...tables.load].map((table) => `DELETE FROM "${table}";`),
       ...parentsFirst(readFileSync(exported, "utf8"), tables),
     ].join("\n"),
   );
