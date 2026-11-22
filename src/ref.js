@@ -15,6 +15,7 @@
 import { hostCookieName } from './cookie.js';
 import { requestIpHash } from './ip.js';
 import { isAutomatedRequest, CLICK_WINDOW_MS } from './fraud.js';
+import { affiliateLink } from './links.js';
 
 export const DEFAULT_REF_COOKIE = 'affiliate_ref';
 const REF_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
@@ -22,6 +23,17 @@ const REF_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
 export function refCookieName(env, request) {
     const name = (env && env.AFFILIATE_REF_COOKIE) || DEFAULT_REF_COOKIE;
     return request ? hostCookieName(name, request.url) : name;
+}
+
+// Which of the affiliate's links the visitor came through (src/links.js).
+export function linkCookieName(env, request) {
+    const name = ((env && env.AFFILIATE_REF_COOKIE) || DEFAULT_REF_COOKIE) + '_link';
+    return request ? hostCookieName(name, request.url) : name;
+}
+
+export function readAffiliateLink(request, env) {
+    const cookie = referralCookie(request.headers.get('Cookie'), linkCookieName(env, request));
+    return cookie.present && !cookie.invalid && cookie.values.size === 1 ? [...cookie.values][0] || null : null;
 }
 
 // Cookie headers contain no path/domain/creation-time information. Never use
@@ -60,7 +72,8 @@ function referralCookie(header, name) {
 
 export async function applyAffiliateRef(request, env, respond, ctx) {
     if (!env.DB || typeof respond !== 'function' || request.method !== 'GET') return null;
-    const code = new URL(request.url).searchParams.get('ref');
+    const searchParams = new URL(request.url).searchParams;
+    const code = searchParams.get('ref');
     if (!code) return null;
     const cookieName = refCookieName(env, request);
 
@@ -77,11 +90,22 @@ export async function applyAffiliateRef(request, env, respond, ctx) {
     // Link previews and crawlers neither count as a click nor get a cookie.
     if (isAutomatedRequest(request)) return null;
 
-    // One click per fresh referral: a visitor already carrying this code (page
-    // reloads, multi-page browsing) is not a second click.
+    // A short link adds aff_link=<slug>; only the affiliate's own active links count.
+    let link = null;
+    const linkSlug = searchParams.get('aff_link');
+    if (linkSlug) {
+        try {
+            link = await affiliateLink(env, aff.id, linkSlug.toLowerCase());
+        } catch (err) {
+            console.error('Affiliate link lookup failed:', err.message);
+        }
+    }
+
+    // One click per fresh referral: a visitor already carrying this code and
+    // link (page reloads, multi-page browsing) is not a second click.
     const existing = readAffiliateRef(request, env);
-    if (existing !== aff.code) {
-        const click = recordClick(request, env, aff.id);
+    if (existing !== aff.code || (link && readAffiliateLink(request, env) !== link.id)) {
+        const click = recordClick(request, env, aff.id, link?.id || null);
         if (ctx?.waitUntil) ctx.waitUntil(click);
         else await click;
     }
@@ -103,6 +127,12 @@ export async function applyAffiliateRef(request, env, respond, ctx) {
     );
     // Retire the known host-only, root-path legacy cookie on a fresh referral.
     // Other legacy scopes are unknown; the current cookie always outranks them.
+    // Remember the link, or forget an earlier one when this visit used none.
+    if (link) {
+        headers.append('Set-Cookie', `${linkCookieName(env, request)}=${encodeURIComponent(link.id)}; Max-Age=${REF_COOKIE_MAX_AGE}; ${attributes}`);
+    } else if (readAffiliateLink(request, env)) {
+        headers.append('Set-Cookie', `${linkCookieName(env, request)}=; Max-Age=0; ${attributes}`);
+    }
     const legacyName = env.AFFILIATE_REF_LEGACY_COOKIE;
     if (legacyName && legacyName !== cookieName) {
         headers.append('Set-Cookie', `${legacyName}=; Max-Age=0; ${attributes}`);
@@ -110,17 +140,17 @@ export async function applyAffiliateRef(request, env, respond, ctx) {
     return new Response(assetRes.body, { status: assetRes.status, headers });
 }
 
-async function recordClick(request, env, affiliateId) {
+async function recordClick(request, env, affiliateId, linkId) {
     try {
         const ipHash = await requestIpHash(request, env);
         const now = Date.now();
         // One click per IP per affiliate per window; a request without an IP
         // can't be deduplicated and is counted.
-        await env.DB.prepare(`INSERT INTO clicks (affiliate_id, ip_hash, created_at)
-            SELECT ?1, ?2, ?3
+        await env.DB.prepare(`INSERT INTO clicks (affiliate_id, ip_hash, created_at, link_id)
+            SELECT ?1, ?2, ?3, ?5
             WHERE ?2 IS NULL OR NOT EXISTS (
                 SELECT 1 FROM clicks WHERE affiliate_id=?1 AND ip_hash=?2 AND created_at > ?4)
-        `).bind(affiliateId, ipHash, now, now - CLICK_WINDOW_MS).run();
+        `).bind(affiliateId, ipHash, now, now - CLICK_WINDOW_MS, linkId).run();
     } catch (err) {
         console.error('Affiliate click insert failed:', err.message);
     }

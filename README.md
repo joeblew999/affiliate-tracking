@@ -47,6 +47,7 @@ pnpm wrangler d1 migrations apply DB --remote
 # pnpm wrangler d1 execute DB --file=migrations/0005_affiliate_operations.sql --remote
 # pnpm wrangler d1 execute DB --file=migrations/0006_hold_period.sql --remote
 # pnpm wrangler d1 execute DB --file=migrations/0007_fraud_checks.sql --remote
+# pnpm wrangler d1 execute DB --file=migrations/0008_links.sql --remote
 
 # 3. Set secrets
 pnpm wrangler secret put AFFILIATE_SESSION_SECRET
@@ -332,6 +333,45 @@ Built in, nothing to configure:
   (`self_ip`). Only salted IP hashes are stored. Flagged sales stay pending
   for an admin, show the reason in the admin dashboard, and are never
   approved by the hold period.
+### Short links (`handleAffiliateLink`)
+
+Besides `?ref=code`, each affiliate can have up to 100 short links, each with
+its own destination and campaign, so you can see which link brought the click
+and the sale. A link looks like `https://yoursite.com/r/nick-youtube`.
+
+Route it before `applyAffiliateRef`:
+
+```js
+import { handleAffiliateLink } from "cf-affiliate";
+
+const linkRes = await handleAffiliateLink(request, env);
+if (linkRes) return linkRes;
+```
+
+It redirects to the link's destination on your site with
+`?ref=<code>&aff_link=<slug>` (the visitor's own `utm_*` parameters are kept),
+and `applyAffiliateRef` then sets the cookie on your site and records the
+click against the link. Checkout adds `metadata[affiliate_link_id]`, and the
+conversion is stored with its `link_id`. Destinations are always paths on
+`SITE_URL` (or the request's origin), never another host, so a link can't be
+used as an open redirect.
+
+For a separate short domain (`go.example.com`), point it at the same Worker
+and set `AFFILIATE_LINK_BASE_URL = "https://go.example.com"` so link URLs are
+shown with it. The cookie is still set on your main site.
+
+Partners manage their links from their dashboard:
+
+```bash
+GET  /api/affiliate/links                                       # with clicks, sales and commission per link
+POST /api/affiliate/links {"destination":"/pricing","campaign":"YouTube","slug":"nick-youtube"}
+POST /api/affiliate/link-archive {"id":"<link id>"}
+```
+
+`examples/partner-links.html` is a ready page for partners to manage their links.
+In the admin dashboard, the **Links** button on each partner opens the same list
+and form. Admins can also do the same through `GET /api/admin/links?affiliate_id=1`,
+`POST /api/admin/links {"affiliate_id":1, ...}` and `POST /api/admin/link-archive`.
 
 ### Partner access and onboarding
 
@@ -368,6 +408,10 @@ context to the helpers directly.
 | `src/route.js` | Route table + `handleAffiliateApi` |
 | `src/ref.js` | Ref middleware (`applyAffiliateRef`) + cookie parsing |
 | `src/checkout.js` | Checkout attribution (`attachAffiliateAttribution`) |
+| `src/links.js` | Short links (`handleAffiliateLink`) |
+| `examples/partner-links.html` | Partner page: create, list and archive links |
+| `functions/api/affiliate/links.js` | Partner link management |
+| `functions/api/admin/links.js` | Admin link management |
 | `src/webhook.js` | Conversion, refund, and dispute recording |
 | `functions/api/_affiliate-auth.js` | HMAC magic-link + session tokens |
 | `functions/api/_crypto-utils.js` | Shared HMAC + constant-time compare |
@@ -411,6 +455,8 @@ routes itself — see `src/route.js` for the exact paths.
 | `AFFILIATE_REF_COOKIE` | optional | Attribution cookie name (default `affiliate_ref`) |
 | `AFFILIATE_IP_SALT` | optional | IP hash salt |
 | `AFFILIATE_HOLD_DAYS` | optional | Days before pending conversions are approved automatically (unset: manual only) |
+| `AFFILIATE_LINK_PREFIX` | optional | Path prefix of short links (default `/r/`) |
+| `AFFILIATE_LINK_BASE_URL` | optional | Origin shown in short-link URLs, e.g. a short domain (default `SITE_URL`) |
 
 ## Tests
 

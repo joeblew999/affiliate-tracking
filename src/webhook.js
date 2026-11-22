@@ -61,14 +61,18 @@ export async function recordConversion(session, event, env, lineItems = session?
         buyerIpHash: session.metadata?.affiliate_buyer_ip_hash,
         affiliateIpHashes: ipRows.map(row => row.ip_hash),
     });
+    const linkId = session.metadata?.affiliate_link_id
+        ? (await env.DB.prepare('SELECT id FROM links WHERE id=?1 AND affiliate_id=?2')
+            .bind(session.metadata.affiliate_link_id, affiliateId).first())?.id || null
+        : null;
     await env.DB.prepare(`
         INSERT INTO conversions
           (affiliate_id, stripe_session_id, stripe_event_id, payment_intent,
            customer_email, amount_cents, commission_cents, status, created_at,
-           currency, customer_country, commission_pct, items_json, fraud_reason)
+           currency, customer_country, commission_pct, items_json, fraud_reason, link_id)
         VALUES (?1,?2,?3,?4,?5,?6,?7,
                 CASE WHEN EXISTS (SELECT 1 FROM refunded_payments WHERE payment_intent=?4)
-                     THEN 'refunded' ELSE 'pending' END,?8,?9,?10,?11,?12,?13)
+                     THEN 'refunded' ELSE 'pending' END,?8,?9,?10,?11,?12,?13,?14)
         ON CONFLICT(stripe_session_id) DO UPDATE SET
           payment_intent=COALESCE(conversions.payment_intent, excluded.payment_intent),
           status=CASE WHEN excluded.status='refunded' AND conversions.status IN ('pending','approved','paying')
@@ -90,7 +94,8 @@ export async function recordConversion(session, event, env, lineItems = session?
         typeof country === 'string' && /^[a-z]{2}$/i.test(country) ? country.toUpperCase() : null,
         aff.commission_pct,
         JSON.stringify(items),
-        fraudReason
+        fraudReason,
+        linkId
     ).run();
     return session;
 }

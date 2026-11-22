@@ -28,6 +28,10 @@ export interface AffiliateEnv {
     AFFILIATE_TERMS_VERSION?: string;
     /** Whole days before a pending conversion is approved automatically. Unset: manual approval only. */
     AFFILIATE_HOLD_DAYS?: string;
+    /** Path prefix of short links. Default /r/. */
+    AFFILIATE_LINK_PREFIX?: string;
+    /** Origin short links are shown under, e.g. https://go.example.com. Default: SITE_URL. */
+    AFFILIATE_LINK_BASE_URL?: string;
     AFFILIATE_PUBLIC_LIMITER?: {
         limit(options: { key: string }): Promise<{ success: boolean }>;
     };
@@ -126,3 +130,6 @@ export function recordRefund(event: StripeEvent | null | undefined, env: Affilia
 
 /** Approves pending conversions older than AFFILIATE_HOLD_DAYS. Returns how many were approved; 0 when unset. */
 export function releaseHeldConversions(env: AffiliateEnv, now?: number): Promise<number>;
+export const DEFAULT_LINK_PREFIX: '/r/';
+/** Redirects GET <prefix><slug> to the link's destination with ?ref= and aff_link=. Null for any other request. */
+export function handleAffiliateLink(request: Request, env: AffiliateEnv): Promise<Response | null>;

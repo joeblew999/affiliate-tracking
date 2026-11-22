@@ -12,7 +12,8 @@
 // remains available when cookie tracking is unconfigured or ambiguous. An
 // unusable entered code throws PromotionCodeError for the host to display.
 
-import { readAffiliateRef } from './ref.js';
+import { readAffiliateRef, readAffiliateLink } from './ref.js';
+import { affiliateLink } from './links.js';
 import { findPromotionCode, affiliateForPromotion, PromotionCodeError } from './promotion.js';
 import { requestIpHash } from './ip.js';
 
@@ -64,6 +65,17 @@ export async function attachAffiliateAttribution(params, request, env, { promoCo
         // sign-in IP hashes when the sale is recorded. Never a raw IP.
         const buyerIpHash = await requestIpHash(request, env);
         if (buyerIpHash) params.set('metadata[affiliate_buyer_ip_hash]', buyerIpHash);
+        // Credit the sale to the short link the visitor used, when it belongs
+        // to the affiliate who gets the sale.
+        const linkId = readAffiliateLink(request, env);
+        if (linkId && env.DB) {
+            try {
+                const link = await affiliateLink(env, aff.id, linkId);
+                if (link) params.set('metadata[affiliate_link_id]', link.id);
+            } catch (err) {
+                console.error('Affiliate link lookup failed during checkout:', err.message);
+            }
+        }
     }
     // Buyer discount. Pre-applied via the promotion code minted at approval
     // time; absent until an admin approves the affiliate.
