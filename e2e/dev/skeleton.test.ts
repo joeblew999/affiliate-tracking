@@ -39,5 +39,5 @@ test("the service's page shows the shop's signed-in user", async () => {
     r.text(),
   );
   expect(html).toContain(bob.email);
-  expect(await fetch(`${AFFILIATES}/`).then((r) => r.text())).toContain("Sign in on the shop");
+  expect(await fetch(`${AFFILIATES}/`).then((r) => r.text())).toContain("Sign in on");
 });

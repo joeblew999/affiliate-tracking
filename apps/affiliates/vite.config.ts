@@ -4,6 +4,11 @@ import { voidPlugin } from "void";
 import { voidReact } from "@void/react/plugin";
 import tailwindcss from "@tailwindcss/vite";
 
+// Its own debugger port. `vp run dev` starts both apps at once; both asked for 9229, and now and then
+// one crashed (EADDRINUSE) instead of moving to another port. Void reads VOID_INSPECTOR_PORT
+// (void 1.11.0, dist/index.mjs; not in its docs).
+process.env.VOID_INSPECTOR_PORT ??= "9231";
+
 export default defineConfig({
   plugins: [voidPlugin(), voidReact(), tailwindcss()],
   // shadcn's "@/" import alias (tsconfig.json "paths" says the same for TypeScript).

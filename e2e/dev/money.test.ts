@@ -16,7 +16,10 @@ import {
 const DAILY = "17 3 * * *";
 
 /** Each session's commission, in the order given (sales in the same second share a time). */
-async function commissionsOf(partnerId: string, sessions: { id: unknown }[]): Promise<number[]> {
+async function commissionsOf(
+  partnerId: string,
+  sessions: Record<string, unknown>[],
+): Promise<number[]> {
   const sales = await salesOf(partnerId);
   return sessions.map(
     (session) => sales.find((sale) => sale.stripeSessionId === session.id)?.commissionCents ?? -1,

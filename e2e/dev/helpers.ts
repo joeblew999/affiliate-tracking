@@ -164,15 +164,13 @@ export function paidSession(
   };
 }
 
-/** Wait until check() passes (for work done through a queue). */
-export async function eventually(check: () => Promise<void>, ms = 20_000): Promise<void> {
-  const deadline = Date.now() + ms;
+/** Wait until check() passes (for work done through a queue). The test's own timeout ends it. */
+export async function eventually(check: () => Promise<void>): Promise<void> {
   for (;;) {
     try {
       await check();
       return;
-    } catch (err) {
-      if (Date.now() > deadline) throw err;
+    } catch {
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }

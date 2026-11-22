@@ -31,6 +31,10 @@ export default defineConfig({
           include: ["e2e/dev/*.test.ts"],
           globalSetup: ["e2e/dev/setup.ts"],
           pool: "forks",
+          // Browser tests and work through queues take longer than Vitest's 5 seconds; as in
+          // void-fbtee's dev-server projects.
+          testTimeout: 120_000,
+          hookTimeout: 120_000,
           fileParallelism: false,
         },
       },
