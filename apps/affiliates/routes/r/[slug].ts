@@ -4,9 +4,12 @@
 // crawlers are sent on with nothing recorded. An unknown or inactive link goes to the host's home.
 import { clicks, links, partners } from "@schema";
 import { defineHandler } from "void";
+import type { Href } from "void/routes";
 import { and, db, eq, gt } from "void/db";
 import { env } from "void/env";
-import { referralCookie, type Referral } from "@/referral-cookie";
+import { setCookie } from "hono/cookie";
+import { REF_COOKIE } from "@/host-contract";
+import { referralValue, type Referral } from "@/referral-cookie";
 import { country, deviceClass, isAutomated, referrerHost, requestIpHash } from "@/visitor";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -66,14 +69,19 @@ export const GET = defineHandler(async (c) => {
   const target = new URL(found?.destination ?? "/", env.HOST_SITE_URL);
   for (const [key, value] of url.searchParams)
     if (!target.searchParams.has(key)) target.searchParams.append(key, value);
-  const headers = new Headers({
-    location: target.toString(),
-    "cache-control": "private, no-store",
-    "referrer-policy": "strict-origin-when-cross-origin",
-  });
+  c.header("cache-control", "private, no-store");
+  c.header("referrer-policy", "strict-origin-when-cross-origin");
   if (found && !isAutomated(c.req.raw)) {
     c.executionCtx.waitUntil(recordClick(c.req.raw, found));
-    headers.append("set-cookie", referralCookie(found, url.protocol === "https:"));
+    // 30 days, for the parent domain so the host's site gets it too.
+    setCookie(c, REF_COOKIE, referralValue(found), {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 30,
+      sameSite: "Lax",
+      httpOnly: true,
+      secure: url.protocol === "https:",
+      domain: env.AFFILIATES_COOKIE_DOMAIN,
+    });
   }
-  return new Response(null, { status: 302, headers });
+  return c.redirect(target.toString() as Href, 302);
 });

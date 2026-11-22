@@ -3,7 +3,6 @@ import { PAGES_PROTOCOL_VERSION } from "@void/edge";
 import { unflatten } from "devalue";
 import { fetch as voidFetch } from "void/client";
 import type { ActionUrl, ResolveActionBody } from "void/routes";
-import { HOST_TOKEN_HEADER } from "../../apps/affiliates/client";
 import type { Props as AdminPage } from "../../apps/affiliates/pages/admin/index.server";
 import type { Props as PartnerPage } from "../../apps/affiliates/pages/index.server";
 import Stripe from "stripe";
@@ -64,7 +63,7 @@ export function asShop(): typeof voidFetch {
       {
         ...options,
         baseURL: AFFILIATES,
-        headers: { [HOST_TOKEN_HEADER]: inject("hostToken"), ...options.headers },
+        headers: { authorization: `Bearer ${inject("hostToken")}`, ...options.headers },
       } as never,
     );
   return call as typeof voidFetch;

@@ -2,7 +2,6 @@
 // then the dashboard: their link and buyer code, totals, short links, and the last 30 days.
 import { action, Form, useForm } from "@void/react";
 import { useState, type ReactNode } from "react";
-import { AppHeader } from "@/components/app-header";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
@@ -24,22 +23,11 @@ import { useAction } from "@/components/use-action";
 import type { Props } from "./index.server";
 
 export default function PartnerPage(props: Props) {
-  const { user, partner } = props;
+  const { partner } = props;
   return (
     <>
-      <AppHeader
-        email={user?.email}
-        shopUrl={props.shopUrl}
-        viewingAs={user?.viewedBy ? user.name : null}
-      >
-        {user?.isAdmin && (
-          <a className="hover:text-foreground" href="/admin">
-            Admin
-          </a>
-        )}
-      </AppHeader>
       <main className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
-        {user && !partner && <Apply />}
+        {!partner && <Apply />}
         {partner?.status === "pending" && (
           <Notice title="Application received" text="An admin will review it soon." />
         )}

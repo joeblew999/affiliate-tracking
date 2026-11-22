@@ -4,9 +4,6 @@
 import type Stripe from "stripe";
 import { z } from "zod";
 
-/** The header the host's calls carry AFFILIATES_HOST_TOKEN in. */
-export const HOST_TOKEN_HEADER = "x-affiliates-host-token";
-
 /**
  * The referral cookie: set by this service's referral links for the parent domain, so the host's site
  * receives it too and passes its value on at signup and checkout.

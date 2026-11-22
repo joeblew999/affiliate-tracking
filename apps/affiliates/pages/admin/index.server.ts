@@ -25,15 +25,8 @@ import { stats } from "@/stats";
 // The admin page: everything, for the host's admins only. ?partner=<id>: only that partner's sales
 // and payouts. ?links=<partner id>: that partner's short links too, for the dialog that shows them.
 export const loader = defineHandler(async (c) => {
-  const user = c.get("shopUser");
-  const shopUrl = env.HOST_SITE_URL;
-  if (user?.role !== "admin")
-    return {
-      allowed: false as const,
-      shopUrl,
-      // An admin viewing as someone: the way back is in the bar.
-      viewingAs: user?.impersonatedBy ? user.name : null,
-    };
+  // Not an admin (or an admin viewing as someone, whose way back is in the layout's bar).
+  if (c.get("shopUser")?.role !== "admin") return { allowed: false as const };
   const linksFor = c.req.query("links") ?? null;
   const partnerId = c.req.query("partner");
   const origin = new URL(c.req.url).origin;
@@ -61,8 +54,6 @@ export const loader = defineHandler(async (c) => {
   ]);
   return {
     allowed: true as const,
-    shopUrl,
-    email: user.email,
     payoutCurrency: env.AFFILIATES_PAYOUT_CURRENCY,
     partners: partnerRows,
     sales: saleRows.map(({ sale, partnerName }) => ({ ...sale, partnerName })),

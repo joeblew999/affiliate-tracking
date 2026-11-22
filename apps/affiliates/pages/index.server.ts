@@ -12,14 +12,11 @@ import { hasStripe, stripe } from "@/stripe";
 import { earnings, stats } from "@/stats";
 import { requestIpHash } from "@/visitor";
 
-// The partner's page: who's signed in (through the host), their partner record, and for an active
-// partner their links and the last 30 days.
+// The partner's page: their partner record, and for an active partner their links and the last 30
+// days. (Who's signed in is in the layout's shared data: middleware/01.user.ts.)
 export const loader = defineHandler(async (c) => {
-  const user = c.get("shopUser");
-  const shopUrl = env.HOST_SITE_URL;
+  const user = requireUser(c);
   const program = { holdDays: env.AFFILIATES_HOLD_DAYS ?? null };
-  if (!user)
-    return { user: null, shopUrl, program, partner: null, links: [], stats: null, earnings: [] };
   const record = await partnerForUser(user.id);
   // An admin who isn't a partner has nothing here: the admin page.
   if (user.role === "admin" && !record && !user.impersonatedBy)
@@ -28,13 +25,6 @@ export const loader = defineHandler(async (c) => {
   if (record && active) await notePartnerIp(record.id, await requestIpHash(c.req.raw));
   const origin = new URL(c.req.url).origin;
   return {
-    user: {
-      email: user.email,
-      name: user.name,
-      isAdmin: user.role === "admin",
-      viewedBy: user.impersonatedBy,
-    },
-    shopUrl,
     program,
     partner: record
       ? {

@@ -7,7 +7,6 @@ import type { z } from "zod";
 import {
   CheckoutInput,
   CheckoutOutput,
-  HOST_TOKEN_HEADER,
   REF_COOKIE,
   SignupInput,
   SignupOutput,
@@ -15,7 +14,7 @@ import {
   StripeEventOutput,
 } from "./src/host-contract";
 
-export { HOST_TOKEN_HEADER, REF_COOKIE };
+export { REF_COOKIE };
 
 /** What the host sends when a user signs up (its queue message too). */
 export type Signup = z.input<typeof SignupInput>;
@@ -45,7 +44,7 @@ export function affiliates(binding: Fetcher, token: string) {
   ): Promise<z.output<O>> {
     const res = await binding.fetch(new URL(path, "https://affiliates.internal"), {
       method: "POST",
-      headers: { "content-type": "application/json", [HOST_TOKEN_HEADER]: token },
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
       body: JSON.stringify(input.parse(body)),
     });
     if (!res.ok) throw new Error(`affiliates ${path}: ${res.status} ${await res.text()}`);

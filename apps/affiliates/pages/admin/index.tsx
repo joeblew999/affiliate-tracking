@@ -4,7 +4,6 @@ import { action, useRouter } from "@void/react";
 import type { Href } from "void/routes";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
-import { AppHeader } from "@/components/app-header";
 import { viewAs } from "@/components/view-as";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +42,6 @@ export default function AdminPage(props: Props) {
   if (!props.allowed) {
     return (
       <>
-        <AppHeader shopUrl={props.shopUrl} viewingAs={props.viewingAs} />
         <main className="mx-auto max-w-lg px-4 py-6">
           <Card>
             <CardHeader>
@@ -64,11 +62,6 @@ export default function AdminPage(props: Props) {
   const toReview = props.sales.filter((s) => s.status === "pending").length;
   return (
     <>
-      <AppHeader email={props.email} shopUrl={props.shopUrl}>
-        <a className="hover:text-foreground" href="/">
-          Partner page
-        </a>
-      </AppHeader>
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
         <Tabs defaultValue="partners">
           <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">

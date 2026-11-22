@@ -9,7 +9,7 @@ test("the host-only API needs the shop's token", async () => {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        ...(token ? { "x-affiliates-host-token": token } : {}),
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({ userId: "u1", ref: null }),
     });

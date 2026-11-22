@@ -37,8 +37,7 @@ export function referrerHost(request: Request): string | null {
 
 /** Cloudflare's two-letter country for the request, when it gave one. */
 export function country(request: Request): string | null {
-  const cf: unknown = Reflect.get(request, "cf");
-  const value: unknown = cf && typeof cf === "object" ? Reflect.get(cf, "country") : undefined;
+  const value = request.cf?.country;
   return typeof value === "string" && /^[A-Z]{2}$/.test(value) ? value : null;
 }
 
@@ -47,8 +46,7 @@ const AUTOMATED =
   /bot\b|bot\/|crawl|spider|slurp|preview|facebookexternalhit|facebookcatalog|embedly|whatsapp|telegrambot|discordbot|slackbot|twitterbot|linkedinbot|skypeuripreview|pinterest|redditbot|applebot|bingpreview|googleother|vkshare|w3c_validator|headlesschrome|lighthouse|curl\/|wget\/|python-requests|go-http-client|node-fetch|axios\//i;
 
 export function isAutomated(request: Request): boolean {
-  const cf: unknown = Reflect.get(request, "cf");
-  const bots: unknown = cf && typeof cf === "object" ? Reflect.get(cf, "botManagement") : undefined;
-  if (bots && typeof bots === "object" && Reflect.get(bots, "verifiedBot") === true) return true;
+  const cf = request.cf as IncomingRequestCfProperties | undefined;
+  if (cf?.botManagement?.verifiedBot) return true;
   return AUTOMATED.test(request.headers.get("user-agent") ?? "");
 }
