@@ -63,7 +63,7 @@ __STYLESHEETS__
       <label>Amount<input name="amount" type="number" min="0.01" step="0.01" required></label>
       <label>Currency<input name="currency" value="usd" maxlength="3" required></label>
       <label>Note<input name="note" maxlength="200" placeholder="Launch week" required></label>
-    </div><button class="primary" type="submit">Add bonus</button><p class="note">Bonuses are approved straight away and paid with the partner's next payout.</p></form>
+    </div><button class="primary" type="submit">Add bonus</button><p class="note">Bonuses are approved straight away and paid with the partner's next payout, in your payout currency.</p></form>
   <section id="performance-panel" hidden>
     <div class="toolbar row spread"><h2>Performance</h2><div class="row"><label for="stats-days" class="muted">Period</label><select id="stats-days"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 365 days</option></select></div></div>
     <div class="card"><span class="muted">Clicks per day</span><svg id="clicks-chart" role="img" aria-label="Clicks per day" width="100%" height="120" viewBox="0 0 600 120" preserveAspectRatio="none"></svg></div>

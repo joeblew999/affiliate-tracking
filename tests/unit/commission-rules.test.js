@@ -133,4 +133,24 @@ describe('bonuses and minimum payout', () => {
         assert.equal((await admin('/api/admin/payouts-run', {})).status, 200);
         assert.deepEqual(sql.prepare('SELECT affiliate_id, amount_cents FROM payouts ORDER BY id').all().map(r => [r.affiliate_id, r.amount_cents]), [[2, 6000], [1, 5500]]);
     });
+
+    it('only takes a bonus in the payout currency, since it has no payment to convert from', async () => {
+        const { env, admin } = setup();
+        const res = await admin('/api/admin/bonus', { affiliate_id: 1, amount_cents: 5000, currency: 'eur', note: 'Launch week' });
+        assert.equal(res.status, 400);
+        assert.match((await res.json()).error, /USD/);
+        env.AFFILIATE_PAYOUT_CURRENCY = 'eur';
+        assert.equal((await admin('/api/admin/bonus', { affiliate_id: 1, amount_cents: 5000, currency: 'eur', note: 'Launch week' })).status, 201);
+    });
+
+    it('counts the minimum in the payout currency, after conversion', async () => {
+        const { sql, env, admin } = setup();
+        globalThis.fetch = async () => Response.json({ id: 'tr_1' });
+        env.AFFILIATE_MIN_PAYOUT_CENTS = '5000';
+        // Already converted: 30.00 GBP is 60.00 USD (over the minimum); 9000 JPY is 60 US cents (under it).
+        sql.exec(`INSERT INTO conversions (affiliate_id,stripe_session_id,amount_cents,commission_cents,status,created_at,currency,payout_currency,payout_cents) VALUES
+            (1,'cs_gbp',0,3000,'approved',0,'gbp','usd',6000),(2,'cs_jpy',0,9000,'approved',0,'jpy','usd',60)`);
+        assert.equal((await admin('/api/admin/payouts-run', {})).status, 200);
+        assert.deepEqual(sql.prepare('SELECT affiliate_id, amount_cents FROM payouts').all().map(r => [r.affiliate_id, r.amount_cents]), [[1, 6000]]);
+    });
 });

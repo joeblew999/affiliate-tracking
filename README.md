@@ -503,7 +503,9 @@ Each conversion stores the rules it used in `commission_detail`, so
 `GET /api/admin/commission-rules` and `POST /api/admin/commission-rule-archive {"id":…}`
 can change the rules without changing anything already earned.
 
-One-off bonuses are approved lines paid with the next payout:
+One-off bonuses are approved lines paid with the next payout. They must be in
+the payout currency (`AFFILIATE_PAYOUT_CURRENCY`), since a bonus has no Stripe
+payment to convert from:
 
 ```bash
 curl -X POST https://yoursite.com/api/admin/bonus -H "x-admin-token: $ADMIN_TOKEN" \
@@ -514,7 +516,8 @@ The admin dashboard's **Rules & bonuses** tab lists the rules, adds and archives
 them, and adds bonuses; bonus lines show in Conversions with their note.
 
 Set `AFFILIATE_MIN_PAYOUT_CENTS` (e.g. `"5000"`) to hold back affiliates who are
-owed less; their commissions roll over to a later run.
+owed less, counted in the payout currency after conversion; their commissions
+roll over to a later run.
 
 ### Using your own sign-in (Better Auth and others)
 

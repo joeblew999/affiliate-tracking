@@ -1,10 +1,12 @@
 //   POST /api/admin/bonus { affiliate_id, amount_cents, currency, note }
 //     A one-off bonus line. It is approved straight away and paid with the
-//     affiliate's next payout.
+//     affiliate's next payout. It must be in the payout currency
+//     (AFFILIATE_PAYOUT_CURRENCY): a bonus has no Stripe payment to convert from.
 
 import { requireAdmin } from './_gate.js';
 import { readJsonObject } from '../_public.js';
 import { currencyCode } from '../../../src/money.js';
+import { payoutCurrency } from '../../../src/settlement.js';
 
 export async function onRequestPost({ request, env }) {
     const gate = await requireAdmin(env, request);
@@ -14,6 +16,15 @@ export async function onRequestPost({ request, env }) {
     if (!Number.isSafeInteger(affiliateId) || affiliateId <= 0 || !Number.isSafeInteger(amount) || amount <= 0 ||
         !currencyCode(currency) || typeof note !== 'string' || !note.trim() || note.length > 200) {
         return Response.json({ ok: false, error: 'affiliate_id, a positive amount_cents, a currency and a note of up to 200 characters are required' }, { status: 400 });
+    }
+    let target;
+    try {
+        target = payoutCurrency(env);
+    } catch (err) {
+        return Response.json({ ok: false, error: err.message }, { status: 500 });
+    }
+    if (currencyCode(currency) !== target) {
+        return Response.json({ ok: false, error: `Bonuses are paid in your payout currency, ${target.toUpperCase()}` }, { status: 400 });
     }
     const now = Date.now();
     const id = 'bonus_' + crypto.randomUUID();
