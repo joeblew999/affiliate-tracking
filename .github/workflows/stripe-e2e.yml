@@ -1,0 +1,50 @@
+# Runs the end-to-end tests against Stripe's test mode, on demand only.
+# Needs a repository secret STRIPE_TEST_SECRET_KEY holding a test-mode key
+# (sk_test_…); the tests refuse a live key and clean up what they create.
+# Each PR branch that has e2e tests is checked out and run on its own.
+name: Stripe end-to-end
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [issue-1-recurring-commissions, issue-6-payout-currencies]
+    name: ${{ matrix.branch }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.branch }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Check the secret is a test key
+        env:
+          STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+        run: |
+          case "$STRIPE_TEST_SECRET_KEY" in
+            sk_test_*|rk_test_*) echo "Test-mode key found." ;;
+            "") echo "::error::Add the repository secret STRIPE_TEST_SECRET_KEY first."; exit 1 ;;
+            *) echo "::error::STRIPE_TEST_SECRET_KEY must be a test-mode key (sk_test_…)."; exit 1 ;;
+          esac
+
+      - name: End-to-end tests
+        env:
+          STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+        run: pnpm test:e2e
