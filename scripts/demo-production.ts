@@ -9,7 +9,11 @@
 import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
-/** Each app's tables, children before parents, so the deletes keep foreign keys whole. */
+/**
+ * Each app's tables, children before parents: deleted in this order, and their rows inserted in the
+ * reverse, so every foreign key points at a row that's there. (A D1 import checks them statement by
+ * statement, and the export lists tables alphabetically.)
+ */
 const APPS = {
   shop: ["session", "account", "verification", "subscription", "user"],
   affiliates: [
@@ -25,6 +29,18 @@ const APPS = {
   ],
 } as const;
 
+/** The export's INSERT statements (one a line), regrouped so parent tables come first. */
+function parentsFirst(sql: string, tables: readonly string[]): string[] {
+  const statements = sql.split("\n").filter((line) => line.startsWith("INSERT INTO "));
+  const tableOf = (line: string) => /^INSERT INTO "([^"]+)"/.exec(line)?.[1] ?? "";
+  const unknown = statements.filter((line) => !tables.includes(tableOf(line)));
+  if (unknown.length)
+    throw new Error(`a table this script doesn't know: ${tableOf(unknown[0] ?? "")}`);
+  return [...tables]
+    .reverse()
+    .flatMap((table) => statements.filter((line) => tableOf(line) === table));
+}
+
 function voidIn(app: string, args: string[]) {
   const run = spawnSync("node_modules/.bin/void", args, { cwd: `apps/${app}`, stdio: "inherit" });
   if (run.status !== 0) throw new Error(`${app}: void ${args.join(" ")} failed`);
@@ -39,10 +55,8 @@ for (const [app, tables] of Object.entries(APPS)) {
   writeFileSync(
     load,
     [
-      // The export lists tables alphabetically, not parents first: check foreign keys at the end.
-      "PRAGMA defer_foreign_keys = true;",
       ...tables.map((table) => `DELETE FROM "${table}";`),
-      readFileSync(exported, "utf8"),
+      ...parentsFirst(readFileSync(exported, "utf8"), tables),
     ].join("\n"),
   );
   voidIn(app, ["db", "execute", "--remote", "--file", `../../${load}`, "--yes"]);
