@@ -1,167 +1,153 @@
 # Affiliates
 
-An affiliate program for any app on Cloudflare: partners share links, the sales those links bring
-earn them commission, and they're paid through Stripe. It is its own app, a backend with its own
-pages, that another app (the **host**) plugs into. The host keeps its users and sign-in; this app
-keeps the affiliate program.
+An affiliate program you can add to any app on Cloudflare. Partners share links. When a link brings a
+sale, the partner earns commission, and they're paid through Stripe.
 
-Built with [Void](https://void.cloud) (Vite, Cloudflare Workers, D1, Drizzle, Better Auth) and
-[Vite+](https://viteplus.dev). Pages are React with [shadcn](https://ui.shadcn.com). Rebuilt from
-[HolotypePteLtd/affiliate-tracking](https://github.com/HolotypePteLtd/affiliate-tracking) (MIT); the
-plan is `plans/2026-11-22-01-void-service.md`.
+It's an app of its own (the **service**). Your app (the **host**) keeps its users, sign-in and
+Stripe, and calls the service. This repo has both: the service, and an example shop as the host.
 
-## What's here
+Live demo: **https://shop.ubuntusoftware.net** (the shop) and
+**https://affiliates.shop.ubuntusoftware.net** (the service).
 
-- `apps/affiliates`: the affiliate service. Partners apply, admins approve; referral links and short
-  links; clicks, signups and sales; commission rules and bonuses; renewals; the hold period; payouts
-  through Stripe Connect; the partner's and the admin's pages. Laid out the Void way:
-  - each table in its own `db/schema/<table>.ts` (as `void gen model` lays them out), with the
-    request validators derived from it (`void/drizzle-zod`);
-  - the two pages read through their `loader` and change data through their named `actions`
-    (`pages/index.server.ts`, `pages/admin/index.server.ts`), called with Void's `action()`; Void
-    re-runs the loader after each. There's no API for the pages;
-  - the only routes are what other things call: the shop's `/api/host/*` (through the binding), the
-    shop's Better Auth at `/api/auth`, and referral links at `/r/<code>`;
-  - custom SQL in its own `void gen migration`.
+Built with [Void](https://void.cloud) and [Vite+](https://viteplus.dev): Cloudflare Workers, D1,
+Drizzle and Better Auth, with React and [shadcn](https://ui.shadcn.com) for the pages. Rebuilt
+from [HolotypePteLtd/affiliate-tracking](https://github.com/HolotypePteLtd/affiliate-tracking).
 
-- `apps/shop`: an example host. Void's Better Auth with its admin and Stripe plugins, wired to the
-  service. It shows what a real host does, and the tests run against it.
-- `e2e/`: the tests, against both apps running for real.
-- `scripts/setup.ts`: each app's local `.env`.
-- `.claude/skills/void`: Void's own skill for coding agents, linked from the installed `void`
-  package (as `void init` links it), so it matches the Void version after every `vp install`.
+## Try the demo
 
-## How it fits together
+Open the shop and press **Sign in as the admin**. You land on the service's admin page.
 
-- **Sign-in is the host's alone,** as Void's own dashboard does with its API. The service has no
-  users, passwords or sessions. A middleware (`apps/affiliates/middleware/01.user.ts`) asks the
-  host's Better Auth who the session cookie belongs to, through the service binding, and sends
-  anyone signed out to the host's sign-in, which brings them back. The service's `/api/auth` is the
-  host's Better Auth through the same binding, so its pages use Better Auth's client as if it were
-  their own: admins are the host's admin role, and "View as" is its admin plugin. A partner is a
-  host user who applied.
-- **Two addresses, one domain.** The host at e.g. `shop.example.com`, the service at
-  `affiliates.shop.example.com`. The host's session cookie is set for the parent domain so the
-  service receives it, and so is the service's referral cookie, so the host receives that.
-- **The host calls the service like a function,** through the service binding and
-  `apps/affiliates/client.ts`. Each call's input and output are defined once, in
-  `apps/affiliates/src/host-contract.ts`; the service's routes check against it and the client takes
-  its types from it. Host calls carry a shared secret (`AFFILIATES_HOST_TOKEN`), since the service
-  also has a public address.
-- **Referral links are the service's:** `affiliates.example.com/r/<partner code or short link>`
-  counts the click, sets the referral cookie, and sends the visitor on to the host's site.
-- **Stripe is the host's.** The host keeps customers and subscriptions, and the Stripe webhook
-  (Better Auth's Stripe plugin). Its `onEvent` hands every event to the service (`stripeEvent` in
-  the client), which records sales, renewals, refunds and disputes, and pays partners with Stripe
-  Connect transfers.
-- **Long-running work goes through queues:** sign-ups reach the service through the host's queue,
-  and payouts run one partner per queue message. A daily cron approves sales past the hold period
-  and queues again any payout left unfinished, so a crash never leaves one half done.
+- **Partners tab:** approve, suspend and set commission. To see the program as a partner, open a
+  partner's menu and choose **View as**. Press **Back to admin** in the bar at the top to return.
+- **Who's who:** Maya is the busiest partner, then Leo, Priya, Tom (every sale of his is reviewed)
+  and Ana. Ken is suspended. Sam and Lena are waiting for approval.
+- **Signing in as anyone:** every demo account uses the password `demo-password-2026` (public, for
+  the demo only): `admin@demo.test`, `maya@demo.test` and so on, and `chris@demo.test` for a
+  customer who never applied.
 
-## Using it from your app
+The demo is 90 days of made-up activity: about 2,000 clicks, signups, sales of three products,
+renewals, refunds, monthly payouts, rules and bonuses. Its dates count back from the day it's
+loaded.
 
-What the example shop does, in `apps/shop`:
+## How it works
 
-1. Bind the service, in your `void.config.ts`: `cloudflare.services: [{ binding: "AFFILIATES",
-   service: "affiliates" }]`. The service binds back to you as `HOST` (its `void.config.ts`).
-2. Give both apps the same `AFFILIATES_HOST_TOKEN` (`void secret put AFFILIATES_HOST_TOKEN` in each).
-3. In your `auth.ts` (see `apps/shop/auth.ts`):
-   - the `admin` plugin; the service's address in `trustedOrigins`; and your session cookie for
-     the parent domain (`advanced.crossSubDomainCookies`, from `AUTH_COOKIE_DOMAIN`);
-   - a new-user hook that queues the sign-up for the service with the referral cookie's value
-     (`referralFrom` in the client; `apps/shop/queues/affiliate-signups.ts`);
-   - with Better Auth's Stripe plugin, `getCheckoutSessionParams` asking the service's `checkout`
-     for the metadata and discount to add, and `onEvent` passing each event to `stripeEvent`
-     (`apps/shop/src/affiliates.ts`).
-4. Set the service's `HOST_SITE_URL` to your site, and its `AFFILIATES_COOKIE_DOMAIN` to the
-   parent domain.
-5. In Stripe, your Better Auth Stripe webhook (`https://shop.example.com/api/auth/stripe/webhook`)
-   needs `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`,
-   `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed` too.
+- **Sign-in is the host's.** The service has no users or passwords. On each request it asks the
+  host's Better Auth who is signed in. Admins are the host's admins. A partner is a host user who
+  applied.
+- **One domain, two addresses.** The shop is `shop.ubuntusoftware.net` and the service is
+  `affiliates.shop.ubuntusoftware.net`. Both set their cookies for the shop's domain, so each app
+  sees the other's: the service sees who is signed in, and the shop sees the referral cookie.
+- **Referral links belong to the service.** `/r/<partner code or short link>` counts the click,
+  sets the referral cookie, and sends the visitor on to the shop.
+- **The host calls the service through a Cloudflare service binding,** using the client in
+  `apps/affiliates/client.ts`. It calls at sign-up, at checkout, and for every Stripe event. Each
+  call is defined once, in `apps/affiliates/src/host-contract.ts`. Calls carry a shared secret,
+  `AFFILIATES_HOST_TOKEN`.
+- **Stripe stays with the host.** Its Better Auth Stripe plugin receives Stripe's webhook and
+  passes every event on. The service turns them into sales, renewals, refunds and disputes, and
+  pays partners with Stripe Connect.
+- **Slow work goes through queues.** Sign-ups reach the service through a queue. Payouts are queued
+  one partner at a time. A daily job approves sales once their hold period is over, and queues any
+  payout that didn't finish, so a crash can't leave one half done.
 
-The service's settings, each with a line saying what it does, are in `apps/affiliates/env.ts`; the
-shop's in `apps/shop/env.ts`.
+## Where things are
+
+| Folder                   | What's in it                                                                                  |
+| ------------------------ | --------------------------------------------------------------------------------------------- |
+| `apps/affiliates`        | The service.                                                                                  |
+| `apps/affiliates/db`     | Its database: one file per table in `schema/`, the migrations, and the demo seed.             |
+| `apps/affiliates/pages`  | Its two pages: the partner page (`index`) and the admin page (`admin/`).                      |
+| `apps/affiliates/routes` | What the host calls (`api/host/`), the host's sign-in passed through (`api/auth/`), and `r/`. |
+| `apps/affiliates/src`    | The program's logic: commission, sales, refunds, payouts, stats.                              |
+| `apps/shop`              | The example host: sign-in, Stripe, and its calls to the service.                              |
+| `e2e`                    | The tests, run against both apps.                                                             |
+| `scripts`                | Local setup, putting the demo on the live site, and screenshots.                              |
+| `plans`                  | The plan this was built to: `2026-11-22-01-void-service.md`.                                  |
+
+Each app's settings, each with a line saying what it's for, are in its `env.ts`.
 
 ## Develop
 
+Once per machine, install Vite+ (`vp`):
+
 ```sh
-curl -fsSL https://vite.plus | bash   # Vite+'s vp, once per machine; open a new terminal after it
-vp env on                             # the Node in .node-version for everything
-vp install                            # the packages
-vp run setup                          # each app's local .env, and the service's local database
-vp run dev                            # the shop on http://localhost:5173, the service on :5174
+curl -fsSL https://vite.plus | bash
 ```
 
-`vp run demo` fills both apps' local databases with the demo (below; it resets them). Or sign up on
-the shop yourself: as `admin@example.test` to be an admin (`ADMIN_EMAILS` in `apps/shop/.env`), or
-as anyone else to apply as a partner at http://localhost:5174.
+Then, in the repo:
 
-The repo's tasks, each with a comment saying what it does, are in `vite.config.ts` (`run.tasks`);
-run one with `vp run <task>`. `vp check` formats, lints and type-checks each file. `vp run
-check:types` runs every package's `typecheck` script (each app's `tsc`; the root's checks the tests
-and scripts), as Void's own repo does: whole projects, so it also catches what only shows up in one
-of them. Imports are relative, with their extension, as in Void's examples.
+```sh
+vp env on          # use the Node version in .node-version
+vp install
+vp run setup       # each app's local settings and database
+vp run dev         # the shop on http://localhost:5173, the service on http://localhost:5174
+```
 
-## Demo data
+`vp run demo` loads the demo into the local databases, replacing what's there. Or sign up on the
+local shop: `admin@example.test` becomes an admin, and anyone else can apply as a partner.
 
-90 days of a believable program, the same locally and on the demo deployment: partners in every
-state, their short links, about 2,000 clicks from several countries, devices and sites, signups,
-sales of three products (renewals, refunds in full and in part, flagged ones), monthly payouts, a
-clawback, commission rules and bonuses. The people are in `apps/affiliates/demo.ts`, shared by
-both apps' seeds (`apps/shop/db/seed.ts` makes them shop accounts, `apps/affiliates/db/seed.ts`
-makes the program), and dates count back from the day it's run.
+All the repo's tasks are in `vite.config.ts`, each with a line saying what it does. Run one with
+`vp run <task>`.
 
-To show it: sign in on the shop as `admin@demo.test`, password `demo-password-2026` (public, for
-demos only), and press Admin. To see the program as one of the partners, choose "View as" in their
-menu on the Partners tab, and "Back to admin" in the bar at the top when done. That's the service's
-Better Auth admin plugin impersonating them. Who's who: Maya is the busiest partner (then Leo, Priya, Tom, who has every sale
-reviewed, and Ana); Ken is suspended; Sam and Lena are waiting for approval. Every demo account
-also signs in on its own with that password (`maya@demo.test` and so on, `chris@demo.test` for a
-customer who hasn't applied).
+Code follows Void's own examples: imports are relative and include the file extension, and types
+come from the database schema and the pages' loaders and actions.
 
-`vp run demo` puts it in the local databases (`void db seed` in each app). `vp run
-demo:production` replaces everything in the deployed databases with it (`void db export`, then
-`void db execute --remote`; `scripts/demo-production.ts`). It's for the demo deployment only.
-`vp run screens` takes screenshots of every page, desktop and phone, signed in as these people.
+## Check and test
 
-## Tests
+- `vp check` formats, lints and type-checks.
+- `vp run check:types` type-checks each project as a whole (both apps, the tests, the scripts), as
+  Void's own repo does.
+- `vp run test:dev` runs the tests in `e2e/dev` against both apps, with their real database, queues
+  and sign-in, and a real browser. It uses your `vp run dev` if it's running. The first time, run
+  `vp run install:browser` to get Chromium.
+- `vp run test:stripe` runs the tests in `e2e/stripe` against Stripe's test mode. It needs a
+  test-mode key in `STRIPE_TEST_SECRET_KEY`, with `vp run dev` stopped. On GitHub, it runs from
+  Actions → **Stripe end-to-end** → Run workflow (`.github/workflows/stripe.yml`), with that key
+  saved as a repository secret.
 
-No fakes: the tests run against both apps with their real local database, queues and sign-in.
-
-- `vp run test:dev`: the flows, the money and the pages in a browser (`e2e/dev/`). They type-check
-  against the service (`e2e/tsconfig.json`): they read the pages' loaders and call their actions the
-  way Void's own client does, typed from them (`e2e/dev/helpers.ts`). Uses your
-  `vp run dev` if it's running, else starts one. Needs Chromium once: `vp run install:browser`.
-  Cached by Vite+: with no file it reads changed, it replays the last result at once. While working
-  on one thing, run just its file: `vp test run --project dev e2e/dev/money.test.ts`.
-- `vp run test:stripe`: what only real Stripe can show, in test mode (`e2e/stripe/`): partners'
-  promotion codes, a sale in another currency paid out at Stripe's settled rate, a real refund. Needs
-  `STRIPE_TEST_SECRET_KEY` (a test-mode key) in the shell, with `vp run dev` stopped. On GitHub:
-  Actions → "Stripe end-to-end" → Run workflow, with that key as a repository secret.
-
-CI (`.github/workflows/ci.yml`) runs `vp check`, `vp run check:types` and `vp run test:dev`, as above.
+There are no fakes or mocks. CI (`.github/workflows/ci.yml`) runs the first three on every push.
 
 ## Deploy
 
-Deployed (2026-11-22) to Cloudflare account `7384af54e33b8a54ff240371ea368440`:
+Both apps run on Cloudflare account `7384af54e33b8a54ff240371ea368440`. Their addresses are set in
+each app's `void.config.ts`.
 
-- the shop at https://shop.ubuntusoftware.net (`apps/shop/void.config.ts`, `routes`);
-- the service at https://affiliates.shop.ubuntusoftware.net (`apps/affiliates/void.config.ts`).
-
-The service is on a subdomain of the shop's. The shop sets its sign-in cookie for
-`shop.ubuntusoftware.net` (`AUTH_COOKIE_DOMAIN`), so the service receives it, and the service sets
-its referral cookie for the same domain (`AFFILIATES_COOKIE_DOMAIN`), so the shop receives that. Each app deploys
-with Void's own commands, run in its folder (`apps/affiliates`, `apps/shop`):
+To deploy an app, in its folder (`apps/affiliates` or `apps/shop`):
 
 ```sh
-void cloudflare login                      # once per machine
-void secret sync <file>                    # the production values its env.ts declares
+void cloudflare login                # once per machine
+void secret sync <file>              # its production settings
 void deploy --platform cloudflare
 ```
 
-`void.lock.json` in each app records its database and other resource IDs: commit it after a
-deploy. Not set yet: Stripe (the `STRIPE_*` values, and the shop's webhook in Stripe, step 5 of
-"Using it from your app").
+Commit each app's `void.lock.json` after deploying: it records the app's database and other
+Cloudflare resources.
+
+`vp run demo:production` replaces the live databases with the demo. Use it only on the demo site.
+
+Not set up yet: Stripe on the live site (the `STRIPE_*` settings, and the webhook in Stripe).
+
+## Add it to your app
+
+The example shop (`apps/shop`) does all of this:
+
+1. **Bind the service** in your `void.config.ts`:
+   `cloudflare.services: [{ binding: "AFFILIATES", service: "affiliates" }]`.
+2. **Share a secret:** set the same `AFFILIATES_HOST_TOKEN` in both apps
+   (`void secret put AFFILIATES_HOST_TOKEN`).
+3. **In your `auth.ts`** (see `apps/shop/auth.ts`):
+   - add Better Auth's `admin` plugin;
+   - add the service's address to `trustedOrigins`;
+   - set your sign-in cookie for the parent domain (`AUTH_COOKIE_DOMAIN`);
+   - when a user is created, queue their sign-up for the service with the referral cookie
+     (`apps/shop/queues/affiliate-signups.ts`);
+   - in Better Auth's Stripe plugin, ask the service what to add to each checkout, and pass every
+     Stripe event on (`apps/shop/src/affiliates.ts`).
+4. **Point the service at your site:** set its `HOST_SITE_URL` to your site, and its
+   `AFFILIATES_COOKIE_DOMAIN` to the parent domain.
+5. **In Stripe,** your webhook (`https://<your site>/api/auth/stripe/webhook`) also needs these
+   events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
+   `invoice.paid`, `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`.
 
 ## License
 
