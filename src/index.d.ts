@@ -32,6 +32,8 @@ export interface AffiliateEnv {
     AFFILIATE_LINK_PREFIX?: string;
     /** Origin short links are shown under, e.g. https://go.example.com. Default: SITE_URL. */
     AFFILIATE_LINK_BASE_URL?: string;
+    /** Months after the first sale that renewals earn commission. Default 12; 0 = first payment only. */
+    AFFILIATE_RECURRING_MONTHS?: string;
     AFFILIATE_PUBLIC_LIMITER?: {
         limit(options: { key: string }): Promise<{ success: boolean }>;
     };
@@ -109,6 +111,8 @@ export interface CheckoutSession {
     amount_total?: number | null;
     payment_intent?: StripeReference | null;
     customer?: StripeReference | null;
+    subscription?: StripeReference | null;
+    invoice?: StripeReference | null;
     currency?: string | null;
     customer_details?: { email?: string | null; address?: { country?: string | null } | null } | null;
     line_items?: { data?: readonly CheckoutLineItem[] } | null;
@@ -148,3 +152,24 @@ export interface AffiliateReferral {
 export function recordSignupReferral(
     requestOrHeaders: Request | Headers | { headers: Headers }, env: AffiliateEnv, userId: string,
 ): Promise<AffiliateReferral | null>;
+export interface StripeInvoice {
+    id: string;
+    object?: 'invoice';
+    billing_reason?: string | null;
+    amount_paid?: number | null;
+    currency?: string | null;
+    customer?: StripeReference | null;
+    customer_email?: string | null;
+    customer_address?: { country?: string | null } | null;
+    subscription?: StripeReference | null;
+    parent?: { subscription_details?: { subscription?: StripeReference | null } | null } | null;
+    payment_intent?: StripeReference | null;
+    payments?: { data?: readonly { payment?: { payment_intent?: StripeReference | null } | null }[] } | null;
+    status_transitions?: { paid_at?: number | null } | null;
+    lines?: { data?: readonly CheckoutLineItem[] } | null;
+}
+
+/** Records a renewal commission for a paid subscription invoice. Null when nothing was recorded. */
+export function recordInvoicePayment(
+    invoice: StripeInvoice | null | undefined, event: StripeEvent | null | undefined, env: AffiliateEnv,
+): Promise<{ affiliate_id: number; commission_cents: number } | null>;

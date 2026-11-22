@@ -49,6 +49,7 @@ pnpm wrangler d1 migrations apply DB --remote
 # pnpm wrangler d1 execute DB --file=migrations/0007_fraud_checks.sql --remote
 # pnpm wrangler d1 execute DB --file=migrations/0008_links.sql --remote
 # pnpm wrangler d1 execute DB --file=migrations/0009_referrals.sql --remote
+# pnpm wrangler d1 execute DB --file=migrations/0010_renewals.sql --remote
 
 # 3. Set secrets
 pnpm wrangler secret put AFFILIATE_SESSION_SECRET
@@ -183,6 +184,36 @@ commission ineligible. A refund received before checkout also applies when
 that checkout is recorded. Already paid commissions retain their payout
 history. If a transfer may have been sent already, reconcile the batch in
 the admin dashboard.
+
+### 6 · Recurring commissions (`recordInvoicePayment`)
+
+For subscriptions, subscribe your webhook to `invoice.paid` too and await the
+helper in that verified branch:
+
+```js
+import { recordInvoicePayment } from "cf-affiliate";
+
+if (event.type === "invoice.paid") {
+    await recordInvoicePayment(event.data.object, event, env);
+}
+```
+
+Each renewal pays the affiliate who got the subscription's first sale (the
+Checkout conversion), at that affiliate's commission rate, until 12 months
+after the first sale. Change the default with `AFFILIATE_RECURRING_MONTHS`
+(`0` = first payment only), or per affiliate with `affiliates.recurring_months`.
+
+- The subscription's first invoice (`billing_reason=subscription_create`) is
+  skipped: its Checkout session is already the sale.
+- Idempotent by invoice id; renewals are conversions with `kind='renewal'`
+  and go through approval, the hold period and payouts like any other.
+- Refunds and disputes of one renewal cancel only that renewal (`recordRefund`
+  as before), including a refund that arrives before its `invoice.paid`.
+- Subscription Checkout sessions have no payment intent of their own, so
+  `recordConversion` now looks up the first invoice's payment (when
+  `STRIPE_SECRET_KEY` is set), so refunds of the first month match too.
+- Both Stripe API shapes are read: `invoice.subscription` / `payment_intent`,
+  and from 2025-03-31.basil `parent.subscription_details` / `invoice_payments`.
 
 ---
 
@@ -459,6 +490,7 @@ context to the helpers directly.
 | `functions/api/admin/links.js` | Admin link management |
 | `src/referral.js` | Signup referrals (`recordSignupReferral`) |
 | `src/webhook.js` | Conversion, refund, and dispute recording |
+| `src/invoice.js` | Renewal commissions (`recordInvoicePayment`) |
 | `functions/api/_affiliate-auth.js` | HMAC magic-link + session tokens |
 | `functions/api/_crypto-utils.js` | Shared HMAC + constant-time compare |
 | `functions/api/_email.js` | Transactional email (Brevo default, configurable) |
@@ -503,6 +535,7 @@ routes itself — see `src/route.js` for the exact paths.
 | `AFFILIATE_HOLD_DAYS` | optional | Days before pending conversions are approved automatically (unset: manual only) |
 | `AFFILIATE_LINK_PREFIX` | optional | Path prefix of short links (default `/r/`) |
 | `AFFILIATE_LINK_BASE_URL` | optional | Origin shown in short-link URLs, e.g. a short domain (default `SITE_URL`) |
+| `AFFILIATE_RECURRING_MONTHS` | optional | Months after the first sale that renewals earn commission (default 12, `0` = first payment only) |
 
 ## Tests
 
@@ -510,6 +543,19 @@ routes itself — see `src/route.js` for the exact paths.
 pnpm test        # Node.js 22.13+, local SQLite, no network/Stripe/D1 services
 pnpm test:watch  # re-run on file changes
 ```
+
+End-to-end tests run against Stripe's real test mode and are not part of
+`pnpm test`. They need a test-mode secret key in your shell (never a live key;
+the tests refuse one) and clean up what they create:
+
+```bash
+STRIPE_TEST_SECRET_KEY=sk_test_… pnpm test:e2e
+```
+
+- `e2e/recurring-commissions.e2e.js`: a real monthly subscription on a Stripe
+  test clock renews 13 times; checks 12 months of commission, no double
+  recording, and that a real refund cancels only its own renewal. Takes a few
+  minutes, because Stripe processes each clock step.
 
 Covers: token sign/verify with purpose scoping, tamper rejection, admin gate,
 constant-time comparison, HTML escaping, cookie headers, applications,

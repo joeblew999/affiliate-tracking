@@ -36,6 +36,10 @@
 //       Verifies the applied promotion before attribution, returns the attributed
 //       session (or null), and propagates Stripe/DB failures for retries.
 //
+//   recordInvoicePayment(invoice, event, env)
+//       Await in the verified invoice.paid branch. Pays renewal commissions to
+//       the affiliate of the subscription's first sale for recurring_months.
+//
 //   recordRefund(event, env)
 //       Await in the verified charge.refunded and charge.dispute.created branches.
 //
@@ -59,3 +63,4 @@ export { recordSignupReferral } from './referral.js';
 export { PromotionCodeError } from './promotion.js';
 export { recordConversion, recordRefund } from './webhook.js';
 export { releaseHeldConversions } from './hold.js';
+export { recordInvoicePayment } from './invoice.js';
