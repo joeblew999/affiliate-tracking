@@ -1,7 +1,7 @@
 // A page that failed or isn't allowed (e.g. /admin for someone who isn't an admin: 403), shown inside
 // the layout, so its header and "Back to admin" bar stay.
 import { Link, type ErrorPageProps } from "@void/react";
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "../src/components/ui/card.tsx";
 
 export default function ErrorPage({ error }: ErrorPageProps) {
   return (

@@ -4,13 +4,13 @@ import { defineHandler, defineHead, type InferProps } from "void";
 import type { Href } from "void/routes";
 import { db, eq } from "void/db";
 import { env } from "void/env";
-import { requirePartner, requireUser } from "@/access";
-import { notePartnerIp } from "@/fraud";
-import { archiveLink, createLink, linksOf } from "@/links";
-import { partnerForUser } from "@/partners";
-import { hasStripe, stripe } from "@/stripe";
-import { earnings, stats } from "@/stats";
-import { requestIpHash } from "@/visitor";
+import { requirePartner, requireUser } from "../src/access.ts";
+import { notePartnerIp } from "../src/fraud.ts";
+import { archiveLink, createLink, linksOf } from "../src/links.ts";
+import { partnerForUser } from "../src/partners.ts";
+import { hasStripe, stripe } from "../src/stripe.ts";
+import { earnings, stats } from "../src/stats.ts";
+import { requestIpHash } from "../src/visitor.ts";
 
 // The partner's page: their partner record, and for an active partner their links and the last 30
 // days. (Who's signed in is in the layout's shared data: middleware/01.user.ts.)

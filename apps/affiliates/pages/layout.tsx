@@ -3,7 +3,7 @@
 import "./style.css";
 import { Link, useShared } from "@void/react";
 import type { ReactNode } from "react";
-import { ViewingAsBar } from "@/components/view-as";
+import { ViewingAsBar } from "../src/components/view-as.tsx";
 
 // Void marks the link to the current page with data-void-active.
 const navLink =

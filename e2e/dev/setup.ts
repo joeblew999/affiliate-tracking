@@ -2,7 +2,7 @@
 // them, with Void's real local D1, queues, both apps' Better Auth and the service binding. No fakes. Uses your
 // own `vp run dev` if both apps answer; else starts one and stops it at the end.
 import type { TestProject } from "vite-plus/test/node";
-import { AFFILIATES, answers, appEnv, SHOP, startDev, stop, untilReady } from "../servers";
+import { AFFILIATES, answers, appEnv, SHOP, startDev, stop, untilReady } from "../servers.ts";
 
 export { AFFILIATES, SHOP };
 

@@ -1,7 +1,7 @@
 import { index, sqliteTable, text } from "void/schema-d1";
-import { id, now } from "./columns";
-import { partners } from "./partners";
-import { links } from "./links";
+import { id, now } from "./columns.ts";
+import { partners } from "./partners.ts";
+import { links } from "./links.ts";
 
 /** A visit through a partner's link. At most one per visitor IP per partner per day. */
 export const clicks = sqliteTable(

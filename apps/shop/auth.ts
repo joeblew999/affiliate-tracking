@@ -62,7 +62,7 @@ export default defineAuth(({ defaults, env }) => {
         createCustomerOnSignUp: Boolean(text(env.STRIPE_SECRET_KEY)),
         // Sales, renewals, refunds and disputes are the affiliate service's to count.
         onEvent: async (event) => {
-          const { affiliatesService } = await import("./src/affiliates");
+          const { affiliatesService } = await import("./src/affiliates.ts");
           await affiliatesService().stripeEvent(event);
         },
         subscription: {
@@ -72,7 +72,7 @@ export default defineAuth(({ defaults, env }) => {
           getCheckoutSessionParams: async ({ user }, request) => {
             const headers = request?.headers;
             // Loaded here, inside the Worker: src/affiliates.ts uses "cloudflare:workers".
-            const { affiliatesService } = await import("./src/affiliates");
+            const { affiliatesService } = await import("./src/affiliates.ts");
             const attribution = await affiliatesService().checkout({
               userId: user.id,
               ref: referralFrom(headers?.get("cookie")),

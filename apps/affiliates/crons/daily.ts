@@ -2,8 +2,8 @@
 // (a crash, a Stripe error past the queue's retries) queued again, so it always finishes.
 import { defineScheduled } from "void";
 import { queues } from "void/queues";
-import { releaseHeldSales } from "../src/hold";
-import { partnersWithPendingPayouts } from "../src/payouts";
+import { releaseHeldSales } from "../src/hold.ts";
+import { partnersWithPendingPayouts } from "../src/payouts.ts";
 
 export const cron = "17 3 * * *";
 

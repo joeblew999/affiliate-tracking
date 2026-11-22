@@ -2,7 +2,7 @@
 // client (src/auth-client.ts: the session, the admin plugin's "View as" and its stop, sign out) goes
 // to the shop through the binding, on this page's own origin.
 import { defineHandler } from "void";
-import { toShop } from "@/user";
+import { toShop } from "../../../src/user.ts";
 
 const shop = defineHandler((c) => toShop(c));
 export const GET = shop;

@@ -6,7 +6,7 @@
 // Runs only when asked for by name: a plain `vp test run` skips it.
 import Stripe from "stripe";
 import type { TestProject } from "vite-plus/test/node";
-import { AFFILIATES, answers, appEnv, SHOP, startDev, stop, untilReady } from "../servers";
+import { AFFILIATES, answers, appEnv, SHOP, startDev, stop, untilReady } from "../servers.ts";
 
 declare module "vite-plus/test" {
   interface ProvidedContext {

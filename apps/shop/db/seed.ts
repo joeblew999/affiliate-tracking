@@ -5,9 +5,9 @@
 import { hashPassword } from "better-auth/crypto";
 import { defineSeed } from "void/seed";
 import { DEMO_PASSWORD, demoPeople } from "affiliates/demo";
-import { accountTable, userTable } from "../.void/better-auth-schema";
+import { accountTable, userTable } from "../.void/better-auth-schema.ts";
 
-export default defineSeed<typeof import("../.void/better-auth-schema")>(async ({ db }) => {
+export default defineSeed<typeof import("../.void/better-auth-schema.ts")>(async ({ db }) => {
   const password = await hashPassword(DEMO_PASSWORD);
   for (const person of demoPeople) {
     const createdAt = new Date(Date.now() - (person.partner?.joinedDaysAgo ?? 150) * 86_400_000);

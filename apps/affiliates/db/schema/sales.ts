@@ -2,10 +2,10 @@ import { isNotNull } from "void/db";
 import { createInsertSchema, createSelectSchema } from "void/drizzle-zod";
 import { index, integer, real, sqliteTable, text, uniqueIndex } from "void/schema-d1";
 import { z } from "zod";
-import { id, now } from "./columns";
-import { partners } from "./partners";
-import { links } from "./links";
-import { payouts } from "./payouts";
+import { id, now } from "./columns.ts";
+import { partners } from "./partners.ts";
+import { links } from "./links.ts";
+import { payouts } from "./payouts.ts";
 
 /**
  * A sale (first purchase or renewal), a bonus, or a clawback, and the commission it earns a partner.

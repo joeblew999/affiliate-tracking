@@ -3,8 +3,8 @@
 // an admin uses every tab. Any error on a page fails the test.
 import { chromium, devices, type Browser, type BrowserContext, type Page } from "playwright";
 import { afterAll, beforeAll, expect, test } from "vite-plus/test";
-import { activePartner, eventually, signInAdmin, type Account } from "./helpers";
-import { AFFILIATES, SHOP } from "./setup";
+import { activePartner, eventually, signInAdmin, type Account } from "./helpers.ts";
+import { AFFILIATES, SHOP } from "./setup.ts";
 
 // Headless Chrome says "HeadlessChrome", which the service treats as a link preview (src/visitor.ts).
 const USER_AGENT =

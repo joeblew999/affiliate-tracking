@@ -1,5 +1,5 @@
 // Clicks per day as bars (each day's count on hover), and the top countries, devices or sites.
-import { date } from "@/format";
+import { date } from "../format.ts";
 
 export function ClicksChart({ days }: { days: { date: string; clicks: number }[] }) {
   const max = Math.max(1, ...days.map((d) => d.clicks));

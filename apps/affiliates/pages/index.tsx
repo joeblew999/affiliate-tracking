@@ -2,13 +2,19 @@
 // then the dashboard: their link and buyer code, totals, short links, and the last 30 days.
 import { action, Form, useForm } from "@void/react";
 import { useState, type ReactNode } from "react";
-import { ClicksChart, TopList } from "@/components/clicks-chart";
-import { CopyButton } from "@/components/copy-button";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { ClicksChart, TopList } from "../src/components/clicks-chart.tsx";
+import { CopyButton } from "../src/components/copy-button.tsx";
+import { Button } from "../src/components/ui/button.tsx";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../src/components/ui/card.tsx";
+import { Checkbox } from "../src/components/ui/checkbox.tsx";
+import { Input } from "../src/components/ui/input.tsx";
+import { Label } from "../src/components/ui/label.tsx";
 import {
   Table,
   TableBody,
@@ -16,12 +22,12 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
-import { money } from "@/format";
-import { bind } from "@/components/bind";
-import { useAction } from "@/components/use-action";
-import type { Props } from "./index.server";
+} from "../src/components/ui/table.tsx";
+import { Textarea } from "../src/components/ui/textarea.tsx";
+import { money } from "../src/format.ts";
+import { bind } from "../src/components/bind.ts";
+import { useAction } from "../src/components/use-action.tsx";
+import type { Props } from "./index.server.ts";
 
 export default function PartnerPage(props: Props) {
   const { partner } = props;

@@ -2,7 +2,7 @@
 // saying how it went. Void re-runs the page's loader after an action, so the page's data comes back
 // by itself.
 import { useState } from "react";
-import { messageOf } from "@/format";
+import { messageOf } from "../format.ts";
 
 /** An action's answer: { ok: false, error } when it was refused (Void's action()). */
 function failure(result: unknown): string | null {

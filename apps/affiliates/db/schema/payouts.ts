@@ -1,8 +1,8 @@
 import { sql } from "void/db";
 import { createInsertSchema } from "void/drizzle-zod";
 import { integer, sqliteTable, text, uniqueIndex } from "void/schema-d1";
-import { id, now } from "./columns";
-import { partners } from "./partners";
+import { id, now } from "./columns.ts";
+import { partners } from "./partners.ts";
 
 /** A payout to a partner: one transfer (or manual payment) covering approved sales. */
 export const payouts = sqliteTable(

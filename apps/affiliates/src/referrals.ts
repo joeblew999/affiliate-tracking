@@ -3,8 +3,8 @@
 // partner's promotion code can take a user over only before their first paid sale.
 import { partners, referrals } from "@schema";
 import { and, db, eq, isNull } from "void/db";
-import { activePartner, type Partner } from "./partners";
-import { parseReferral } from "./referral-cookie";
+import { activePartner, type Partner } from "./partners.ts";
+import { parseReferral } from "./referral-cookie.ts";
 
 export async function recordSignupReferral(userId: string, ref: string | null): Promise<boolean> {
   const referral = parseReferral(ref);

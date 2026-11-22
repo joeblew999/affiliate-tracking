@@ -12,7 +12,7 @@ import {
   payoutsOf,
   signInAdmin,
   stripeEvent,
-} from "./helpers";
+} from "./helpers.ts";
 
 const DAILY = "17 3 * * *";
 

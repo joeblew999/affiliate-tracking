@@ -1,4 +1,3 @@
-import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite-plus";
 import { voidPlugin } from "void";
 import { voidReact } from "@void/react/plugin";
@@ -11,8 +10,6 @@ process.env.VOID_INSPECTOR_PORT ??= "9231";
 
 export default defineConfig({
   plugins: [voidPlugin(), voidReact(), tailwindcss()],
-  // shadcn's "@/" import alias (tsconfig.json "paths" says the same for TypeScript).
-  resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   server: {
     // The shop is 5173; this app is always 5174 (the tests and the shop's links expect it).
     port: 5174,

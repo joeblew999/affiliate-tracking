@@ -97,9 +97,10 @@ the shop yourself: as `admin@example.test` to be an admin (`ADMIN_EMAILS` in `ap
 as anyone else to apply as a partner at http://localhost:5174.
 
 The repo's tasks, each with a comment saying what it does, are in `vite.config.ts` (`run.tasks`);
-run one with `vp run <task>`. `vp check` formats, lints and type-checks each file; `vp run check:types` checks each TypeScript
-project whole (both apps, the tests, the root scripts), which catches what only shows up in one of
-them.
+run one with `vp run <task>`. `vp check` formats, lints and type-checks each file. `vp run
+check:types` runs every package's `typecheck` script (each app's `tsc`; the root's checks the tests
+and scripts), as Void's own repo does: whole projects, so it also catches what only shows up in one
+of them. Imports are relative, with their extension, as in Void's examples.
 
 ## Demo data
 

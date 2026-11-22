@@ -1,7 +1,7 @@
 import { createInsertSchema, createSelectSchema } from "void/drizzle-zod";
 import { index, integer, real, sqliteTable, text } from "void/schema-d1";
-import { id, now } from "./columns";
-import { partners } from "./partners";
+import { id, now } from "./columns.ts";
+import { partners } from "./partners.ts";
 
 /**
  * How commission is worked out, beyond each partner's own percent. For each item sold the most

@@ -3,7 +3,7 @@
 import { action, Form, useForm } from "@void/react";
 import { bind } from "affiliates/bind";
 import { useState, type ReactNode } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "../src/components/ui/button.tsx";
 import {
   Card,
   CardContent,
@@ -11,12 +11,12 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { demoAccounts } from "@/demo-accounts";
-import type { Props } from "./index.server";
+} from "../src/components/ui/card.tsx";
+import { Input } from "../src/components/ui/input.tsx";
+import { Label } from "../src/components/ui/label.tsx";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../src/components/ui/tabs.tsx";
+import { demoAccounts } from "../src/demo-accounts.ts";
+import type { Props } from "./index.server.ts";
 
 export default function Shop({ user, affiliatesUrl, back }: Props) {
   return (

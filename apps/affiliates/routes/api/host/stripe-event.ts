@@ -4,11 +4,11 @@
 // charge.dispute.created and closed: src/refunds.ts). Others are ignored. A failure is an error, so
 // the host's webhook fails and Stripe sends the event again.
 import { defineHandler } from "void";
-import { StripeEventInput, type StripeEventOutput } from "@/host-contract";
-import { noteDispute, noteRefund } from "@/refunds";
-import { recordRenewal } from "@/renewals";
-import { disputedPaymentIntent, recordCheckoutSale } from "@/sales";
-import { idOf } from "@/stripe";
+import { StripeEventInput, type StripeEventOutput } from "../../../src/host-contract.ts";
+import { noteDispute, noteRefund } from "../../../src/refunds.ts";
+import { recordRenewal } from "../../../src/renewals.ts";
+import { disputedPaymentIntent, recordCheckoutSale } from "../../../src/sales.ts";
+import { idOf } from "../../../src/stripe.ts";
 
 export const POST = defineHandler.withValidator({ body: StripeEventInput })(async (
   _c,

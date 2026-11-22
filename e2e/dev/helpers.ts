@@ -2,13 +2,13 @@ import { readFileSync } from "node:fs";
 import { PAGES_PROTOCOL_VERSION } from "@void/edge";
 import { unflatten } from "devalue";
 import { createAuthClient } from "better-auth/client";
-import { affiliates } from "../../apps/affiliates/client";
+import { affiliates } from "../../apps/affiliates/client.ts";
 import type { ActionUrl, ResolveActionBody } from "void/routes";
-import type { Props as AdminPage } from "../../apps/affiliates/pages/admin/index.server";
-import type { Props as PartnerPage } from "../../apps/affiliates/pages/index.server";
+import type { Props as AdminPage } from "../../apps/affiliates/pages/admin/index.server.ts";
+import type { Props as PartnerPage } from "../../apps/affiliates/pages/index.server.ts";
 import Stripe from "stripe";
 import { inject } from "vite-plus/test";
-import { AFFILIATES, SHOP } from "./setup";
+import { AFFILIATES, SHOP } from "./setup.ts";
 
 /** The shop's Better Auth, as a browser uses it: typed from Better Auth, the cookies it sets kept. */
 const shopAuth = createAuthClient({ baseURL: SHOP, fetchOptions: { headers: { origin: SHOP } } });

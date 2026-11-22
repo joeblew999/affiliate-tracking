@@ -14,7 +14,7 @@ import {
   payoutsOf,
   signInAdmin,
   stripeEvent,
-} from "../dev/helpers";
+} from "../dev/helpers.ts";
 
 const skip = inject("stripeSkip");
 

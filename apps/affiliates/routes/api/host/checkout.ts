@@ -1,12 +1,12 @@
 import { links, partners } from "@schema";
 import { defineHandler } from "void";
 import { and, db, eq } from "void/db";
-import { CheckoutInput, type CheckoutOutput } from "@/host-contract";
-import { activePartner, type Partner } from "@/partners";
-import { parseReferral } from "@/referral-cookie";
-import { referringPartner } from "@/referrals";
-import { META } from "@/sales";
-import { hashIp } from "@/visitor";
+import { CheckoutInput, type CheckoutOutput } from "../../../src/host-contract.ts";
+import { activePartner, type Partner } from "../../../src/partners.ts";
+import { parseReferral } from "../../../src/referral-cookie.ts";
+import { referringPartner } from "../../../src/referrals.ts";
+import { META } from "../../../src/sales.ts";
+import { hashIp } from "../../../src/visitor.ts";
 
 // What the host adds to a Stripe Checkout Session it's about to create: metadata saying which
 // partner the sale is for (the user's referral first, else the referral cookie), and that partner's

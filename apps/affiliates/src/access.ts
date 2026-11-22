@@ -2,10 +2,10 @@
 // Better Auth admin plugin); a partner is a shop user who applied here.
 import { HTTPException } from "hono/http-exception";
 import type { CloudContext } from "void";
-import { notePartnerIp } from "./fraud";
-import { partnerForUser, type Partner } from "./partners";
-import type { User } from "./user";
-import { requestIpHash } from "./visitor";
+import { notePartnerIp } from "./fraud.ts";
+import { partnerForUser, type Partner } from "./partners.ts";
+import type { User } from "./user.ts";
+import { requestIpHash } from "./visitor.ts";
 
 export function requireUser(c: CloudContext): User {
   const user = c.get("shopUser");

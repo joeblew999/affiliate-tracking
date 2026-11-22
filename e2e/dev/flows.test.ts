@@ -14,8 +14,8 @@ import {
   signInAdmin,
   signUp,
   stripeEvent,
-} from "./helpers";
-import { AFFILIATES } from "./setup";
+} from "./helpers.ts";
+import { AFFILIATES } from "./setup.ts";
 
 /** Follow a referral link as a browser would: the redirect and the referral cookie it sets. */
 async function follow(path: string, userAgent = "Mozilla/5.0 (Macintosh) Safari/605.1.15") {

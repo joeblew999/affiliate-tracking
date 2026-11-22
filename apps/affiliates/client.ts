@@ -13,7 +13,7 @@ import {
   SignupOutput,
   StripeEventInput,
   StripeEventOutput,
-} from "./src/host-contract";
+} from "./src/host-contract.ts";
 
 export { REF_COOKIE };
 

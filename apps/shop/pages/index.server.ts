@@ -8,7 +8,7 @@ import { env } from "void/env";
 import type { Href } from "void/routes";
 import { z } from "zod";
 import { DEMO_PASSWORD } from "affiliates/demo";
-import { demoAccounts } from "@/demo-accounts";
+import { demoAccounts } from "../src/demo-accounts.ts";
 
 /** The affiliate service's page at this path or URL; null if it would be anywhere else. */
 function service(path: string | null | undefined): Href | null {

@@ -8,12 +8,12 @@
 import { sales, type SaleItem } from "@schema";
 import type Stripe from "stripe";
 import { db, eq } from "void/db";
-import { computeCommission, type CommissionItem } from "./commission";
-import { selfReferralReason } from "./fraud";
-import { activePartner, partnerForPromotion } from "./partners";
-import { settleReferral } from "./referrals";
-import { applyRefunds } from "./refunds";
-import { hasStripe, idOf, stripe } from "./stripe";
+import { computeCommission, type CommissionItem } from "./commission.ts";
+import { selfReferralReason } from "./fraud.ts";
+import { activePartner, partnerForPromotion } from "./partners.ts";
+import { settleReferral } from "./referrals.ts";
+import { applyRefunds } from "./refunds.ts";
+import { hasStripe, idOf, stripe } from "./stripe.ts";
 
 /** The checkout metadata keys this service sets (routes/api/host/checkout.ts) and reads back here. */
 export const META = {

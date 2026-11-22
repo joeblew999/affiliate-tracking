@@ -1,27 +1,19 @@
 {
   "extends": "./.void/tsconfig.json",
   "compilerOptions": {
+    "noEmit": true,
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "esModuleInterop": true,
     "skipLibCheck": true,
-    "types": ["void/env"],
+    "allowImportingTsExtensions": true,
     "jsx": "react-jsx",
     "lib": ["ES2025", "DOM", "DOM.Iterable"],
-    "paths": {
-      "@/*": ["./src/*"],
-      "void/routes": ["./.void/routes.d.ts"],
-      "void/queues": ["./.void/queues.d.ts"]
-    }
+    "types": ["void/env"]
   },
-  "include": ["src", "pages", "routes", "queues", "db", "*.ts"],
-  "files": [
-    "./.void/routes.d.ts",
-    "./.void/bindings.d.ts",
-    "./.void/queues.d.ts",
-    "./.void/env.d.ts",
-    "./.void/auth.d.ts"
-  ]
+  "include": ["src", "pages", "routes", "queues", "db", "*.ts"]
 }

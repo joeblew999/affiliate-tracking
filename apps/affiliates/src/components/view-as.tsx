@@ -1,7 +1,7 @@
 // "View as": an admin sees the program as a partner (Better Auth's admin plugin, impersonation),
 // until "Back to admin".
-import { auth } from "@/auth-client";
-import { Button } from "@/components/ui/button";
+import { auth } from "../auth-client.ts";
+import { Button } from "./ui/button.tsx";
 
 export async function viewAs(userId: string) {
   const result = await auth.admin.impersonateUser({ userId });

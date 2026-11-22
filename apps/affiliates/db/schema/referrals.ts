@@ -1,6 +1,6 @@
 import { index, integer, sqliteTable, text } from "void/schema-d1";
-import { id, now } from "./columns";
-import { partners } from "./partners";
+import { id, now } from "./columns.ts";
+import { partners } from "./partners.ts";
 
 /** A host user who signed up through a partner: their later purchases are the partner's. */
 export const referrals = sqliteTable(

@@ -6,7 +6,7 @@
 import { HTTPException } from "hono/http-exception";
 import { defineMiddleware } from "void";
 import { env } from "void/env";
-import { currentUser, signInUrl, type User } from "@/user";
+import { currentUser, signInUrl, type User } from "../src/user.ts";
 
 declare module "void" {
   interface CloudContextVariables {

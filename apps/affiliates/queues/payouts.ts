@@ -2,7 +2,7 @@
 // and retried by Void; src/payouts.ts picks up where the last attempt was.
 import type { payouts } from "@schema";
 import { defineQueue } from "void";
-import { payPartner } from "../src/payouts";
+import { payPartner } from "../src/payouts.ts";
 
 /** One partner to pay. */
 type Message = Pick<typeof payouts.$inferSelect, "partnerId">;

@@ -6,9 +6,9 @@
 // approval), their short links, clicks from several countries, devices and sites, signups, sales
 // of three products (some renewals, some refunded in full or in part, some flagged), the monthly
 // payouts that paid the older ones, commission rules and bonuses.
-import type { SaleItem } from "./schema";
+import type { SaleItem } from "./schema.ts";
 import { defineSeed } from "void/seed";
-import { demoPeople } from "../demo";
+import { demoPeople } from "../demo.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
 const HOLD_DAYS = 30;
@@ -38,7 +38,7 @@ function random(seed: number) {
   return { next, pick, chance: (p: number) => next() < p };
 }
 
-export default defineSeed<typeof import("./schema")>(async ({ db, schema }) => {
+export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) => {
   const now = Date.now();
   const rand = random(2026);
   const uuid = () => crypto.randomUUID();

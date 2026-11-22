@@ -15,11 +15,11 @@ import { defineHandler, defineHead, type InferProps } from "void";
 import { and, db, desc, eq, inArray, ne } from "void/db";
 import { env } from "void/env";
 import { queues } from "void/queues";
-import { ensurePromotionCode } from "@/approval";
-import { linksOf } from "@/links";
-import { activePartner, partnerById } from "@/partners";
-import { partnersToPay } from "@/payouts";
-import { stats } from "@/stats";
+import { ensurePromotionCode } from "../../src/approval.ts";
+import { linksOf } from "../../src/links.ts";
+import { activePartner, partnerById } from "../../src/partners.ts";
+import { partnersToPay } from "../../src/payouts.ts";
+import { stats } from "../../src/stats.ts";
 
 // The admin page: everything, for the host's admins only. ?partner=<id>: only that partner's sales
 // and payouts. ?links=<partner id>: that partner's short links too, for the dialog that shows them.

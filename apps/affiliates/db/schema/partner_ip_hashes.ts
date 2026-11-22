@@ -1,5 +1,5 @@
 import { integer, primaryKey, sqliteTable, text } from "void/schema-d1";
-import { partners } from "./partners";
+import { partners } from "./partners.ts";
 
 /** The IP hashes a partner used the dashboard from: a sale from one of them is a self-referral. */
 export const partnerIpHashes = sqliteTable(

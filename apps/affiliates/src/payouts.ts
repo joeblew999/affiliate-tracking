@@ -17,8 +17,8 @@ import { partners, payouts, sales } from "@schema";
 import { and, db, eq, inArray, isNotNull, isNull, ne, sql, sum } from "void/db";
 import { env } from "void/env";
 import { alias } from "void/schema-d1";
-import { refundShare } from "./refunds";
-import { hasStripe, stripe } from "./stripe";
+import { refundShare } from "./refunds.ts";
+import { hasStripe, stripe } from "./stripe.ts";
 
 type Payout = typeof payouts.$inferSelect;
 const transferGroup = (payoutId: string) => `affiliates_payout_${payoutId}`;

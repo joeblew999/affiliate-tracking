@@ -2,6 +2,10 @@
   "name": "affiliates-repo",
   "private": true,
   "type": "module",
+  "scripts": {
+    "check:types": "vp run --filter './**' --parallel typecheck",
+    "typecheck": "tsc -p e2e && tsc -p ."
+  },
   "devDependencies": {
     "@types/node": "26.6.6",
     "@void/edge": "catalog:",

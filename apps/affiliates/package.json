@@ -10,9 +10,10 @@
   "scripts": {
     "dev": "vp dev",
     "build": "vp build",
-    "postinstall": "void prepare && void init --tsconfig",
+    "postinstall": "void prepare",
     "db:migrate": "void db migrate",
-    "db:seed": "void db seed --yes"
+    "db:seed": "void db seed --yes",
+    "typecheck": "tsc"
   },
   "dependencies": {
     "@base-ui/react": "1.9.0",

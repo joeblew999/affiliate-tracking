@@ -4,7 +4,7 @@
 // approval), Chris (a customer who hasn't applied) and Dana (the admin).
 import { mkdirSync, rmSync } from "node:fs";
 import { chromium, devices, type BrowserContext } from "playwright";
-import { DEMO_PASSWORD } from "../apps/affiliates/demo";
+import { DEMO_PASSWORD } from "../apps/affiliates/demo.ts";
 
 const SHOP = "http://localhost:5173";
 const AFFILIATES = "http://localhost:5174";

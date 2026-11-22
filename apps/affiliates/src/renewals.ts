@@ -8,9 +8,9 @@ import { partners, sales } from "@schema";
 import type Stripe from "stripe";
 import { and, asc, db, eq, or } from "void/db";
 import { env } from "void/env";
-import { computeCommission } from "./commission";
-import { applyRefunds } from "./refunds";
-import { hasStripe, idOf, stripe } from "./stripe";
+import { computeCommission } from "./commission.ts";
+import { applyRefunds } from "./refunds.ts";
+import { hasStripe, idOf, stripe } from "./stripe.ts";
 
 const DEFAULT_RECURRING_MONTHS = 12;
 

@@ -1,5 +1,5 @@
 import { integer, sqliteTable, text } from "void/schema-d1";
-import { now } from "./columns";
+import { now } from "./columns.ts";
 
 /**
  * What's been refunded or disputed of a payment, by Stripe's latest count; kept whether its sale

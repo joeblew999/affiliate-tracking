@@ -8,9 +8,15 @@ import type { Href } from "void/routes";
 import { and, db, eq, gt } from "void/db";
 import { env } from "void/env";
 import { setCookie } from "hono/cookie";
-import { REF_COOKIE } from "@/host-contract";
-import { referralValue, type Referral } from "@/referral-cookie";
-import { country, deviceClass, isAutomated, referrerHost, requestIpHash } from "@/visitor";
+import { REF_COOKIE } from "../../src/host-contract.ts";
+import { referralValue, type Referral } from "../../src/referral-cookie.ts";
+import {
+  country,
+  deviceClass,
+  isAutomated,
+  referrerHost,
+  requestIpHash,
+} from "../../src/visitor.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 

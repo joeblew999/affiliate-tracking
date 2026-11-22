@@ -4,18 +4,24 @@ import { action, Form, useForm, useRouter } from "@void/react";
 import type { Href, ResolveActionBody } from "void/routes";
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
-import { viewAs } from "@/components/view-as";
-import { ClicksChart, TopList } from "@/components/clicks-chart";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { viewAs } from "../../src/components/view-as.tsx";
+import { ClicksChart, TopList } from "../../src/components/clicks-chart.tsx";
+import { Badge } from "../../src/components/ui/badge.tsx";
+import { Button } from "../../src/components/ui/button.tsx";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../../src/components/ui/card.tsx";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
+} from "../../src/components/ui/dropdown-menu.tsx";
+import { Input } from "../../src/components/ui/input.tsx";
 import {
   Table,
   TableBody,
@@ -23,12 +29,12 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { date, minorUnits, money } from "@/format";
-import { bind } from "@/components/bind";
-import { useAction } from "@/components/use-action";
-import type { Props } from "./index.server";
+} from "../../src/components/ui/table.tsx";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../src/components/ui/tabs.tsx";
+import { date, minorUnits, money } from "../../src/format.ts";
+import { bind } from "../../src/components/bind.ts";
+import { useAction } from "../../src/components/use-action.tsx";
+import type { Props } from "./index.server.ts";
 
 /** A new rule, typed as the addRule action takes it: a percent, for every partner and product. */
 const NO_RULE: ResolveActionBody<"/admin?addRule"> = {

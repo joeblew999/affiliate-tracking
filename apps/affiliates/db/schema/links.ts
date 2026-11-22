@@ -1,7 +1,7 @@
 import { createInsertSchema, createSelectSchema } from "void/drizzle-zod";
 import { index, sqliteTable, text, uniqueIndex } from "void/schema-d1";
-import { id, now } from "./columns";
-import { partners } from "./partners";
+import { id, now } from "./columns.ts";
+import { partners } from "./partners.ts";
 
 /** A partner's short link: /r/<slug> goes to destination, a path on the host's site. */
 export const links = sqliteTable(

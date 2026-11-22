@@ -1,7 +1,7 @@
 // Copies a value, then says so for a moment.
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button } from "./ui/button.tsx";
 
 export function CopyButton({
   value,

@@ -9,7 +9,7 @@
 // so changing a rule later never changes what was already earned.
 import { commissionRules, sales, type CommissionLine } from "@schema";
 import { and, count, db, eq, gte, isNull, lte, ne, or } from "void/db";
-import type { Partner } from "./partners";
+import type { Partner } from "./partners.ts";
 
 type Rule = typeof commissionRules.$inferSelect;
 

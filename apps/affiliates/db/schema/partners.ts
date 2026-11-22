@@ -1,7 +1,7 @@
 import { createInsertSchema, createSelectSchema, createUpdateSchema } from "void/drizzle-zod";
 import { integer, real, sqliteTable, text, uniqueIndex } from "void/schema-d1";
 import { z } from "zod";
-import { id, now } from "./columns";
+import { id, now } from "./columns.ts";
 
 /** A host user who promotes the product, once approved. */
 export const partners = sqliteTable(
