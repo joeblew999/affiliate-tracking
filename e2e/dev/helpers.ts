@@ -212,6 +212,9 @@ export interface Sale {
 /** The partner's sales, as an admin sees them, newest first. */
 export async function salesOf(partnerId: string): Promise<Sale[]> {
   const admin = await signInAdmin();
-  const all = await service<{ sales: Sale[] }>("/api/admin/sales", admin.cookie);
-  return all.body.sales.filter((sale) => sale.partnerId === partnerId);
+  const res = await service<{ sales: Sale[] }>(
+    `/api/admin/sales?partnerId=${partnerId}`,
+    admin.cookie,
+  );
+  return res.body.sales;
 }

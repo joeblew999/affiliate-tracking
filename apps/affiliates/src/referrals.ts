@@ -2,7 +2,7 @@
 // their first paid sale. Their later purchases are that partner's even after the cookie expires. A
 // partner's promotion code can take a user over only before their first paid sale.
 import { partners, referrals } from "@schema";
-import { and, db, eq, sql } from "void/db";
+import { and, db, eq, isNull } from "void/db";
 import { activePartner, type Partner } from "./partners";
 import { parseReferral } from "./referral-cookie";
 
@@ -37,23 +37,38 @@ export async function settleReferral(sale: {
   stripeCustomerId: string | null;
   at: number;
 }): Promise<void> {
-  await db
-    .insert(referrals)
-    .values({
-      userId: sale.userId,
-      partnerId: sale.partnerId,
-      source: sale.source,
-      stripeCustomerId: sale.stripeCustomerId,
-      createdAt: sale.at,
-      convertedAt: sale.at,
-    })
-    .onConflictDoUpdate({
-      target: referrals.userId,
-      set: {
-        partnerId: sql`CASE WHEN ${referrals.convertedAt} IS NULL AND excluded.source = 'promo_code' THEN excluded.partner_id ELSE ${referrals.partnerId} END`,
-        source: sql`CASE WHEN ${referrals.convertedAt} IS NULL AND excluded.source = 'promo_code' THEN 'promo_code' ELSE ${referrals.source} END`,
-        stripeCustomerId: sql`COALESCE(${referrals.stripeCustomerId}, excluded.stripe_customer_id)`,
-        convertedAt: sql`COALESCE(${referrals.convertedAt}, excluded.converted_at)`,
-      },
-    });
+  const mine = eq(referrals.userId, sale.userId);
+  const notConverted = and(mine, isNull(referrals.convertedAt));
+  // One batch, which D1 runs as a unit (Void's Batch Operations), in this order:
+  await db.batch([
+    // A user with no referral yet: this sale's partner.
+    db
+      .insert(referrals)
+      .values({
+        userId: sale.userId,
+        partnerId: sale.partnerId,
+        source: sale.source,
+        createdAt: sale.at,
+      })
+      .onConflictDoNothing({ target: referrals.userId }),
+    // A promo code typed at checkout wins over a referral link, until the referral has converted.
+    ...(sale.source === "promo_code"
+      ? [
+          db
+            .update(referrals)
+            .set({ partnerId: sale.partnerId, source: "promo_code" })
+            .where(notConverted),
+        ]
+      : []),
+    // The customer and when they converted: the first sale's, kept after.
+    ...(sale.stripeCustomerId
+      ? [
+          db
+            .update(referrals)
+            .set({ stripeCustomerId: sale.stripeCustomerId })
+            .where(and(mine, isNull(referrals.stripeCustomerId))),
+        ]
+      : []),
+    db.update(referrals).set({ convertedAt: sale.at }).where(notConverted),
+  ]);
 }

@@ -1,15 +1,14 @@
-import { partners } from "@schema";
+import { partnerStatusInput, partners } from "@schema";
 import { HTTPException } from "hono/http-exception";
 import { defineHandler } from "void";
 import { db, eq } from "void/db";
-import { z } from "zod";
 import { requireAdmin } from "@/access";
 import { ensurePromotionCode } from "@/approval";
 
 // Approve (active), suspend or reactivate a partner. Approving also makes their buyer-discount
 // promotion code, when the service has a Stripe key and a coupon (src/approval.ts).
 export const POST = defineHandler.withValidator({
-  body: z.object({ id: z.uuid(), status: z.enum(["active", "suspended"]) }),
+  body: partnerStatusInput,
 })(async (c, { body }) => {
   requireAdmin(c);
   const [row] = await db

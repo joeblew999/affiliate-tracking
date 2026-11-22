@@ -14,9 +14,10 @@
 //      owed less than they were clawed back is paid nothing until their sales make it up.
 // Every step can be run again after a crash and picks up where it was.
 import { partners, payouts, sales } from "@schema";
-import { and, db, eq, inArray, isNotNull, isNull, ne, sql, sum } from "void/db";
+import { and, db, eq, inArray, isNotNull, isNull, ne, sum } from "void/db";
 import { env } from "void/env";
 import { alias } from "void/schema-d1";
+import { refundShare } from "./refunds";
 import { hasStripe, stripe } from "./stripe";
 
 type Payout = typeof payouts.$inferSelect;
@@ -24,6 +25,13 @@ type PayoutOutcome =
   | { status: "sent" | "manual"; payoutId: string; amountCents: number }
   | { status: "nothing owed" }
   | { status: "failed"; payoutId: string; reason: string };
+
+/** db.batch takes a non-empty list. */
+function toBatch<T>(statements: T[]): [T, ...T[]] {
+  const [first, ...rest] = statements;
+  if (!first) throw new Error("an empty batch");
+  return [first, ...rest];
+}
 
 const transferGroup = (payoutId: string) => `affiliates_payout_${payoutId}`;
 
@@ -36,10 +44,22 @@ async function settle(partnerId: string): Promise<void> {
     isNull(sales.payoutId),
     isNull(sales.payoutCents),
   );
-  await db
-    .update(sales)
-    .set({ payoutCurrency: target, payoutCents: sql`${sales.commissionCents}` })
+  // Already in the payout currency: the commission as it is.
+  const local = await db
+    .select({ id: sales.id, commissionCents: sales.commissionCents })
+    .from(sales)
     .where(and(unclaimed, eq(sales.currency, target)));
+  if (local.length)
+    await db.batch(
+      toBatch(
+        local.map((sale) =>
+          db
+            .update(sales)
+            .set({ payoutCurrency: target, payoutCents: sale.commissionCents })
+            .where(and(eq(sales.id, sale.id), unclaimed)),
+        ),
+      ),
+    );
   if (!hasStripe()) return;
   const foreign = await db
     .select({
@@ -121,13 +141,16 @@ async function claim(partnerId: string): Promise<Payout | null> {
       stripeAccountId: partner?.stripeAccountId ?? null,
     }),
     db.update(sales).set({ status: "paying", payoutId: id }).where(claimable),
-    db
-      .update(payouts)
-      .set({
-        amountCents: sql`(SELECT COALESCE(SUM(${sales.payoutCents}), 0) FROM ${sales} WHERE ${sales.payoutId} = ${id})`,
-      })
-      .where(eq(payouts.id, id)),
   ]);
+  // Its amount: what the sales it claimed add up to (one may have changed since the sum above).
+  const [claimed] = await db
+    .select({ cents: sum(sales.payoutCents).mapWith(Number) })
+    .from(sales)
+    .where(eq(sales.payoutId, id));
+  await db
+    .update(payouts)
+    .set({ amountCents: claimed?.cents ?? 0 })
+    .where(eq(payouts.id, id));
   return pendingPayout(partnerId);
 }
 
@@ -158,8 +181,18 @@ async function refundedSinceClaim(payoutId: string): Promise<boolean> {
  * refund being applied at the same moment starts again from the sale as it now is.
  */
 async function release(payout: Payout, reason: string): Promise<void> {
-  const taken = sql<number>`CASE WHEN ${sales.amountCents} > 0 THEN CAST(ROUND(${sales.grossCommissionCents} * MIN(${sales.refundedCents}, ${sales.amountCents}) * 1.0 / ${sales.amountCents}) AS INTEGER) ELSE 0 END`;
-  const isSale = inArray(sales.kind, ["checkout", "renewal"]);
+  const inIt = await db
+    .select({
+      id: sales.id,
+      kind: sales.kind,
+      status: sales.status,
+      amountCents: sales.amountCents,
+      refundedCents: sales.refundedCents,
+      grossCommissionCents: sales.grossCommissionCents,
+      refundVersion: sales.refundVersion,
+    })
+    .from(sales)
+    .where(eq(sales.payoutId, payout.id));
   await db.batch([
     db
       .update(payouts)
@@ -174,18 +207,36 @@ async function release(payout: Payout, reason: string): Promise<void> {
           inArray(sales.refundOf, inPayout(payout.id)),
         ),
       ),
-    db
-      .update(sales)
-      .set({
-        status: sql`CASE WHEN ${isSale} AND ${sales.refundedCents} >= ${sales.amountCents} THEN 'refunded' WHEN ${sales.status} = 'paying' THEN 'approved' ELSE ${sales.status} END`,
-        commissionCents: sql`CASE WHEN ${isSale} THEN ${sales.grossCommissionCents} - ${taken} ELSE ${sales.commissionCents} END`,
-        payoutCurrency: sql`CASE WHEN ${isSale} THEN NULL ELSE ${sales.payoutCurrency} END`,
-        payoutCents: sql`CASE WHEN ${isSale} THEN NULL ELSE ${sales.payoutCents} END`,
-        fxSource: sql`CASE WHEN ${isSale} THEN NULL ELSE ${sales.fxSource} END`,
-        refundVersion: sql`${sales.refundVersion} + 1`,
-        payoutId: null,
-      })
-      .where(eq(sales.payoutId, payout.id)),
+    ...inIt.map((sale) => {
+      const isSale = sale.kind === "checkout" || sale.kind === "renewal";
+      // Each sale as it is now, guarded by its refundVersion: a refund being applied at the same
+      // moment starts again from the sale as this leaves it.
+      const mine = and(eq(sales.id, sale.id), eq(sales.refundVersion, sale.refundVersion));
+      const status =
+        isSale && sale.refundedCents >= sale.amountCents
+          ? ("refunded" as const)
+          : sale.status === "paying"
+            ? ("approved" as const)
+            : sale.status;
+      return db
+        .update(sales)
+        .set(
+          isSale
+            ? {
+                status,
+                commissionCents:
+                  sale.grossCommissionCents -
+                  refundShare(sale.grossCommissionCents, sale.refundedCents, sale.amountCents),
+                payoutCurrency: null,
+                payoutCents: null,
+                fxSource: null,
+                refundVersion: sale.refundVersion + 1,
+                payoutId: null,
+              }
+            : { status, refundVersion: sale.refundVersion + 1, payoutId: null },
+        )
+        .where(mine);
+    }),
   ]);
 }
 
@@ -245,8 +296,8 @@ export async function payPartner(partnerId: string): Promise<PayoutOutcome> {
   }
   await db
     .update(payouts)
-    .set({ transferStartedAt: sql`COALESCE(${payouts.transferStartedAt}, ${Date.now()})` })
-    .where(eq(payouts.id, payout.id));
+    .set({ transferStartedAt: Date.now() })
+    .where(and(eq(payouts.id, payout.id), isNull(payouts.transferStartedAt)));
   try {
     const transferId = await transfer(payout, payout.stripeAccountId);
     await finish(payout, "sent", transferId);

@@ -1,27 +1,12 @@
 // Partners' short links: /r/<slug> to a page on the host's site (routes/r/[slug].ts), each with its
 // own clicks and sales. Up to 100 active per partner. A destination is always a path on the host's
 // site, never another site, so a link can't be used as an open redirect.
-import { clicks, links, sales } from "@schema";
+import { clicks, linkInput, links, sales } from "@schema";
 import { HTTPException } from "hono/http-exception";
-import { and, count, db, desc, eq, isNotNull, ne, sql } from "void/db";
+import { and, count, db, desc, eq, isNotNull, ne, sum } from "void/db";
 import { z } from "zod";
 
 const MAX_ACTIVE_LINKS = 100;
-
-export const NewLink = z.object({
-  destination: z
-    .string()
-    .max(512)
-    .regex(/^\/(?!\/)[^\s\\]*$/, "a path on the site, like /pricing")
-    .default("/"),
-  campaign: z.string().trim().max(100).nullable().default(null),
-  /** Made from the partner's code when empty. */
-  slug: z
-    .string()
-    .regex(/^[a-z0-9][a-z0-9-]{1,63}$/, "2–64 lowercase letters, digits or dashes")
-    .nullable()
-    .default(null),
-});
 
 /**
  * A partner's links, each with its clicks and sales (not refunded) and its commission net of
@@ -50,17 +35,25 @@ export async function linksOf(partnerId: string, origin: string) {
     db
       .select({
         linkId: sales.linkId,
-        n: sql<number>`COUNT(CASE WHEN ${sales.kind} != 'clawback' THEN 1 END)`,
-        commissionCents: sql<number>`COALESCE(SUM(${sales.commissionCents}), 0)`,
+        kind: sales.kind,
+        n: count(),
+        commissionCents: sum(sales.commissionCents).mapWith(Number),
       })
       .from(sales)
       .where(
         and(eq(sales.partnerId, partnerId), isNotNull(sales.linkId), ne(sales.status, "refunded")),
       )
-      .groupBy(sales.linkId),
+      .groupBy(sales.linkId, sales.kind),
   ]);
   const clicksOf = new Map(clickCounts.map((row) => [row.linkId, row.n]));
-  const salesOf = new Map(saleCounts.map((row) => [row.linkId, row]));
+  // Per link: its sales (clawbacks aren't sales), and commission net of clawbacks.
+  const salesOf = new Map<string | null, { n: number; commissionCents: number }>();
+  for (const row of saleCounts) {
+    const total = salesOf.get(row.linkId) ?? { n: 0, commissionCents: 0 };
+    if (row.kind !== "clawback") total.n += row.n;
+    total.commissionCents += row.commissionCents;
+    salesOf.set(row.linkId, total);
+  }
   return rows.map((row) => ({
     ...row,
     clicks: clicksOf.get(row.id) ?? 0,
@@ -72,9 +65,9 @@ export async function linksOf(partnerId: string, origin: string) {
 
 export async function createLink(
   partner: { id: string; code: string },
-  input: z.output<typeof NewLink>,
+  input: z.output<typeof linkInput>,
 ) {
-  const slug = input.slug ?? `${partner.code}-${crypto.randomUUID().slice(0, 4)}`;
+  const slug = (input.slug ?? `${partner.code}-${crypto.randomUUID().slice(0, 4)}`).toLowerCase();
   const [active] = await db
     .select({ n: count() })
     .from(links)
@@ -84,7 +77,7 @@ export async function createLink(
   const [taken] = await db
     .select({ id: links.id })
     .from(links)
-    .where(sql`${links.slug} = ${slug} COLLATE NOCASE`)
+    .where(eq(links.slug, slug))
     .limit(1);
   if (taken) throw new HTTPException(409, { message: "That short name is taken" });
   const [row] = await db
@@ -92,8 +85,8 @@ export async function createLink(
     .values({
       partnerId: partner.id,
       slug,
-      destination: input.destination,
-      campaign: input.campaign,
+      destination: input.destination ?? "/",
+      campaign: input.campaign ?? null,
     })
     .returning();
   if (!row) throw new Error("link not created");

@@ -174,8 +174,8 @@ test("a payout run pays each partner's approved sales and bonuses, through the q
     (
       await service("/api/admin/bonus", admin.cookie, {
         partnerId: nick.partnerId,
-        amountCents: 2500,
-        note: "Launch week",
+        commissionCents: 2500,
+        bonusNote: "Launch week",
       })
     ).status,
   ).toBe(200);

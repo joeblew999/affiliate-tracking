@@ -80,7 +80,7 @@ test("a short link counts its own clicks and sales", async () => {
   const made = await service<{ link: { id: string; slug: string } }>(
     "/api/partner/links",
     nick.cookie,
-    { destination: "/pricing", campaign: "Newsletter", slug: null },
+    { destination: "/pricing", campaign: "Newsletter" },
   );
   const followed = await follow(`/r/${made.body.link.slug}`);
   expect(followed.location).toBe("http://localhost:5173/pricing");

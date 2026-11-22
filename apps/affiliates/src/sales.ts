@@ -88,7 +88,8 @@ export async function recordCheckoutSale(
   const items = lines.map(itemOf);
   const paymentIntent = idOf(session.payment_intent);
   const at = event.created * 1000;
-  const customerEmail = session.customer_details?.email ?? null;
+  // Lowercase: one customer however they typed it (counted in src/stats.ts, capped in src/commission.ts).
+  const customerEmail = session.customer_details?.email?.toLowerCase() ?? null;
   const commission = await computeCommission(partner, {
     amountCents,
     currency,

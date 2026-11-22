@@ -20,6 +20,6 @@ export async function ensurePromotionCode(partner: Partner): Promise<void> {
   );
   await db
     .update(partners)
-    .set({ promoCode: promotion.code, promoCodeId: promotion.id })
+    .set({ promoCode: promotion.code.toUpperCase(), promoCodeId: promotion.id })
     .where(eq(partners.id, partner.id));
 }

@@ -2,7 +2,7 @@
 // refunded in full (status refunded), under an open dispute, flagged by the fraud checks, its partner isn't active, or the partner's sales
 // are always reviewed by hand. Unset: an admin approves every sale. Run daily (crons/daily.ts).
 import { partners, refundedPayments, sales } from "@schema";
-import { and, db, eq, inArray, isNull, lte, notExists, or, sql } from "void/db";
+import { and, db, eq, inArray, isNull, lte, notExists, or } from "void/db";
 import { env } from "void/env";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -27,7 +27,7 @@ export async function releaseHeldSales(now = Date.now()): Promise<number> {
           isNull(sales.paymentIntent),
           notExists(
             db
-              .select({ x: sql`1` })
+              .select({ paymentIntent: refundedPayments.paymentIntent })
               .from(refundedPayments)
               .where(
                 and(

@@ -8,7 +8,7 @@
 // that rule, across all their purchases. What was applied is stored with the sale (commissionDetail),
 // so changing a rule later never changes what was already earned.
 import { commissionRules, sales, type CommissionLine } from "@schema";
-import { and, count, db, eq, gte, isNull, lte, ne, or, sql } from "void/db";
+import { and, count, db, eq, gte, isNull, lte, ne, or } from "void/db";
 import type { Partner } from "./partners";
 
 type Rule = typeof commissionRules.$inferSelect;
@@ -120,25 +120,28 @@ export async function computeCommission(
       ? ruleCommission(rule, line.amountCents, line.quantity, sale.currency)
       : Math.round((line.amountCents * partner.commissionPct) / 100);
     if (rule && rule.capPerCustomerCents !== null && sale.customerEmail) {
-      const [earned] = await db
-        .select({
-          cents: sql<number>`COALESCE(SUM(json_extract(d.value, '$.commissionCents')), 0)`,
-        })
-        .from(sql`${sales}, json_each(${sales.commissionDetail}) d`)
+      // What this customer already earned the partner under this rule: their earlier sales'
+      // lines (emails are stored lowercase, src/sales.ts).
+      const earlier = await db
+        .select({ detail: sales.commissionDetail })
+        .from(sales)
         .where(
           and(
             eq(sales.partnerId, partner.id),
             ne(sales.status, "refunded"),
-            sql`lower(${sales.customerEmail}) = lower(${sale.customerEmail})`,
-            sql`json_extract(d.value, '$.ruleId') = ${rule.id}`,
+            eq(sales.customerEmail, sale.customerEmail.toLowerCase()),
           ),
         );
+      const earned = earlier
+        .flatMap((row) => row.detail ?? [])
+        .filter((d) => d.ruleId === rule.id)
+        .reduce((sum, d) => sum + d.commissionCents, 0);
       const alreadyInSale = detail
         .filter((d) => d.ruleId === rule.id)
         .reduce((sum, d) => sum + d.commissionCents, 0);
       commissionCents = Math.max(
         0,
-        Math.min(commissionCents, rule.capPerCustomerCents - (earned?.cents ?? 0) - alreadyInSale),
+        Math.min(commissionCents, rule.capPerCustomerCents - earned - alreadyInSale),
       );
     }
     detail.push({

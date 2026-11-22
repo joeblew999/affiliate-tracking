@@ -99,7 +99,7 @@ function Apply() {
         method: "POST",
         body: {
           name: field(form, "name"),
-          application: field(form, "application") || undefined,
+          application: field(form, "application") || null,
           acceptTerms: true,
         },
       }),
@@ -156,7 +156,7 @@ function Dashboard({ partner, links, stats, earnings, program }: Props) {
         body: {
           destination: field(form, "destination") || "/",
           campaign: field(form, "campaign") || null,
-          slug: field(form, "slug").toLowerCase() || null,
+          slug: field(form, "slug").toLowerCase() || undefined,
         },
       });
       formEl.reset();

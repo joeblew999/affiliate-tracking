@@ -6,7 +6,7 @@
 // renewals are never approved automatically. Idempotent by invoice.
 import { partners, sales } from "@schema";
 import type Stripe from "stripe";
-import { and, asc, db, eq, or, sql } from "void/db";
+import { and, asc, db, eq, or } from "void/db";
 import { env } from "void/env";
 import { computeCommission } from "./commission";
 import { applyRefunds } from "./refunds";
@@ -68,7 +68,8 @@ export async function recordRenewal(
   if (!subscription && !customer) return { recorded: false, reason: "no subscription or customer" };
 
   // The sale that started it: the subscription's checkout sale, else the customer's first.
-  const [first] = await db
+  // (or() leaves out a condition that's undefined; at least one is set, checked above.)
+  const candidates = await db
     .select({ sale: sales, partner: partners })
     .from(sales)
     .innerJoin(partners, eq(partners.id, sales.partnerId))
@@ -76,16 +77,15 @@ export async function recordRenewal(
       and(
         eq(sales.kind, "checkout"),
         or(
-          subscription ? eq(sales.stripeSubscriptionId, subscription) : sql`0`,
-          customer ? eq(sales.stripeCustomerId, customer) : sql`0`,
+          subscription ? eq(sales.stripeSubscriptionId, subscription) : undefined,
+          customer ? eq(sales.stripeCustomerId, customer) : undefined,
         ),
       ),
     )
-    .orderBy(
-      sql`CASE WHEN ${sales.stripeSubscriptionId} = ${subscription} THEN 0 ELSE 1 END`,
-      asc(sales.createdAt),
-    )
-    .limit(1);
+    .orderBy(asc(sales.createdAt));
+  const first =
+    candidates.find((row) => subscription && row.sale.stripeSubscriptionId === subscription) ??
+    candidates[0];
   if (!first) return { recorded: false, reason: "no first sale" };
   if (first.partner.status !== "active") return { recorded: false, reason: "partner not active" };
 
@@ -104,7 +104,7 @@ export async function recordRenewal(
   const commission = await computeCommission(first.partner, {
     amountCents: invoice.amount_paid,
     currency,
-    customerEmail: invoice.customer_email,
+    customerEmail: invoice.customer_email?.toLowerCase() ?? null,
     at: paidAt,
     items: lines.map((line, i) => ({
       productId: items[i]?.productId ?? null,
@@ -127,7 +127,7 @@ export async function recordRenewal(
       stripeSubscriptionId: subscription,
       userId: first.sale.userId,
       linkId: first.sale.linkId,
-      customerEmail: invoice.customer_email,
+      customerEmail: invoice.customer_email?.toLowerCase() ?? null,
       customerCountry: country,
       amountCents: invoice.amount_paid,
       currency,

@@ -1,15 +1,11 @@
-import { commissionRules } from "@schema";
+import { commissionRules, ruleIdInput } from "@schema";
 import { HTTPException } from "hono/http-exception";
 import { defineHandler } from "void";
 import { db, eq } from "void/db";
-import { z } from "zod";
 import { requireAdmin } from "@/access";
 
 // Stop using a rule. Commission already earned under it stays as it is.
-export const POST = defineHandler.withValidator({ body: z.object({ id: z.uuid() }) })(async (
-  c,
-  { body },
-) => {
+export const POST = defineHandler.withValidator({ body: ruleIdInput })(async (c, { body }) => {
   requireAdmin(c);
   const [row] = await db
     .update(commissionRules)

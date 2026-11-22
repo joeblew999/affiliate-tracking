@@ -485,9 +485,16 @@ function Rules({ rules, partners, payoutCurrency }: Allowed) {
     };
     const body =
       kind === "percent"
-        ? { kind, percent: Number(field(form, "percent")), ...common }
+        ? {
+            kind,
+            percent: Number(field(form, "percent")),
+            fixedCents: null,
+            currency: null,
+            ...common,
+          }
         : {
             kind,
+            percent: null,
             fixedCents: minorUnits(field(form, "fixed"), field(form, "currency")),
             currency: field(form, "currency").toLowerCase(),
             ...common,
@@ -506,8 +513,8 @@ function Rules({ rules, partners, payoutCurrency }: Allowed) {
         method: "POST",
         body: {
           partnerId: field(form, "partnerId"),
-          amountCents: minorUnits(field(form, "amount"), payoutCurrency),
-          note: field(form, "note"),
+          commissionCents: minorUnits(field(form, "amount"), payoutCurrency),
+          bonusNote: field(form, "note"),
         },
       });
       formEl.reset();

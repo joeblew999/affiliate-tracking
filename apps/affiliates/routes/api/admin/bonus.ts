@@ -1,20 +1,15 @@
-import { sales } from "@schema";
+import { bonusInput, sales } from "@schema";
 import { HTTPException } from "hono/http-exception";
 import { defineHandler } from "void";
 import { db } from "void/db";
 import { env } from "void/env";
-import { z } from "zod";
 import { requireAdmin } from "@/access";
 import { activePartner } from "@/partners";
 
 // A one-off bonus for a partner: approved straight away and paid with their next payout. In the
 // payout currency: a bonus has no Stripe payment to convert from.
 export const POST = defineHandler.withValidator({
-  body: z.object({
-    partnerId: z.uuid(),
-    amountCents: z.int().positive(),
-    note: z.string().trim().min(1).max(200),
-  }),
+  body: bonusInput,
 })(async (c, { body }) => {
   requireAdmin(c);
   if (!(await activePartner(body.partnerId)))
@@ -29,11 +24,11 @@ export const POST = defineHandler.withValidator({
       status: "approved",
       amountCents: 0,
       currency,
-      commissionCents: body.amountCents,
-      grossCommissionCents: body.amountCents,
+      commissionCents: body.commissionCents,
+      grossCommissionCents: body.commissionCents,
       payoutCurrency: currency,
-      payoutCents: body.amountCents,
-      bonusNote: body.note,
+      payoutCents: body.commissionCents,
+      bonusNote: body.bonusNote,
       createdAt: now,
       approvedAt: now,
     })

@@ -2,8 +2,10 @@
 // milliseconds since 1970 (Date.now()); money is in a currency's minor units (cents). Column names are
 // snake_case (database.casing in void.config.ts). People are the host app's users: this service
 // stores their user id, never a password or session.
-import { sql } from "void/db";
+import { isNotNull, sql } from "void/db";
+import { createInsertSchema, createSelectSchema, createUpdateSchema } from "void/drizzle-zod";
 import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "void/schema-d1";
+import { z } from "zod";
 
 const id = () =>
   text()
@@ -44,7 +46,8 @@ export const partners = sqliteTable(
     application: text(),
     createdAt: now(),
   },
-  (t) => [uniqueIndex("partners_promo_code").on(sql`${t.promoCode} COLLATE NOCASE`)],
+  // Stored uppercase (src/approval.ts), so one code can't belong to two partners in any case.
+  (t) => [uniqueIndex("partners_promo_code").on(t.promoCode)],
 );
 
 /** A partner's short link: /r/<slug> goes to destination, a path on the host's site. */
@@ -64,7 +67,8 @@ export const links = sqliteTable(
     createdAt: now(),
   },
   (t) => [
-    uniqueIndex("links_slug").on(sql`${t.slug} COLLATE NOCASE`),
+    // Stored lowercase (src/links.ts), so a short name is one link in any case.
+    uniqueIndex("links_slug").on(t.slug),
     index("links_partner").on(t.partnerId, t.status),
   ],
 );
@@ -150,6 +154,7 @@ export const payouts = sqliteTable(
     createdAt: now(),
     paidAt: integer(),
   },
+  // A literal, not eq(): SQLite allows no bound parameters in a partial index's WHERE.
   (t) => [
     uniqueIndex("payouts_one_pending")
       .on(t.partnerId)
@@ -229,7 +234,7 @@ export const sales = sqliteTable(
     index("sales_user").on(t.userId),
     uniqueIndex("sales_one_clawback_per_refund")
       .on(t.refundOf, t.refundVersion)
-      .where(sql`${t.refundOf} IS NOT NULL`),
+      .where(isNotNull(t.refundOf)),
   ],
 );
 
@@ -286,3 +291,82 @@ export interface SaleItem {
   variant: string | null;
   quantity: number;
 }
+
+// What requests may send, derived from the tables above (Void's "Schema-Derived Validators", in
+// void/drizzle-zod): a column's type and allowed values are written once, here in the tables, and
+// the routes validate against these.
+const partnerRow = createSelectSchema(partners);
+const saleRow = createSelectSchema(sales);
+
+/** An admin's decision on a partner: active or suspended (pending is only for new applicants). */
+export const partnerStatusInput = partnerRow
+  .pick({ id: true })
+  .extend({ status: partnerRow.shape.status.exclude(["pending"]) });
+
+/** An admin's change to a partner's terms. */
+export const partnerUpdateInput = createUpdateSchema(partners, {
+  commissionPct: (s) => s.min(0).max(100),
+  recurringMonths: (s) => s.min(0).max(1200),
+})
+  .pick({ commissionPct: true, recurringMonths: true, reviewRequired: true })
+  .extend(partnerRow.pick({ id: true }).shape);
+
+/** A shop user applying to be a partner. */
+export const applyInput = createInsertSchema(partners, {
+  application: (s) => s.trim().max(2000),
+})
+  .pick({ application: true })
+  // The column allows no name (an admin's partner may have none); an applicant gives one.
+  .extend({ name: z.string().trim().min(1).max(100), acceptTerms: z.literal(true) });
+
+/** An admin's decision on a sale: approve, reject, or back to pending. */
+export const saleStatusInput = saleRow
+  .pick({ id: true })
+  .extend({ status: saleRow.shape.status.extract(["approved", "rejected", "pending"]) });
+
+/** A bonus an admin gives a partner: a sale of kind "bonus" (routes/api/admin/bonus.ts). */
+export const bonusInput = createInsertSchema(sales, {
+  commissionCents: (s) => s.positive(),
+  bonusNote: () => z.string().trim().min(1).max(200),
+}).pick({ partnerId: true, commissionCents: true, bonusNote: true });
+
+/** A new commission rule: a percent, or a fixed amount per unit in a currency. */
+export const ruleInput = createInsertSchema(commissionRules, {
+  productId: (s) => s.regex(/^(prod|price)_[A-Za-z0-9]+$/, "a Stripe prod_… or price_… id"),
+  percent: (s) => s.min(0).max(100),
+  fixedCents: (s) => s.min(0),
+  currency: (s) => s.regex(/^[a-z]{3}$/),
+  minMonthlySales: (s) => s.min(0),
+  capPerCustomerCents: (s) => s.min(0),
+})
+  .pick({
+    partnerId: true,
+    productId: true,
+    kind: true,
+    percent: true,
+    fixedCents: true,
+    currency: true,
+    minMonthlySales: true,
+    capPerCustomerCents: true,
+  })
+  .refine(
+    (r) => (r.kind === "percent" ? r.percent != null : r.fixedCents != null && r.currency != null),
+    {
+      message: "a percent rule needs percent; a fixed one needs fixedCents and currency",
+    },
+  );
+
+/** A partner's new short link. The slug is made from their code when not given. */
+export const linkInput = createInsertSchema(links, {
+  destination: (s) => s.max(512).regex(/^\/(?!\/)[^\s\\]*$/, "a path on the site, like /pricing"),
+  campaign: (s) => s.trim().max(100),
+  slug: (s) => s.regex(/^[a-z0-9][a-z0-9-]{1,63}$/, "2–64 lowercase letters, digits or dashes"),
+})
+  .pick({ destination: true, campaign: true, slug: true })
+  .partial();
+
+/** One row, by its id. */
+export const partnerIdInput = createSelectSchema(links).pick({ partnerId: true });
+export const ruleIdInput = createSelectSchema(commissionRules).pick({ id: true });
+export const linkIdInput = createSelectSchema(links).pick({ id: true });
+export const payoutRunInput = createInsertSchema(payouts).pick({ partnerId: true }).partial();

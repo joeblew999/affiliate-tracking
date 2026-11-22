@@ -1,8 +1,7 @@
-import { partners } from "@schema";
+import { applyInput, partners } from "@schema";
 import { HTTPException } from "hono/http-exception";
 import { defineHandler } from "void";
 import { db } from "void/db";
-import { z } from "zod";
 import { requireUser } from "@/access";
 import { partnerForUser } from "@/partners";
 
@@ -21,11 +20,7 @@ function codeFor(name: string): string {
 
 // A signed-in host user applies to be a partner. Pending until an admin approves.
 export const POST = defineHandler.withValidator({
-  body: z.object({
-    name: z.string().trim().min(1).max(100),
-    application: z.string().trim().max(2000).optional(),
-    acceptTerms: z.literal(true),
-  }),
+  body: applyInput,
 })(async (c, { body }) => {
   const user = requireUser(c);
   if (await partnerForUser(user.id)) throw new HTTPException(409, { message: "Already applied" });

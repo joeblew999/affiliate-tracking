@@ -4,7 +4,7 @@
 // crawlers are sent on with nothing recorded. An unknown or inactive link goes to the host's home.
 import { clicks, links, partners } from "@schema";
 import { defineHandler } from "void";
-import { and, db, eq, gt, sql } from "void/db";
+import { and, db, eq, gt } from "void/db";
 import { env } from "void/env";
 import { referralCookie, type Referral } from "@/referral-cookie";
 import { country, deviceClass, isAutomated, referrerHost, requestIpHash } from "@/visitor";
@@ -18,7 +18,7 @@ async function resolve(slug: string): Promise<(Referral & { destination: string 
     .innerJoin(partners, eq(partners.id, links.partnerId))
     .where(
       and(
-        sql`${links.slug} = ${slug} COLLATE NOCASE`,
+        eq(links.slug, slug.toLowerCase()),
         eq(links.status, "active"),
         eq(partners.status, "active"),
       ),

@@ -11,13 +11,13 @@
 // written in the same transaction as the change, which only happens if the sale is as it was read:
 // an event run twice, or two at once, never counts a refund twice.
 import { refundedPayments, sales } from "@schema";
-import { and, db, eq, inArray, isNull, notExists, sql } from "void/db";
+import { and, db, eq, inArray, isNull, lt, notExists, or } from "void/db";
 import { alias } from "void/schema-d1";
 
 type Sale = typeof sales.$inferSelect;
 
 /** The part of a commission that a refund of refundedCents, of a sale of amountCents, takes. */
-function refundShare(commissionCents: number, refundedCents: number, amountCents: number) {
+export function refundShare(commissionCents: number, refundedCents: number, amountCents: number) {
   if (amountCents <= 0 || refundedCents <= 0) return 0;
   return Math.round((commissionCents * Math.min(refundedCents, amountCents)) / amountCents);
 }
@@ -29,7 +29,9 @@ export async function noteRefund(paymentIntent: string, refundedCents: number): 
     .values({ paymentIntent, refundedCents })
     .onConflictDoUpdate({
       target: refundedPayments.paymentIntent,
-      set: { refundedCents: sql`MAX(${refundedPayments.refundedCents}, ${refundedCents})` },
+      set: { refundedCents },
+      // Stripe's events can arrive out of order: the total only goes up.
+      setWhere: lt(refundedPayments.refundedCents, refundedCents),
     });
   return applyRefunds(paymentIntent);
 }
@@ -41,18 +43,16 @@ export async function noteDispute(
   status: "open" | "won" | "lost",
 ): Promise<number> {
   // A dispute's events can arrive out of order: once closed, a late "open" changes nothing.
-  const disputeStatus =
-    status === "open"
-      ? sql<
-          "open" | "won" | "lost"
-        >`CASE WHEN ${refundedPayments.disputeStatus} IN ('won', 'lost') THEN ${refundedPayments.disputeStatus} ELSE 'open' END`
-      : status;
   await db
     .insert(refundedPayments)
     .values({ paymentIntent, disputedCents, disputeStatus: status })
     .onConflictDoUpdate({
       target: refundedPayments.paymentIntent,
-      set: { disputedCents, disputeStatus },
+      set: { disputedCents, disputeStatus: status },
+      setWhere:
+        status === "open"
+          ? or(isNull(refundedPayments.disputeStatus), eq(refundedPayments.disputeStatus, "open"))
+          : undefined,
     });
   return applyRefunds(paymentIntent);
 }

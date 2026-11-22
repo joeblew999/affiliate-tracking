@@ -1,6 +1,6 @@
 import { links, partners } from "@schema";
 import { defineHandler } from "void";
-import { and, db, eq, sql } from "void/db";
+import { and, db, eq } from "void/db";
 import { CheckoutInput, type CheckoutOutput } from "@/host-contract";
 import { activePartner, type Partner } from "@/partners";
 import { parseReferral } from "@/referral-cookie";
@@ -21,10 +21,7 @@ export const POST = defineHandler.withValidator({ body: CheckoutInput })(async (
         .select()
         .from(partners)
         .where(
-          and(
-            sql`${partners.promoCode} = ${body.promoCode} COLLATE NOCASE`,
-            eq(partners.status, "active"),
-          ),
+          and(eq(partners.promoCode, body.promoCode.toUpperCase()), eq(partners.status, "active")),
         )
         .limit(1)
     : [];
