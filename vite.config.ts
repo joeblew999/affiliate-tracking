@@ -25,16 +25,22 @@ export default defineConfig({
       dev: { command: "vp run -r --parallel dev", cache: false },
       // Chromium for the browser tests (once per machine).
       "install:browser": { command: "playwright install --with-deps chromium", cache: false },
-      // The tests against the running apps (e2e/dev/): your `vp run dev` if it's up, else they
-      // start one and stop it after. Cached as Void's own repo caches its tests: the files the run
-      // reads are its inputs, so with none of them changed `vp run test:dev` replays the last
-      // result at once. Left out: what the dev servers rewrite every run (the local databases in
-      // .wrangler, Void's generated .void, Node's compile cache). `vp test run --project dev`
-      // runs them regardless; add a file to run just that one while working on it.
+      // The tests (e2e/dev/), against both apps started fresh for the run (e2e/apps.ts), so they
+      // never touch your own local data or your `vp run dev`. Cached as Void's own repo caches its
+      // tests: with none of the files the run reads changed, it replays the last result at once.
+      // Left out: what running rewrites (the run's copies in .e2e, Void's generated .void, the
+      // local databases in .wrangler, Node's compile cache). `vp test run --project dev` runs
+      // them regardless; add a file to run just that one while working on it.
       "test:dev": {
         command: "vp test run --project dev",
         cache: {
-          input: [{ auto: true }, "!**/.wrangler/**", "!**/.void/**", "!**/node_modules/.cache/**"],
+          input: [
+            { auto: true },
+            "!.e2e/**",
+            "!**/.wrangler/**",
+            "!**/.void/**",
+            "!**/node_modules/.cache/**",
+          ],
           output: [],
         },
       },
@@ -53,11 +59,12 @@ export default defineConfig({
           name: "dev",
           include: ["e2e/dev/*.test.ts"],
           globalSetup: ["e2e/dev/setup.ts"],
+          setupFiles: ["e2e/dev/each-file.ts"],
           pool: "forks",
-          // Browser tests and work through queues take longer than Vitest's 5 seconds; as in
-          // void-fbtee's dev-server projects.
+          // Browser tests and work through queues take longer than Vitest's 5 seconds, and
+          // starting both apps longer still (Void's own integration tests allow 120 seconds).
           testTimeout: 120_000,
-          hookTimeout: 120_000,
+          hookTimeout: 180_000,
           fileParallelism: false,
         },
       },
@@ -66,6 +73,7 @@ export default defineConfig({
           name: "stripe",
           include: ["e2e/stripe/*.test.ts"],
           globalSetup: ["e2e/stripe/setup.ts"],
+          setupFiles: ["e2e/dev/each-file.ts"],
           pool: "forks",
           testTimeout: 120_000,
           hookTimeout: 180_000,

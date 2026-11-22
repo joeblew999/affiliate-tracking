@@ -1,7 +1,7 @@
 // The host-only API (the shop's calls through its binding) is closed to everyone without the shop's
 // token: the service also has a public address.
 import { expect, inject, test } from "vite-plus/test";
-import { AFFILIATES } from "./setup.ts";
+import { AFFILIATES } from "./helpers.ts";
 
 test("the host-only API needs the shop's token", async () => {
   const call = (token?: string) =>

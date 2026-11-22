@@ -1,8 +1,8 @@
 # What every CI job starts with, after the checkout: Vite+ (vp), the Node in .node-version, the pnpm
 # in package.json, and the packages, exactly as pnpm-lock.yaml says (Vite+'s CI guide,
-# https://viteplus.dev/guide/ci). Then each app's local .env and the service's local database.
+# https://viteplus.dev/guide/ci).
 name: setup
-description: Vite+, the packages, and the apps' local setup
+description: Vite+ and the packages
 runs:
   using: composite
   steps:
@@ -10,5 +10,3 @@ runs:
       with:
         node-version-file: .node-version
         run-install: true
-    - run: vp run setup
-      shell: bash

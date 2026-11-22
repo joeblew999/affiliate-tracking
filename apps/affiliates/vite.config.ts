@@ -3,13 +3,18 @@ import { voidPlugin } from "void";
 import { voidReact } from "@void/react/plugin";
 import tailwindcss from "@tailwindcss/vite";
 
-// Its own debugger port. `vp run dev` starts both apps at once; both asked for 9229, and now and then
-// one crashed (EADDRINUSE) instead of moving to another port. Void reads VOID_INSPECTOR_PORT
-// (void 1.11.0, dist/index.mjs; not in its docs).
-process.env.VOID_INSPECTOR_PORT ??= "9231";
-
 export default defineConfig({
   plugins: [voidPlugin(), voidReact(), tailwindcss()],
+  // The Worker's dependencies Vite otherwise finds only on the first request that uses them, then
+  // reloads mid-request: bundled when the server starts instead. Only these: a package whose
+  // errors the code checks (Better Auth's, Hono's) must not be bundled twice.
+  environments: {
+    void_worker: {
+      optimizeDeps: {
+        include: ["hono/bearer-auth"],
+      },
+    },
+  },
   server: {
     // The shop is 5173; this app is always 5174 (the tests and the shop's links expect it).
     port: 5174,

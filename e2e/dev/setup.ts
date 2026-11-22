@@ -1,24 +1,24 @@
-// Global setup for the dev-server tests (`vp run test:dev`): both apps running as a developer runs
-// them, with Void's real local D1, queues, both apps' Better Auth and the service binding. No fakes. Uses your
-// own `vp run dev` if both apps answer; else starts one and stops it at the end.
+// Global setup for `vp run test:dev`: both apps started fresh (../apps.ts), with Void's real local
+// D1, queues, the shop's Better Auth and the service binding, and stopped after. No fakes.
 import type { TestProject } from "vite-plus/test/node";
-import { AFFILIATES, answers, appEnv, SHOP, startDev, stop, untilReady } from "../servers.ts";
-
-export { AFFILIATES, SHOP };
+import { startApps } from "../apps.ts";
 
 declare module "vite-plus/test" {
   interface ProvidedContext {
+    shop: string;
+    affiliates: string;
     hostToken: string;
     webhookSecret: string;
+    cronToken: string;
   }
 }
 
 export default async function setup(project: TestProject) {
-  const running = (await answers(SHOP)) && (await answers(AFFILIATES));
-  const ours = running ? undefined : await startDev();
-  await untilReady();
-  project.provide("hostToken", appEnv("affiliates", "AFFILIATES_HOST_TOKEN"));
-  // Stripe events go to the shop's Better Auth Stripe webhook, signed with its secret.
-  project.provide("webhookSecret", appEnv("shop", "STRIPE_WEBHOOK_SECRET"));
-  return () => stop(ours);
+  const apps = await startApps();
+  project.provide("shop", apps.shop);
+  project.provide("affiliates", apps.affiliates);
+  project.provide("hostToken", apps.hostToken);
+  project.provide("webhookSecret", apps.webhookSecret);
+  project.provide("cronToken", apps.cronToken());
+  return apps.stop;
 }

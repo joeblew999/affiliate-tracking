@@ -10,3 +10,4 @@ package-lock.json
 .dev.vars
 .screens
 .demo
+.e2e/

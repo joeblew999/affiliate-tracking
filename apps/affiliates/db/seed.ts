@@ -1,6 +1,6 @@
 // `vp run demo` (both apps) or `vp run affiliates#db:seed`: resets the service's local database and
 // fills it with 90 days of a believable program, for demos. The people are in ../demo.ts, shared
-// with the shop's seed, which makes them shop accounts. The numbers come from a fixed random seed: every run makes the same program, dated back from today.
+// with the shop's seed, which makes them shop accounts. The numbers and ids come from a fixed random seed: every run makes the same program, dated back from today.
 //
 // What it makes: partners in every state (active, review-required, suspended, waiting for
 // approval), their short links, clicks from several countries, devices and sites, signups, sales
@@ -35,13 +35,18 @@ function random(seed: number) {
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
   const pick = <T>(items: readonly T[]): T => items[Math.floor(next() * items.length)] as T;
-  return { next, pick, chance: (p: number) => next() < p };
+  /** A UUID (version 4's shape) from the same numbers: the same ids every run too. */
+  const uuid = () => {
+    const hex = Array.from({ length: 32 }, () => Math.floor(next() * 16).toString(16)).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${"89ab"[Math.floor(next() * 4)]}${hex.slice(17, 20)}-${hex.slice(20)}`;
+  };
+  return { next, pick, uuid, chance: (p: number) => next() < p };
 }
 
 export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) => {
   const now = Date.now();
   const rand = random(2026);
-  const uuid = () => crypto.randomUUID();
+  const uuid = rand.uuid;
   const at = (daysAgo: number) => now - daysAgo * DAY - Math.floor(rand.next() * DAY * 0.9);
 
   // D1 takes at most 100 values a statement, so rows go in in small batches.

@@ -160,10 +160,8 @@ function Partners({ partners, links }: Props) {
     name: partners.find((p) => p.id === links.partnerId)?.name ?? "",
     links: links.links,
   };
-  const change = (
-    id: string,
-    body: { status?: "active" | "suspended"; reviewRequired?: boolean; commissionPct?: number },
-  ) => run(() => action("/admin?changePartner", { data: { id, ...body } }));
+  const change = (id: string, body: Omit<ResolveActionBody<"/admin?changePartner">, "id">) =>
+    run(() => action("/admin?changePartner", { data: { id, ...body } }));
   const status = (id: string, value: "active" | "suspended") => change(id, { status: value });
   const update = change;
   return (
@@ -178,6 +176,7 @@ function Partners({ partners, links }: Props) {
             <TableHead className="hidden sm:table-cell">Status</TableHead>
             <TableHead className="hidden md:table-cell">Code</TableHead>
             <TableHead className="hidden md:table-cell">Commission %</TableHead>
+            <TableHead className="hidden md:table-cell">Renewals paid for</TableHead>
             <TableHead className="hidden lg:table-cell">Application</TableHead>
             <TableHead />
           </TableRow>
@@ -214,6 +213,27 @@ function Partners({ partners, links }: Props) {
                     if (pct !== p.commissionPct) void update(p.id, { commissionPct: pct });
                   }}
                 />
+              </TableCell>
+              <TableCell className="hidden md:table-cell">
+                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <Input
+                    aria-label={`Months of renewals for ${p.name ?? p.email}`}
+                    className="w-16"
+                    type="number"
+                    min={0}
+                    max={1200}
+                    placeholder="default"
+                    defaultValue={p.recurringMonths ?? ""}
+                    onBlur={(e) => {
+                      // Empty: the program's default (AFFILIATES_RECURRING_MONTHS).
+                      const text = e.currentTarget.value;
+                      const months = text === "" ? null : Number(text);
+                      if (months !== p.recurringMonths)
+                        void update(p.id, { recurringMonths: months });
+                    }}
+                  />
+                  months
+                </div>
               </TableCell>
               <TableCell className="hidden max-w-xs text-sm whitespace-normal text-muted-foreground lg:table-cell">
                 {p.application ?? "—"}

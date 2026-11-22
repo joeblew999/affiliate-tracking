@@ -97,15 +97,21 @@ come from the database schema and the pages' loaders and actions.
 - `vp check` formats, lints and type-checks.
 - `vp run check:types` type-checks each project as a whole (both apps, the tests, the scripts), as
   Void's own repo does.
-- `vp run test:dev` runs the tests in `e2e/dev` against both apps, with their real database, queues
-  and sign-in, and a real browser. It uses your `vp run dev` if it's running. The first time, run
-  `vp run install:browser` to get Chromium.
+- `vp run test:dev` runs the tests in `e2e/dev`. The first time, run `vp run install:browser` to
+  get Chromium.
 - `vp run test:stripe` runs the tests in `e2e/stripe` against Stripe's test mode. It needs a
-  test-mode key in `STRIPE_TEST_SECRET_KEY`, with `vp run dev` stopped. On GitHub, it runs from
+  test-mode key in `STRIPE_TEST_SECRET_KEY`. On GitHub, it runs from
   Actions → **Stripe end-to-end** → Run workflow (`.github/workflows/stripe.yml`), with that key
   saved as a repository secret.
 
-There are no fakes or mocks. CI (`.github/workflows/ci.yml`) runs the first three on every push.
+The tests work as Void's own do. Each run copies both apps and starts them fresh, with new
+databases, on free ports (`e2e/apps.ts`), so it never touches your local data or your `vp run dev`.
+People are real browsers using the real pages: signing up, applying, approving, adding rules and
+bonuses, running payouts, viewing as a partner. What they check is what those pages show. The
+shop's calls to the service go through its own client, and Stripe's events through its webhook,
+signed. There are no fakes or mocks.
+
+CI (`.github/workflows/ci.yml`) runs the first three on every push.
 
 ## Deploy
 
