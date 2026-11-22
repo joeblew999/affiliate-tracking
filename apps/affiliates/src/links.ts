@@ -60,7 +60,7 @@ export async function createLink(
   partner: { id: string; code: string },
   input: z.output<typeof newLink>,
 ) {
-  const slug = (input.slug ?? `${partner.code}-${crypto.randomUUID().slice(0, 4)}`).toLowerCase();
+  const slug = (input.slug ?? `${partner.code}-${crypto.randomUUID().slice(0, 8)}`).toLowerCase();
   const [active] = await db
     .select({ n: count() })
     .from(links)
