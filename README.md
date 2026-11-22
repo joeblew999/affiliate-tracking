@@ -96,8 +96,25 @@ CI (`.github/workflows/ci.yml`) runs `vp check` and `vp run test:dev`, as above.
 
 ## Deploy
 
-Not yet: it needs the domain for the pair (step 6 of the plan). Each app deploys with Void's own
-`void deploy --platform cloudflare`.
+Deployed (2026-11-22) to Cloudflare account `7384af54e33b8a54ff240371ea368440`:
+
+- the shop at https://shop.ubuntusoftware.net (`apps/shop/void.config.ts`, `routes`);
+- the service at https://affiliates.shop.ubuntusoftware.net (`apps/affiliates/void.config.ts`).
+
+The service is on a subdomain of the shop's, and the shop sets its sign-in cookie for
+`shop.ubuntusoftware.net` (`AUTH_COOKIE_DOMAIN`), so the service receives it. Each app deploys
+with Void's own commands, run in its folder (`apps/affiliates`, `apps/shop`):
+
+```sh
+void cloudflare login                      # once per machine
+void secret sync <file>                    # the production values its env.ts declares
+void deploy --platform cloudflare
+```
+
+`void.lock.json` in each app records its database and other resource IDs: commit it after a
+deploy. Not set yet: Stripe (each app's `STRIPE_*` values, and the service's webhook endpoint in
+Stripe, step 5 of "Using it from your app"). Until then the service's `STRIPE_WEBHOOK_SECRET` is
+a random placeholder, so its webhook accepts nothing.
 
 ## License
 

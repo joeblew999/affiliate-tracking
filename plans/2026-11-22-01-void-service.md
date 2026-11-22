@@ -1,7 +1,7 @@
 # 2026-11-22-01-void-service.md
 
-Status: approved 2026-11-22 ("get busy"). Steps 1 to 5 done, on Void 1.11.0 (released 2026-11-19);
-the example shop is the host for now. Step 6 (deploy) waits for the domain. What's left is under
+Status: approved 2026-11-22 ("get busy"). Steps 1 to 6 done, on Void 1.11.0 (released 2026-11-19);
+the example shop is the host for now, deployed with the service on ubuntusoftware.net. What's left is under
 "Follow-ups" at the end.
 
 ## What we're building
@@ -137,6 +137,8 @@ Each step ends with its tests passing locally; pushed when you say.
   debugger port (EADDRINUSE 9229) instead of moving to another; each app now sets its own
   (`VOID_INSPECTOR_PORT`, read by Void 1.11.0 but not in its docs). Worth reporting to Void, with
   the steps to see it.
-- **Deploy (step 6)** waits for the domain. It also needs: Better Auth's `crossSubDomainCookies` in
-  the shop, `AFFILIATES_COOKIE_DOMAIN` on the service, both apps' secrets, and the Stripe webhook
-  endpoint for the service.
+- **Done 2026-11-22: deploy (step 6)**, at https://shop.ubuntusoftware.net and
+  https://affiliates.shop.ubuntusoftware.net (README, "Deploy"). Checked live: a sign-up on the
+  shop is seen by the service through its cookie and the binding. Left: Stripe (the apps' keys
+  and the service's webhook endpoint in Stripe); and one test user, smoke-1795349659@example.test,
+  in the shop's database (the Cloudflare connector may read it but not delete from it).

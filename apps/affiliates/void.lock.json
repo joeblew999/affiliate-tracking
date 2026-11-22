@@ -29,7 +29,16 @@
         "pattern": "affiliates.shop.ubuntusoftware.net",
         "custom_domain": true
       }
+    ],
+    "account_id": "7384af54e33b8a54ff240371ea368440",
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "affiliates-db",
+        "database_id": "c66d8d63-5eb4-46fe-a953-ded99677b141",
+        "migrations_dir": "./db/migrations"
+      }
     ]
   },
-  "text": "{\n  \"name\": \"affiliates\",\n  \"services\": [\n    {\n      \"binding\": \"HOST\",\n      \"service\": \"shop\"\n    }\n  ],\n  \"compatibility_date\": \"2026-02-24\",\n  \"routes\": [\n    {\n      \"pattern\": \"affiliates.shop.ubuntusoftware.net\",\n      \"custom_domain\": true\n    }\n  ]\n}\n"
+  "text": "{\n  \"name\": \"affiliates\",\n  \"services\": [\n    {\n      \"binding\": \"HOST\",\n      \"service\": \"shop\"\n    }\n  ],\n  \"compatibility_date\": \"2026-02-24\",\n  \"routes\": [\n    {\n      \"pattern\": \"affiliates.shop.ubuntusoftware.net\",\n      \"custom_domain\": true\n    }\n  ],\n  \"account_id\": \"7384af54e33b8a54ff240371ea368440\",\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"affiliates-db\",\n      \"database_id\": \"c66d8d63-5eb4-46fe-a953-ded99677b141\",\n      \"migrations_dir\": \"./db/migrations\"\n    }\n  ]\n}\n"
 }
