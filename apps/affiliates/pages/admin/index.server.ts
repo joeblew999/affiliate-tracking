@@ -25,8 +25,9 @@ import { stats } from "@/stats";
 // The admin page: everything, for the host's admins only. ?partner=<id>: only that partner's sales
 // and payouts. ?links=<partner id>: that partner's short links too, for the dialog that shows them.
 export const loader = defineHandler(async (c) => {
-  // Not an admin (or an admin viewing as someone, whose way back is in the layout's bar).
-  if (c.get("shopUser")?.role !== "admin") return { allowed: false as const };
+  // Not an admin (or an admin viewing as someone, whose way back is in the layout's bar): 403,
+  // shown by pages/_error.tsx.
+  requireAdmin(c);
   const linksFor = c.req.query("links") ?? null;
   const partnerId = c.req.query("partner");
   const origin = new URL(c.req.url).origin;
@@ -53,7 +54,6 @@ export const loader = defineHandler(async (c) => {
     stats(null, 30),
   ]);
   return {
-    allowed: true as const,
     payoutCurrency: env.AFFILIATES_PAYOUT_CURRENCY,
     partners: partnerRows,
     sales: saleRows.map(({ sale, partnerName }) => ({ ...sale, partnerName })),

@@ -14,7 +14,7 @@
 //      owed less than they were clawed back is paid nothing until their sales make it up.
 // Every step can be run again after a crash and picks up where it was.
 import { partners, payouts, sales } from "@schema";
-import { and, db, eq, inArray, isNotNull, isNull, ne, sum } from "void/db";
+import { and, db, eq, inArray, isNotNull, isNull, ne, sql, sum } from "void/db";
 import { env } from "void/env";
 import { alias } from "void/schema-d1";
 import { refundShare } from "./refunds";
@@ -25,13 +25,6 @@ type PayoutOutcome =
   | { status: "sent" | "manual"; payoutId: string; amountCents: number }
   | { status: "nothing owed" }
   | { status: "failed"; payoutId: string; reason: string };
-
-/** db.batch takes a non-empty list. */
-function toBatch<T>(statements: T[]): [T, ...T[]] {
-  const [first, ...rest] = statements;
-  if (!first) throw new Error("an empty batch");
-  return [first, ...rest];
-}
 
 const transferGroup = (payoutId: string) => `affiliates_payout_${payoutId}`;
 
@@ -45,21 +38,10 @@ async function settle(partnerId: string): Promise<void> {
     isNull(sales.payoutCents),
   );
   // Already in the payout currency: the commission as it is.
-  const local = await db
-    .select({ id: sales.id, commissionCents: sales.commissionCents })
-    .from(sales)
+  await db
+    .update(sales)
+    .set({ payoutCurrency: target, payoutCents: sql`${sales.commissionCents}` })
     .where(and(unclaimed, eq(sales.currency, target)));
-  if (local.length)
-    await db.batch(
-      toBatch(
-        local.map((sale) =>
-          db
-            .update(sales)
-            .set({ payoutCurrency: target, payoutCents: sale.commissionCents })
-            .where(and(eq(sales.id, sale.id), unclaimed)),
-        ),
-      ),
-    );
   if (!hasStripe()) return;
   const foreign = await db
     .select({

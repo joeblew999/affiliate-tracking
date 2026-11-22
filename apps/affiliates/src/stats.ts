@@ -2,7 +2,7 @@
 // sales) and money by status in each currency; clicks per day; top countries, devices and referring
 // sites. For one partner (their dashboard) or all of them (admins), over the last N days (UTC).
 import { clicks, partners, referrals, sales } from "@schema";
-import { and, count, db, desc, eq, gte, inArray, isNotNull, lte, ne, type SQL } from "void/db";
+import { and, count, db, desc, eq, gte, inArray, isNotNull, lte, ne, sql, type SQL } from "void/db";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -30,6 +30,8 @@ export async function stats(partnerId: string | null, days: number) {
     ne(sales.status, "refunded"),
     inArray(sales.kind, ["checkout", "renewal"]),
   );
+  // Which of the N days a click was on, 0 for the first.
+  const day = sql<number>`(${clicks.createdAt} - ${start}) / ${DAY_MS}`.mapWith(Number);
   const signupScope = and(
     gte(referrals.createdAt, start),
     lte(referrals.createdAt, end),
@@ -41,9 +43,8 @@ export async function stats(partnerId: string | null, days: number) {
     clickCounts,
     signupCounts,
     saleCounts,
-    customerPairs,
-    saleRows,
-    clickTimes,
+    money,
+    clickDays,
     countries,
     devices,
     referrers,
@@ -63,29 +64,34 @@ export async function stats(partnerId: string | null, days: number) {
       .from(referrals)
       .where(signupScope)
       .groupBy(referrals.partnerId),
+    // Customers once each: emails are stored lowercase (src/sales.ts), so one customer however
+    // they typed it.
     db
-      .select({ partnerId: sales.partnerId, n: count() })
+      .select({
+        partnerId: sales.partnerId,
+        n: count(),
+        customers: sql<number>`count(distinct ${sales.customerEmail})`.mapWith(Number),
+      })
       .from(sales)
       .where(countedSales)
       .groupBy(sales.partnerId),
-    // Each partner's customers, once each: emails are stored lowercase (src/sales.ts), so one
-    // customer however they typed it.
-    db
-      .selectDistinct({ partnerId: sales.partnerId, email: sales.customerEmail })
-      .from(sales)
-      .where(and(countedSales, isNotNull(sales.customerEmail))),
+    // Revenue after refunds; commission by status, net of clawbacks (approved lines below zero).
     db
       .select({
         partnerId: sales.partnerId,
         currency: sales.currency,
-        status: sales.status,
-        amountCents: sales.amountCents,
-        refundedCents: sales.refundedCents,
-        commissionCents: sales.commissionCents,
+        revenueCents: total(
+          sql`${sales.amountCents} - min(${sales.refundedCents}, ${sales.amountCents})`,
+        ),
+        pendingCents: commissionIn(["pending"]),
+        approvedCents: commissionIn(["approved"]),
+        paidCents: commissionIn(["paying", "paid"]),
       })
       .from(sales)
-      .where(saleScope),
-    db.select({ createdAt: clicks.createdAt }).from(clicks).where(clickScope),
+      .where(saleScope)
+      .groupBy(sales.partnerId, sales.currency)
+      .orderBy(sales.currency),
+    db.select({ day, clicks: count() }).from(clicks).where(clickScope).groupBy(day),
     top(clicks.country, clickScope),
     top(clicks.device, clickScope),
     top(clicks.referrerHost, clickScope),
@@ -96,26 +102,7 @@ export async function stats(partnerId: string | null, days: number) {
   const clickMap = by(clickCounts);
   const signupMap = by(signupCounts);
   const saleMap = by(saleCounts);
-  // Money per partner and currency: revenue after refunds; commission by status, net of
-  // clawbacks, which are approved lines below zero.
-  const money = new Map<string, MoneyRow>();
-  for (const row of saleRows) {
-    const key = `${row.partnerId} ${row.currency}`;
-    const m = money.get(key) ?? {
-      partnerId: row.partnerId,
-      currency: row.currency,
-      revenueCents: 0,
-      ...zeroTotals(),
-    };
-    m.revenueCents += row.amountCents - Math.min(row.refundedCents, row.amountCents);
-    addByStatus(m, row);
-    money.set(key, m);
-  }
-  const perDay = new Map<number, number>();
-  for (const { createdAt } of clickTimes) {
-    const day = Math.floor((createdAt - start) / DAY_MS);
-    perDay.set(day, (perDay.get(day) ?? 0) + 1);
-  }
+  const perDay = new Map(clickDays.map((d) => [d.day, d.clicks]));
   return {
     range: { days, start: new Date(start).toISOString(), end: new Date(end).toISOString() },
     funnel: people.map((p) => ({
@@ -124,17 +111,9 @@ export async function stats(partnerId: string | null, days: number) {
       name: p.name,
       clicks: clickMap.get(p.id)?.n ?? 0,
       signups: signupMap.get(p.id)?.n ?? 0,
-      customers: customerPairs.filter((c) => c.partnerId === p.id).length,
+      customers: saleMap.get(p.id)?.customers ?? 0,
       sales: saleMap.get(p.id)?.n ?? 0,
-      money: [...money.values()]
-        .filter((m) => m.partnerId === p.id)
-        .map((m) => ({
-          currency: m.currency,
-          revenueCents: m.revenueCents,
-          pendingCents: m.pendingCents,
-          approvedCents: m.approvedCents,
-          paidCents: m.paidCents,
-        })),
+      money: money.filter((m) => m.partnerId === p.id),
     })),
     clicksByDay: Array.from({ length: days }, (_, i) => ({
       date: new Date(start + i * DAY_MS).toISOString().slice(0, 10),
@@ -165,50 +144,28 @@ async function top(
  * the hold period or an admin), ready to pay (approved, less clawbacks: the next payout), and paid
  * (sent, or being sent). Rejected and fully refunded sales earn nothing and aren't counted.
  */
-export async function earnings(partnerId: string) {
-  const rows = await db
+export function earnings(partnerId: string) {
+  return db
     .select({
       currency: sales.currency,
-      status: sales.status,
-      commissionCents: sales.commissionCents,
+      onHoldCents: commissionIn(["pending"]),
+      readyCents: commissionIn(["approved"]),
+      paidCents: commissionIn(["paying", "paid"]),
     })
     .from(sales)
     .where(eq(sales.partnerId, partnerId))
+    .groupBy(sales.currency)
     .orderBy(sales.currency);
-  const byCurrency = new Map<string, { currency: string } & Totals>();
-  for (const row of rows) {
-    const e = byCurrency.get(row.currency) ?? { currency: row.currency, ...zeroTotals() };
-    addByStatus(e, row);
-    byCurrency.set(row.currency, e);
-  }
-  return [...byCurrency.values()].map(({ currency, pendingCents, approvedCents, paidCents }) => ({
-    currency,
-    onHoldCents: pendingCents,
-    readyCents: approvedCents,
-    paidCents,
-  }));
 }
 
-/** Commission by where it is: pending, approved (ready to pay), paying or paid. */
-interface Totals {
-  pendingCents: number;
-  approvedCents: number;
-  paidCents: number;
+/** A sum, 0 when there are no rows. */
+function total(value: SQL) {
+  return sql<number>`coalesce(sum(${value}), 0)`.mapWith(Number);
 }
-interface MoneyRow extends Totals {
-  partnerId: string;
-  currency: string;
-  revenueCents: number;
-}
-function zeroTotals(): Totals {
-  return { pendingCents: 0, approvedCents: 0, paidCents: 0 };
-}
-function addByStatus(
-  totals: Totals,
-  row: { status: (typeof sales.$inferSelect)["status"]; commissionCents: number },
-) {
-  if (row.status === "pending") totals.pendingCents += row.commissionCents;
-  else if (row.status === "approved") totals.approvedCents += row.commissionCents;
-  else if (row.status === "paying" || row.status === "paid")
-    totals.paidCents += row.commissionCents;
+
+/** The commission of the sales in these statuses. */
+function commissionIn(statuses: (typeof sales.$inferSelect)["status"][]) {
+  return total(
+    sql`case when ${inArray(sales.status, statuses)} then ${sales.commissionCents} else 0 end`,
+  );
 }

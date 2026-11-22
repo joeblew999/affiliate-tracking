@@ -3,7 +3,7 @@
 // site, never another site, so a link can't be used as an open redirect.
 import { clicks, links, newLink, sales } from "@schema";
 import { HTTPException } from "hono/http-exception";
-import { and, count, db, desc, eq, isNotNull, ne, sum } from "void/db";
+import { and, count, db, desc, eq, isNotNull, ne, sql, sum } from "void/db";
 import { z } from "zod";
 
 const MAX_ACTIVE_LINKS = 100;
@@ -35,25 +35,18 @@ export async function linksOf(partnerId: string, origin: string) {
     db
       .select({
         linkId: sales.linkId,
-        kind: sales.kind,
-        n: count(),
+        // Its sales: clawbacks aren't sales, but their commission is netted off.
+        n: sql<number>`count(case when ${sales.kind} != 'clawback' then 1 end)`.mapWith(Number),
         commissionCents: sum(sales.commissionCents).mapWith(Number),
       })
       .from(sales)
       .where(
         and(eq(sales.partnerId, partnerId), isNotNull(sales.linkId), ne(sales.status, "refunded")),
       )
-      .groupBy(sales.linkId, sales.kind),
+      .groupBy(sales.linkId),
   ]);
   const clicksOf = new Map(clickCounts.map((row) => [row.linkId, row.n]));
-  // Per link: its sales (clawbacks aren't sales), and commission net of clawbacks.
-  const salesOf = new Map<string | null, { n: number; commissionCents: number }>();
-  for (const row of saleCounts) {
-    const total = salesOf.get(row.linkId) ?? { n: 0, commissionCents: 0 };
-    if (row.kind !== "clawback") total.n += row.n;
-    total.commissionCents += row.commissionCents;
-    salesOf.set(row.linkId, total);
-  }
+  const salesOf = new Map(saleCounts.map((row) => [row.linkId, row]));
   return rows.map((row) => ({
     ...row,
     clicks: clicksOf.get(row.id) ?? 0,

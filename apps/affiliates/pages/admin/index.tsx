@@ -29,8 +29,6 @@ import { date, minorUnits, money } from "@/format";
 import { useAction } from "@/components/use-action";
 import type { Props } from "./index.server";
 
-type Allowed = Extract<Props, { allowed: true }>;
-
 function field(form: FormData, name: string): string {
   const value = form.get(name);
   return typeof value === "string" ? value.trim() : "";
@@ -39,25 +37,6 @@ function field(form: FormData, name: string): string {
 const selectClass = "h-9 rounded-md border bg-transparent px-2 text-sm";
 
 export default function AdminPage(props: Props) {
-  if (!props.allowed) {
-    return (
-      <>
-        <main className="mx-auto max-w-lg px-4 py-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Admins only</CardTitle>
-              <CardDescription>
-                Your shop account isn't an admin.{" "}
-                <a className="underline" href="/">
-                  Your partner page
-                </a>
-              </CardDescription>
-            </CardHeader>
-          </Card>
-        </main>
-      </>
-    );
-  }
   const applications = props.partners.filter((p) => p.status === "pending").length;
   const toReview = props.sales.filter((s) => s.status === "pending").length;
   return (
@@ -129,7 +108,7 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{status}</Badge>;
 }
 
-function Partners({ partners, links }: Allowed) {
+function Partners({ partners, links }: Props) {
   const { run, busy, feedback } = useAction();
   const router = useRouter();
   const linksFor = links && {
@@ -274,7 +253,7 @@ function Partners({ partners, links }: Allowed) {
   );
 }
 
-function Sales({ sales }: Allowed) {
+function Sales({ sales }: Props) {
   const { run, busy, feedback } = useAction();
   const decide = (id: string, status: "approved" | "rejected" | "pending") =>
     run(() => action("/admin?changeSale", { data: { id, status } }));
@@ -376,7 +355,7 @@ function Sales({ sales }: Allowed) {
   );
 }
 
-function Payouts({ payouts }: Allowed) {
+function Payouts({ payouts }: Props) {
   const { run, busy, feedback } = useAction();
   return (
     <Section
@@ -428,7 +407,7 @@ function Payouts({ payouts }: Allowed) {
   );
 }
 
-function Rules({ rules, partners, payoutCurrency }: Allowed) {
+function Rules({ rules, partners, payoutCurrency }: Props) {
   const { run, busy, feedback } = useAction();
   const [kind, setKind] = useState<"percent" | "fixed">("percent");
   const active = partners.filter((p) => p.status === "active");
@@ -608,7 +587,7 @@ function Rules({ rules, partners, payoutCurrency }: Allowed) {
   );
 }
 
-function Performance({ stats }: Allowed) {
+function Performance({ stats }: Props) {
   return (
     <Section title="Last 30 days">
       <ClicksChart days={stats.clicksByDay} />
