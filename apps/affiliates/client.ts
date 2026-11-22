@@ -2,6 +2,7 @@
 // carry AFFILIATES_HOST_TOKEN. Their input and output types come from src/host-contract.ts, which the
 // service's routes also validate against, so nothing is written twice and the host's type check never
 // pulls in the service's code.
+import { parse } from "hono/utils/cookie";
 import type Stripe from "stripe";
 import type { z } from "zod";
 import {
@@ -23,16 +24,7 @@ export type Checkout = z.output<typeof CheckoutOutput>;
 
 /** The referral cookie's value from a Cookie header, or null. Pass only this, never the whole header. */
 export function referralFrom(cookieHeader: string | null | undefined): string | null {
-  for (const part of (cookieHeader ?? "").split(";")) {
-    const eq = part.indexOf("=");
-    if (eq <= 0 || part.slice(0, eq).trim() !== REF_COOKIE) continue;
-    try {
-      return decodeURIComponent(part.slice(eq + 1).trim()) || null;
-    } catch {
-      return null; // not valid percent-encoding: no referral
-    }
-  }
-  return null;
+  return parse(cookieHeader ?? "", REF_COOKIE)[REF_COOKIE] || null;
 }
 
 export function affiliates(binding: Fetcher, token: string) {
