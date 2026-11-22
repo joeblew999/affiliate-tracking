@@ -1,6 +1,7 @@
 // Both apps, run as a developer runs them (`vp run dev`), for the test suites' global setups.
 import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { stripVTControlCharacters } from "node:util";
 
 export const SHOP = "http://localhost:5173";
 export const AFFILIATES = "http://localhost:5174";
@@ -15,7 +16,10 @@ export async function answers(url: string): Promise<boolean> {
   }
 }
 
-/** `vp run dev`, with extra environment if given (it beats the apps' .env); resolves once both print their address. */
+/**
+ * `vp run dev`, with extra environment if given (it beats the apps' .env); resolves once both print
+ * their address. Its output goes to this process's stderr, so a failing run shows what the apps said.
+ */
 export function startDev(env: Record<string, string> = {}): Promise<ChildProcess> {
   const child = spawn("vp", ["run", "dev"], {
     stdio: ["ignore", "pipe", "pipe"],
@@ -26,7 +30,9 @@ export function startDev(env: Record<string, string> = {}): Promise<ChildProcess
   let log = "";
   return new Promise((resolve, reject) => {
     const onData = (chunk: Buffer) => {
-      log += chunk.toString();
+      process.stderr.write(chunk);
+      // Without its colours: with CI set (as on GitHub), Vite colours the address mid-line.
+      log += stripVTControlCharacters(chunk.toString());
       for (const port of waiting) {
         if (new RegExp(String.raw`Local:\s+http://localhost:${port}/`).test(log))
           waiting.delete(port);

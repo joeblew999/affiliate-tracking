@@ -7,6 +7,12 @@
         "binding": "AFFILIATES",
         "service": "affiliates"
       }
+    ],
+    "routes": [
+      {
+        "pattern": "shop.ubuntusoftware.net",
+        "custom_domain": true
+      }
     ]
   },
   "resolved": {
@@ -17,7 +23,13 @@
         "service": "affiliates"
       }
     ],
-    "compatibility_date": "2026-02-24"
+    "compatibility_date": "2026-02-24",
+    "routes": [
+      {
+        "pattern": "shop.ubuntusoftware.net",
+        "custom_domain": true
+      }
+    ]
   },
-  "text": "{\n  \"name\": \"shop\",\n  \"services\": [\n    {\n      \"binding\": \"AFFILIATES\",\n      \"service\": \"affiliates\"\n    }\n  ],\n  \"compatibility_date\": \"2026-02-24\"\n}\n"
+  "text": "{\n  \"name\": \"shop\",\n  \"services\": [\n    {\n      \"binding\": \"AFFILIATES\",\n      \"service\": \"affiliates\"\n    }\n  ],\n  \"compatibility_date\": \"2026-02-24\",\n  \"routes\": [\n    {\n      \"pattern\": \"shop.ubuntusoftware.net\",\n      \"custom_domain\": true\n    }\n  ]\n}\n"
 }
