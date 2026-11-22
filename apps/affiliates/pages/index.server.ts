@@ -1,5 +1,5 @@
 import { HTTPException } from "hono/http-exception";
-import { defineHandler, type InferProps } from "void";
+import { defineHandler, defineHead, type InferProps } from "void";
 import { env } from "void/env";
 import { notePartnerIp } from "@/fraud";
 import { linksOf } from "@/links";
@@ -49,3 +49,5 @@ export const loader = defineHandler(async (c) => {
   };
 });
 export type Props = InferProps<typeof loader>;
+
+export const head = defineHead(() => ({ title: "Dashboard" }));

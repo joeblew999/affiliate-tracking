@@ -2,6 +2,16 @@ import { defineConfig } from "void/config";
 
 export default defineConfig({
   routing: { typedRoutes: true },
+  // Every page: its language, and the viewport tag, without which phones render the page at
+  // desktop width and shrink it.
+  head: {
+    titleTemplate: "%s | Example shop",
+    htmlAttrs: { lang: "en" },
+    meta: [
+      { charset: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+    ],
+  },
   // AFFILIATES: the affiliate service (apps/affiliates), called through its client.
   cloudflare: {
     name: "shop",

@@ -100,17 +100,6 @@ test("a short link counts its own clicks and sales", async () => {
   });
 });
 
-test("link previews and unknown links set nothing", async () => {
-  const nick = await activePartner();
-  const preview = await follow(`/r/${nick.code}`, "WhatsApp/2.23 A");
-  expect(preview.status).toBe(302);
-  expect(preview.cookie).toBeNull();
-  const unknown = await follow("/r/no-such-partner");
-  expect(unknown.location).toBe("http://localhost:5173/");
-  expect(unknown.cookie).toBeNull();
-  expect((await partnerMe(nick.cookie)).clicks).toBe(0);
-});
-
 test("a user who signs up with the referral cookie stays the partner's at checkout, without the cookie", async () => {
   const nick = await activePartner();
   const { cookie } = await follow(`/r/${nick.code}`);

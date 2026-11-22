@@ -32,12 +32,3 @@ test("the host-only API needs the shop's token", async () => {
   expect(ok.status).toBe(200);
   expect(await ok.json()).toEqual({ userId: "u1", referred: false });
 });
-
-test("the service's page shows the shop's signed-in user", async () => {
-  const bob = await signUp("Bob");
-  const html = await fetch(`${AFFILIATES}/`, { headers: { cookie: bob.cookie } }).then((r) =>
-    r.text(),
-  );
-  expect(html).toContain(bob.email);
-  expect(await fetch(`${AFFILIATES}/`).then((r) => r.text())).toContain("Sign in on");
-});

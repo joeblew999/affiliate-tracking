@@ -3,7 +3,7 @@
 // in as the demo's people (apps/affiliates/demo.ts): Maya (an active partner), Sam (waiting for
 // approval), Chris (a customer who hasn't applied) and Dana (the admin).
 import { mkdirSync, rmSync } from "node:fs";
-import { chromium, type BrowserContext } from "playwright";
+import { chromium, devices, type BrowserContext } from "playwright";
 import { DEMO_PASSWORD } from "../apps/affiliates/demo";
 
 const SHOP = "http://localhost:5173";
@@ -45,11 +45,13 @@ const people = {
   admin: await signIn("admin@demo.test"),
 };
 const browser = await chromium.launch();
-for (const [device, viewport] of [
-  ["desktop", { width: 1280, height: 860 }],
-  ["phone", { width: 390, height: 844 }],
+// The phone is a real iPhone emulation: it honours the page's viewport tag as a phone does (a plain
+// narrow window doesn't, and hid a missing tag once).
+for (const [device, options] of [
+  ["desktop", { viewport: { width: 1280, height: 860 }, userAgent: CHROME }],
+  ["phone", devices["iPhone 15"]],
 ] as const) {
-  const context = await browser.newContext({ viewport, userAgent: CHROME });
+  const context = await browser.newContext(options);
   const page = await context.newPage();
   page.on("pageerror", (err) => console.error(`page error: ${err.message}`));
   const shot = async (name: string, url?: string) => {

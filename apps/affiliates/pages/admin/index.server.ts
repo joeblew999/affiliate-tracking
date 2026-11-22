@@ -1,5 +1,5 @@
 import { commissionRules, partners, payouts, sales } from "@schema";
-import { defineHandler, type InferProps } from "void";
+import { defineHandler, defineHead, type InferProps } from "void";
 import { db, desc, eq } from "void/db";
 import { env } from "void/env";
 import { stats } from "@/stats";
@@ -49,3 +49,5 @@ export const loader = defineHandler(async (c) => {
   };
 });
 export type Props = InferProps<typeof loader>;
+
+export const head = defineHead(() => ({ title: "Admin" }));

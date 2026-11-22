@@ -1,4 +1,4 @@
-import { defineHandler, type InferProps } from "void";
+import { defineHandler, defineHead, type InferProps } from "void";
 import { getUser } from "void/auth";
 import { env } from "void/env";
 
@@ -10,3 +10,5 @@ export const loader = defineHandler(() => {
   };
 });
 export type Props = InferProps<typeof loader>;
+
+export const head = defineHead(() => ({ title: "Account" }));
