@@ -15,14 +15,15 @@ overrides:
   vite@*: "catalog:"
   vitest@*: "catalog:"
 
-# One version each for both apps. The same set joeblew999/void-fbtee runs (its pnpm-workspace.yaml,
-# read 2026-11-22): Void 1.8.0 with Vite+ 1.6.0, which that repo found Vite+ 1.7.0 breaks.
+# One version each for both apps. Void 1.11.0 (released 2026-11-19); the rest as joeblew999/void-fbtee
+# pins them (its pnpm-workspace.yaml, read 2026-11-22), with Vite+ 1.6.0, which that repo found
+# Vite+ 1.7.0 breaks.
 catalog:
   vite: npm:@voidzero-dev/vite-plus-core@1.6.0
   vite-plus: 1.6.0
   vitest: 5.1.0
-  void: 1.8.0
-  "@void/react": 1.8.0
+  void: 1.11.0
+  "@void/react": 1.11.0
   "@cloudflare/workers-types": 5.20261117.1
   typescript: 7.0.2
   react: 19.3.1

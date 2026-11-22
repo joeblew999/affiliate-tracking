@@ -1,7 +1,9 @@
 # 2026-11-22-01-void-service.md
 
-Status: proposed 2026-11-22, waiting for approval in the conversation. Nothing built yet beyond
-the trial in `spike/` (not committed).
+Status: approved 2026-11-22 ("get busy"); the example shop is the host for now, and the domain waits
+for step 6. Step 1 done (commit d567b58), then upgraded to Void 1.11.0 (released 2026-11-19): its
+check, lint, types and dev-server tests pass. The trial's `spike/` folder was removed once its code
+moved into `apps/`.
 
 ## What we're building
 
