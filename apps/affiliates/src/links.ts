@@ -6,7 +6,7 @@ import { HTTPException } from "hono/http-exception";
 import { and, count, db, desc, eq, isNotNull, ne, sql } from "void/db";
 import { z } from "zod";
 
-export const MAX_ACTIVE_LINKS = 100;
+const MAX_ACTIVE_LINKS = 100;
 
 export const NewLink = z.object({
   destination: z

@@ -3,7 +3,7 @@
 // request is a link preview or crawler rather than a person: those record nothing.
 import { env } from "void/env";
 
-export type DeviceClass = "tablet" | "mobile" | "desktop";
+type DeviceClass = "tablet" | "mobile" | "desktop";
 
 const encoder = new TextEncoder();
 

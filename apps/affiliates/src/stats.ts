@@ -3,13 +3,10 @@
 // sites. For one partner (their dashboard) or all of them (admins), over the last N days (UTC).
 import { clicks, partners, referrals, sales } from "@schema";
 import { and, count, db, desc, eq, gte, inArray, isNotNull, lte, ne, sql, type SQL } from "void/db";
-import { z } from "zod";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export const StatsQuery = z.object({ days: z.coerce.number().int().min(1).max(366).default(30) });
-
-export function range(days: number, now = Date.now()) {
+function range(days: number, now = Date.now()) {
   const today = new Date(now);
   const start =
     Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()) - (days - 1) * DAY_MS;

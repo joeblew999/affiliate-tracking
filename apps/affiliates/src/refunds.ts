@@ -17,7 +17,7 @@ import { alias } from "void/schema-d1";
 type Sale = typeof sales.$inferSelect;
 
 /** The part of a commission that a refund of refundedCents, of a sale of amountCents, takes. */
-export function refundShare(commissionCents: number, refundedCents: number, amountCents: number) {
+function refundShare(commissionCents: number, refundedCents: number, amountCents: number) {
   if (amountCents <= 0 || refundedCents <= 0) return 0;
   return Math.round((commissionCents * Math.min(refundedCents, amountCents)) / amountCents);
 }

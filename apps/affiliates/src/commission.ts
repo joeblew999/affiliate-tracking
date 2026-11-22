@@ -35,7 +35,7 @@ function monthStart(at: number): number {
   return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1);
 }
 
-export function pickRule(
+function pickRule(
   rules: readonly Rule[],
   partnerId: string,
   productIds: readonly string[],

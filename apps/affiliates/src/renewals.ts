@@ -12,7 +12,7 @@ import { computeCommission } from "./commission";
 import { applyRefunds } from "./refunds";
 import { hasStripe, idOf, stripe } from "./stripe";
 
-export const DEFAULT_RECURRING_MONTHS = 12;
+const DEFAULT_RECURRING_MONTHS = 12;
 
 export function recurringMonths(partner: { recurringMonths: number | null }): number {
   if (partner.recurringMonths !== null) return partner.recurringMonths;
@@ -20,7 +20,7 @@ export function recurringMonths(partner: { recurringMonths: number | null }): nu
 }
 
 /** The same day N calendar months later (the month's last day when it has no such day). */
-export function addMonths(at: number, months: number): number {
+function addMonths(at: number, months: number): number {
   const date = new Date(at);
   const day = date.getUTCDate();
   date.setUTCDate(1);
@@ -52,9 +52,7 @@ async function paymentIntentOf(invoice: Stripe.Invoice): Promise<string | null> 
   return null;
 }
 
-export type RenewalResult =
-  | { recorded: true; saleId: string }
-  | { recorded: false; reason: string };
+type RenewalResult = { recorded: true; saleId: string } | { recorded: false; reason: string };
 
 export async function recordRenewal(
   invoice: Stripe.Invoice,

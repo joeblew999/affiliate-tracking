@@ -24,7 +24,7 @@ export const META = {
   buyerIpHash: "affiliate_buyer_ip_hash",
 } as const;
 
-export type SaleResult = { recorded: true; saleId: string } | { recorded: false; reason: string };
+type SaleResult = { recorded: true; saleId: string } | { recorded: false; reason: string };
 
 async function lineItems(session: Stripe.Checkout.Session): Promise<Stripe.LineItem[]> {
   // The webhook doesn't carry them. Without a Stripe key (local dev) the sale has no items.

@@ -7,7 +7,7 @@
 
 export const DEMO_PASSWORD = "demo-password-2026";
 
-export interface DemoPerson {
+interface DemoPerson {
   /** The shop user's id, which is also the partner's userId. */
   userId: string;
   name: string;

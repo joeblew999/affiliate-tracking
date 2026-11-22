@@ -19,16 +19,16 @@ import { env } from "void/env";
 import { alias } from "void/schema-d1";
 import { hasStripe, stripe } from "./stripe";
 
-export type Payout = typeof payouts.$inferSelect;
-export type PayoutOutcome =
+type Payout = typeof payouts.$inferSelect;
+type PayoutOutcome =
   | { status: "sent" | "manual"; payoutId: string; amountCents: number }
   | { status: "nothing owed" }
   | { status: "failed"; payoutId: string; reason: string };
 
-export const transferGroup = (payoutId: string) => `affiliates_payout_${payoutId}`;
+const transferGroup = (payoutId: string) => `affiliates_payout_${payoutId}`;
 
 /** Step 1: the payout-currency amount of each approved, unclaimed sale that doesn't have one. */
-export async function settle(partnerId: string): Promise<void> {
+async function settle(partnerId: string): Promise<void> {
   const target = env.AFFILIATES_PAYOUT_CURRENCY.toLowerCase();
   const unclaimed = and(
     eq(sales.partnerId, partnerId),
@@ -88,7 +88,7 @@ async function pendingPayout(partnerId: string): Promise<Payout | null> {
 }
 
 /** Step 2: the partner's pending payout, or a new one for their settled sales; null if none is owed. */
-export async function claim(partnerId: string): Promise<Payout | null> {
+async function claim(partnerId: string): Promise<Payout | null> {
   const pending = await pendingPayout(partnerId);
   if (pending) return pending;
   const target = env.AFFILIATES_PAYOUT_CURRENCY.toLowerCase();

@@ -4,7 +4,7 @@
 import { partnerIpHashes } from "@schema";
 import { db, eq } from "void/db";
 
-export type FraudReason = "self_email" | "self_ip";
+type FraudReason = "self_email" | "self_ip";
 
 export async function selfReferralReason(
   partner: { id: string; email: string },

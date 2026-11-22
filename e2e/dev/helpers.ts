@@ -71,7 +71,7 @@ export async function host<T>(path: string, body: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
-export interface PartnerMe {
+interface PartnerMe {
   partner: {
     id: string;
     code: string;
