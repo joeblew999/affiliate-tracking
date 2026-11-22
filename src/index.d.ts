@@ -34,6 +34,8 @@ export interface AffiliateEnv {
     AFFILIATE_LINK_BASE_URL?: string;
     /** Months after the first sale that renewals earn commission. Default 12; 0 = first payment only. */
     AFFILIATE_RECURRING_MONTHS?: string;
+    /** Smallest amount owed (minor units) that is paid out; less waits for a later run. */
+    AFFILIATE_MIN_PAYOUT_CENTS?: string;
     AFFILIATE_PUBLIC_LIMITER?: {
         limit(options: { key: string }): Promise<{ success: boolean }>;
     };

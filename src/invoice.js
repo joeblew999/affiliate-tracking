@@ -6,7 +6,7 @@
 //   if (event.type === 'invoice.paid') await recordInvoicePayment(event.data.object, event, env);
 //
 // A renewal pays the affiliate who got the subscription's first sale (the
-// Checkout conversion recordConversion stored), at that affiliate's rate, for
+// Checkout conversion recordConversion stored), under the same commission rules, for
 // recurring_months months after the first sale. The first invoice of a new
 // subscription is skipped: its Checkout session is the sale. Idempotent by
 // invoice id. Refunds and disputes of a renewal cancel only that renewal,
@@ -14,6 +14,7 @@
 
 import { currencyCode } from './money.js';
 import { stripeId, stripeRequest } from './stripe.js';
+import { computeCommission } from './rules.js';
 
 export const DEFAULT_RECURRING_MONTHS = 12;
 
@@ -110,23 +111,34 @@ export async function recordInvoicePayment(invoice, event, env) {
         };
     });
     const country = invoice.customer_address?.country;
-    const commission = Math.round(amount * first.commission_pct / 100);
+    // Renewals go through the same commission rules as the first sale
+    // (per product, tiers, caps per customer).
+    const { commission, pct, detail } = await computeCommission(env, {
+        affiliate: { id: first.affiliate_id, commission_pct: first.commission_pct },
+        amountCents: amount, currency: currencyCode(invoice.currency), customerEmail: invoice.customer_email || null,
+        at: paidAt,
+        items: (invoice.lines?.data || []).map((line, i) => ({
+            product_id: items[i].product_id, price_id: stripeId(line.price ?? line.pricing?.price_details?.price),
+            quantity: items[i].quantity, amount_cents: line.amount,
+        })),
+    });
     const result = await env.DB.prepare(`
         INSERT INTO conversions
           (affiliate_id, stripe_session_id, stripe_event_id, payment_intent, customer_email,
            amount_cents, commission_cents, status, created_at, currency, customer_country,
            commission_pct, items_json, stripe_customer_id, stripe_subscription_id, stripe_invoice_id, kind,
-           link_id, user_id, fraud_reason)
+           link_id, user_id, fraud_reason, commission_detail)
         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7,
                 CASE WHEN ?4 IS NOT NULL AND EXISTS (SELECT 1 FROM refunded_payments WHERE payment_intent=?4)
                      THEN 'refunded' ELSE 'pending' END,
-                ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?2, 'renewal', ?15, ?16, ?17)
+                ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?2, 'renewal', ?15, ?16, ?17, ?18)
         ON CONFLICT DO NOTHING`).bind(
         first.affiliate_id, invoice.id, event?.id || null, paymentIntent, invoice.customer_email || null,
         amount, commission, paidAt, currencyCode(invoice.currency),
         typeof country === 'string' && /^[a-z]{2}$/i.test(country) ? country.toUpperCase() : null,
-        first.commission_pct, JSON.stringify(items), customer, subscription,
+        pct, JSON.stringify(items), customer, subscription,
         first.link_id ?? null, first.user_id ?? null, first.fraud_reason ?? null,
+        detail ? JSON.stringify(detail) : null,
     ).run();
     return result.meta?.changes ? { affiliate_id: first.affiliate_id, commission_cents: commission } : null;
 }

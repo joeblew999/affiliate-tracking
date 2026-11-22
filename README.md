@@ -51,6 +51,7 @@ pnpm wrangler d1 migrations apply DB --remote
 # pnpm wrangler d1 execute DB --file=migrations/0009_referrals.sql --remote
 # pnpm wrangler d1 execute DB --file=migrations/0010_renewals.sql --remote
 # pnpm wrangler d1 execute DB --file=migrations/0011_payout_currency.sql --remote
+# pnpm wrangler d1 execute DB --file=migrations/0012_commission_rules.sql --remote
 
 # 3. Set secrets
 pnpm wrangler secret put AFFILIATE_SESSION_SECRET
@@ -463,6 +464,51 @@ proportion. Each conversion keeps `payout_cents`, `payout_currency` and
 be traced back to Stripe. A commission that can't be converted (unknown
 currency, no settled charge, or a balance in another currency) stops the run
 with HTTP 409 for reconciliation, as before; nothing is guessed.
+### Commission rules, bonuses and minimum payout
+
+Without rules every affiliate earns their `commission_pct` on the whole order,
+as before. Rules let you pay differently by affiliate, product and volume:
+
+```bash
+# 40% on the annual plan for everyone
+curl -X POST https://yoursite.com/api/admin/commission-rules -H "x-admin-token: $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" -d '{"kind":"percent","percent":40,"product_id":"prod_annual"}'
+
+# Nick: 20%, and 30% once he has 10 sales this month
+... -d '{"kind":"percent","percent":20,"affiliate_id":1}'
+... -d '{"kind":"percent","percent":30,"affiliate_id":1,"min_monthly_sales":10}'
+
+# $15 per seat sold, at most $300 per customer
+... -d '{"kind":"fixed","fixed_cents":1500,"currency":"usd","product_id":"prod_seat","cap_per_customer_cents":30000}'
+```
+
+For each item in an order the most specific active rule wins: this affiliate
+and this product, then this product, then this affiliate, then a rule for
+everyone, then the affiliate's `commission_pct`. Among equally specific rules
+the highest tier the affiliate has reached this calendar month (UTC) applies.
+`product_id` takes a Stripe `prod_…` or `price_…` id and needs the purchased
+line items with their amounts (pass them to `recordConversion`, or expand
+`line_items` on the session); without them only rules with no product apply.
+Percent rules pay a share of what the item sold for after discounts; fixed
+rules pay per unit, only for sales in their currency. Caps count everything
+one customer (by email) has earned the affiliate under that rule.
+
+Each conversion stores the rules it used in `commission_detail`, so
+`GET /api/admin/commission-rules` and `POST /api/admin/commission-rule-archive {"id":…}`
+can change the rules without changing anything already earned.
+
+One-off bonuses are approved lines paid with the next payout:
+
+```bash
+curl -X POST https://yoursite.com/api/admin/bonus -H "x-admin-token: $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" -d '{"affiliate_id":1,"amount_cents":5000,"currency":"usd","note":"Launch week"}'
+```
+
+The admin dashboard's **Rules & bonuses** tab lists the rules, adds and archives
+them, and adds bonuses; bonus lines show in Conversions with their note.
+
+Set `AFFILIATE_MIN_PAYOUT_CENTS` (e.g. `"5000"`) to hold back affiliates who are
+owed less; their commissions roll over to a later run.
 
 ### Partner access and onboarding
 
@@ -506,6 +552,9 @@ context to the helpers directly.
 | `src/referral.js` | Signup referrals (`recordSignupReferral`) |
 | `src/webhook.js` | Conversion, refund, and dispute recording |
 | `src/invoice.js` | Renewal commissions (`recordInvoicePayment`) |
+| `src/rules.js` | Commission rules |
+| `functions/api/admin/commission-rules.js` | Create, list and archive commission rules |
+| `functions/api/admin/bonus.js` | One-off bonus lines |
 | `functions/api/_affiliate-auth.js` | HMAC magic-link + session tokens |
 | `functions/api/_crypto-utils.js` | Shared HMAC + constant-time compare |
 | `functions/api/_email.js` | Transactional email (Brevo default, configurable) |
@@ -553,6 +602,7 @@ routes itself — see `src/route.js` for the exact paths.
 | `AFFILIATE_LINK_BASE_URL` | optional | Origin shown in short-link URLs, e.g. a short domain (default `SITE_URL`) |
 | `AFFILIATE_RECURRING_MONTHS` | optional | Months after the first sale that renewals earn commission (default 12, `0` = first payment only) |
 | `AFFILIATE_PAYOUT_CURRENCY` | optional | Currency payouts are sent in, your Stripe settlement currency (default `usd`) |
+| `AFFILIATE_MIN_PAYOUT_CENTS` | optional | Smallest amount owed that is paid out; less rolls over |
 
 ## Tests
 

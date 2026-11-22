@@ -32,11 +32,12 @@ function subscribe(env, email) {
     }, { id: 'evt_cs', created: Math.floor(START / 1000) }, env);
 }
 
-function renewal() {
+function renewal(n = 1, overrides = {}) {
     return {
-        id: 'in_1', object: 'invoice', billing_reason: 'subscription_cycle', amount_paid: 2000, currency: 'usd',
-        customer: 'cus_1', parent: { subscription_details: { subscription: 'sub_1' } }, payment_intent: 'pi_1',
-        status_transitions: { paid_at: Math.floor((START + 31 * DAY) / 1000) }, lines: { data: [] },
+        id: 'in_' + n, object: 'invoice', billing_reason: 'subscription_cycle', amount_paid: 2000, currency: 'usd',
+        customer: 'cus_1', parent: { subscription_details: { subscription: 'sub_1' } }, payment_intent: 'pi_' + n,
+        status_transitions: { paid_at: Math.floor((START + n * 31 * DAY) / 1000) }, lines: { data: [] },
+        ...overrides,
     };
 }
 
@@ -62,6 +63,21 @@ describe('features together', () => {
         assert.deepEqual(rows, [
             { kind: 'checkout', link_id: 'link-1', status: 'approved' },
             { kind: 'renewal', link_id: 'link-1', status: 'approved' },
+        ]);
+    });
+
+    it('renewals go through the commission rules, and a per-customer cap counts them', async () => {
+        const { sql, env } = setup();
+        sql.exec(`INSERT INTO commission_rules (id,kind,percent,cap_per_customer_cents,created_at)
+                  VALUES ('rule-1','percent',50,1500,0)`);
+        await subscribe(env, 'buyer@example.test');
+        for (let n = 1; n <= 3; n++) await recordInvoicePayment(renewal(n, { customer_email: 'buyer@example.test' }), {}, env);
+        const rows = sql.prepare('SELECT kind, commission_cents, commission_pct FROM conversions ORDER BY id').all().map(r => ({ ...r }));
+        assert.deepEqual(rows, [
+            { kind: 'checkout', commission_cents: 1000, commission_pct: 50 },
+            { kind: 'renewal', commission_cents: 500, commission_pct: 50 },
+            { kind: 'renewal', commission_cents: 0, commission_pct: 50 },
+            { kind: 'renewal', commission_cents: 0, commission_pct: 50 },
         ]);
     });
 });
