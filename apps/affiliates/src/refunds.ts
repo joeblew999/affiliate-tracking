@@ -13,6 +13,7 @@
 import { refundedPayments, sales } from "@schema";
 import { and, db, eq, inArray, isNull, lt, notExists, or } from "void/db";
 import { alias } from "void/schema-d1";
+import { now as clock } from "./clock.ts";
 
 type Sale = typeof sales.$inferSelect;
 
@@ -131,7 +132,7 @@ async function applyToSale(
     .where(and(unchangedSince, eq(sales.payoutId, sale.payoutId)))
     .returning({ id: sales.id });
   if (clawCents === 0) return (await update).length ? "changed" : "raced";
-  const now = Date.now();
+  const now = clock();
   const current = alias(sales, "current");
   const [, updated] = await db.batch([
     db

@@ -30,4 +30,9 @@ export default defineEnv({
   // A Stripe coupon (the buyer discount). With it, each partner gets a promotion code for it when
   // approved; checkouts through them get the discount.
   AFFILIATES_COUPON_ID: string().optional(),
+  // Pins the service's clock (src/clock.ts) to this instant (ISO 8601), for tests and the local
+  // demo: the demo fixtures are dated from it. Unset in production: the real time.
+  AFFILIATES_NOW: string().optional(),
+  // The real time (ms) at which the clock reads AFFILIATES_NOW; it runs on from there.
+  AFFILIATES_NOW_FROM: number().optional(),
 });

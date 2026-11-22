@@ -1,24 +1,19 @@
-// Global setup for `vp run test:dev`: both apps started fresh (../apps.ts), with Void's real local
-// D1, queues, the shop's Better Auth and the service binding, and stopped after. No fakes.
+// Global setup for `vp run test:dev`: both apps migrated and seeded with the demo fixtures once
+// (../apps.ts); each test file then starts its own copy of them (each-file.ts).
 import type { TestProject } from "vite-plus/test/node";
-import { startApps } from "../apps.ts";
+import { prepareApps, removeApps, type Template } from "../apps.ts";
 
 declare module "vite-plus/test" {
   interface ProvidedContext {
-    shop: string;
-    affiliates: string;
-    hostToken: string;
-    webhookSecret: string;
-    cronToken: string;
+    template: Template;
+    /** More settings for both apps, for every file (the Stripe tests' key, say). */
+    appEnv: Record<string, string>;
   }
 }
 
 export default async function setup(project: TestProject) {
-  const apps = await startApps();
-  project.provide("shop", apps.shop);
-  project.provide("affiliates", apps.affiliates);
-  project.provide("hostToken", apps.hostToken);
-  project.provide("webhookSecret", apps.webhookSecret);
-  project.provide("cronToken", apps.cronToken());
-  return apps.stop;
+  const template = await prepareApps();
+  project.provide("template", template);
+  project.provide("appEnv", {});
+  return () => removeApps(template);
 }

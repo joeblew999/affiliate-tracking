@@ -11,6 +11,7 @@ import { partnerForUser } from "../src/partners.ts";
 import { hasStripe, stripe } from "../src/stripe.ts";
 import { earnings, stats } from "../src/stats.ts";
 import { requestIpHash } from "../src/visitor.ts";
+import { now as clock } from "../src/clock.ts";
 
 // The partner's page: their partner record, and for an active partner their links and the last 30
 // days. (Who's signed in is in the layout's shared data: middleware/01.user.ts.)
@@ -74,7 +75,7 @@ export const actions = {
       code: codeFor(body.name),
       application: body.application ?? null,
       termsVersion: TERMS_VERSION,
-      termsAcceptedAt: Date.now(),
+      termsAcceptedAt: clock(),
     });
   }),
 

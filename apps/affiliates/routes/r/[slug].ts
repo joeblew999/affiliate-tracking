@@ -17,6 +17,7 @@ import {
   referrerHost,
   requestIpHash,
 } from "../../src/visitor.ts";
+import { now as clock } from "../../src/clock.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -44,7 +45,7 @@ async function resolve(slug: string): Promise<(Referral & { destination: string 
 
 async function recordClick(request: Request, referral: Referral): Promise<void> {
   const ipHash = await requestIpHash(request);
-  const since = Date.now() - DAY_MS;
+  const since = clock() - DAY_MS;
   if (ipHash) {
     const [seen] = await db
       .select({ id: clicks.id })

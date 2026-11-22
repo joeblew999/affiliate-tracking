@@ -4,10 +4,11 @@
 import { partners, refundedPayments, sales } from "@schema";
 import { and, db, eq, inArray, isNull, lte, notExists, or } from "void/db";
 import { env } from "void/env";
+import { now as clock } from "./clock.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-export async function releaseHeldSales(now = Date.now()): Promise<number> {
+export async function releaseHeldSales(now = clock()): Promise<number> {
   const days = env.AFFILIATES_HOLD_DAYS;
   if (days === undefined) return 0;
   const eligiblePartners = db

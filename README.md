@@ -25,9 +25,10 @@ Open the shop and press **Sign in as the admin**. You land on the service's admi
   the demo only): `admin@demo.test`, `maya@demo.test` and so on, and `chris@demo.test` for a
   customer who never applied.
 
-The demo is 90 days of made-up activity: about 2,000 clicks, signups, sales of three products,
-renewals, refunds, monthly payouts, rules and bonuses. Its dates count back from the day it's
-loaded.
+The demo is written out in one file, `apps/affiliates/demo.ts`: its people, and every sale,
+renewal, refund, bonus, payout and rule of the program, with exact amounts. Times are days before
+one instant. Both apps' seeds load it (`vp run demo`) and the tests check against it, so the demo
+can't drift from the code. Only the clicks behind the charts are generated, from a fixed seed.
 
 ## How it works
 
@@ -104,12 +105,14 @@ come from the database schema and the pages' loaders and actions.
   Actions → **Stripe end-to-end** → Run workflow (`.github/workflows/stripe.yml`), with that key
   saved as a repository secret.
 
-The tests work as Void's own do. Each run copies both apps and starts them fresh, with new
-databases, on free ports (`e2e/apps.ts`), so it never touches your local data or your `vp run dev`.
-People are real browsers using the real pages: signing up, applying, approving, adding rules and
-bonuses, running payouts, viewing as a partner. What they check is what those pages show. The
-shop's calls to the service go through its own client, and Stripe's events through its webhook,
-signed. There are no fakes or mocks.
+The tests work as Void's own do (`e2e/apps.ts`). Once per run, both apps are copied, migrated and
+seeded with the demo fixtures. Each test file then gets its own copy of that seeded state, on free
+ports, so every file starts from exactly the fixtures and nothing it changes reaches another file,
+your local data or your `vp run dev`. The service's clock is pinned to the fixtures' instant
+(`DEMO_NOW`, by `AFFILIATES_NOW`; `apps/affiliates/src/clock.ts`), so "on hold", "ready to pay" and
+"the last 30 days" come out the same on every run, and the tests check exact amounts from
+`demo.ts`. People are real browsers on the real pages. The shop's calls to the service go through
+its own client, and Stripe's events through its webhook, signed. There are no fakes or mocks.
 
 CI (`.github/workflows/ci.yml`) runs the first three on every push.
 

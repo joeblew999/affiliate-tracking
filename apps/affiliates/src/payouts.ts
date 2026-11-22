@@ -19,6 +19,7 @@ import { env } from "void/env";
 import { alias } from "void/schema-d1";
 import { refundShare } from "./refunds.ts";
 import { hasStripe, stripe } from "./stripe.ts";
+import { now as clock } from "./clock.ts";
 
 type Payout = typeof payouts.$inferSelect;
 const transferGroup = (payoutId: string) => `affiliates_payout_${payoutId}`;
@@ -223,7 +224,7 @@ async function finish(
   status: "sent" | "manual",
   transferId: string | null,
 ): Promise<void> {
-  const now = Date.now();
+  const now = clock();
   await db.batch([
     db
       .update(payouts)
@@ -273,7 +274,7 @@ export async function payPartner(partnerId: string) {
   }
   await db
     .update(payouts)
-    .set({ transferStartedAt: Date.now() })
+    .set({ transferStartedAt: clock() })
     .where(and(eq(payouts.id, payout.id), isNull(payouts.transferStartedAt)));
   try {
     const transferId = await transfer(payout, payout.stripeAccountId);

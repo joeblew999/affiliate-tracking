@@ -8,7 +8,7 @@ test("an admin lands on the admin page, views the program as a partner, and come
   const pat = await activePartner("Pat Viewed");
   const { page, errors } = await admin();
   await open(page, `${AFFILIATES}/`);
-  await expect.poll(() => page.url()).toBe(`${AFFILIATES}/admin`);
+  await page.waitForURL(`${AFFILIATES}/admin`);
 
   const row = page.getByRole("row").filter({ hasText: pat.email });
   await row.getByRole("button", { name: `More for ${pat.email}` }).click();
@@ -17,10 +17,10 @@ test("an admin lands on the admin page, views the program as a partner, and come
   await page.getByText(`Viewing as ${pat.name}`).waitFor();
   expect(await page.getByText("Your link", { exact: true }).count()).toBe(1);
 
-  await page.waitForLoadState("networkidle"); // the button works once the page's script has loaded
+  await page.locator('#app[data-hydrated="true"]').waitFor(); // the button works once React has the page
   await page.getByRole("button", { name: "Back to admin" }).click();
   await page.waitForURL(`${AFFILIATES}/admin`);
-  await expect.poll(() => page.getByText("Viewing as").count()).toBe(0);
+  await page.getByText("Viewing as").waitFor({ state: "detached" });
   expect(errors).toEqual([]);
 });
 

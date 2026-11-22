@@ -20,6 +20,7 @@ import { linksOf } from "../../src/links.ts";
 import { activePartner, partnerById } from "../../src/partners.ts";
 import { partnersToPay } from "../../src/payouts.ts";
 import { stats } from "../../src/stats.ts";
+import { now as clock } from "../../src/clock.ts";
 
 // The admin page: everything, for the host's admins only. ?partner=<id>: only that partner's sales
 // and payouts. ?links=<partner id>: that partner's short links too, for the dialog that shows them.
@@ -80,7 +81,7 @@ export const actions = {
   changeSale: defineHandler.withValidator({ body: saleChange })(async (c, { body }) => {
     const [row] = await db
       .update(sales)
-      .set({ status: body.status, approvedAt: body.status === "approved" ? Date.now() : null })
+      .set({ status: body.status, approvedAt: body.status === "approved" ? clock() : null })
       .where(
         and(
           eq(sales.id, body.id),
@@ -101,7 +102,7 @@ export const actions = {
     if (!(await activePartner(body.partnerId)))
       throw new HTTPException(404, { message: "No such active partner" });
     const currency = env.AFFILIATES_PAYOUT_CURRENCY.toLowerCase();
-    const now = Date.now();
+    const now = clock();
     await db.insert(sales).values({
       partnerId: body.partnerId,
       kind: "bonus",

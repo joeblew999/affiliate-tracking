@@ -3,6 +3,7 @@
 // stay pending for an admin; the hold period never approves them.
 import { partnerIpHashes, type sales } from "@schema";
 import { db, eq } from "void/db";
+import { now as clock } from "./clock.ts";
 
 type FraudReason = NonNullable<(typeof sales.$inferSelect)["fraudReason"]>;
 
@@ -28,9 +29,9 @@ export async function notePartnerIp(partnerId: string, ipHash: string | null): P
   if (!ipHash) return;
   await db
     .insert(partnerIpHashes)
-    .values({ partnerId, ipHash, lastSeenAt: Date.now() })
+    .values({ partnerId, ipHash, lastSeenAt: clock() })
     .onConflictDoUpdate({
       target: [partnerIpHashes.partnerId, partnerIpHashes.ipHash],
-      set: { lastSeenAt: Date.now() },
+      set: { lastSeenAt: clock() },
     });
 }

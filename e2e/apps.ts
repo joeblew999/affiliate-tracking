@@ -1,10 +1,16 @@
-// Both apps, started fresh for a test run, as Void's own integration tests start theirs
-// (voidzero-dev/void, test/integration-helpers.ts): each app copied with nothing generated, so it has
-// a new local database; its packages linked from the installed tree; its own workers' names, so its
-// service bindings reach each other and never a `vp run dev` that's running; free ports; the
-// debugger off. Each new database gets the demo seed (apps/affiliates/demo.ts, the same every
-// run), so the tests start from the demo the README describes and keep it working. Nothing a run does touches your own local data. Copies go in .e2e/ (ignored), inside
-// the repo so Vite serves the linked packages, and are removed after.
+// Both apps for the tests, as Void's own integration tests run theirs (voidzero-dev/void,
+// test/integration-helpers.ts), from the demo fixtures (apps/affiliates/demo.ts):
+//
+// - prepareApps(), once per run: both apps copied (nothing generated), migrated and seeded with the
+//   fixtures, dated from DEMO_NOW. That seeded state is the template.
+// - startApps(), once per test file: both apps copied again, given a copy of the template's
+//   databases, their own worker names (so their service bindings reach each other and never your
+//   `vp run dev`), free ports and the debugger off, and started. So every file starts from exactly
+//   the fixtures, and nothing a file changes reaches another, or your local data.
+//
+// The service's clock is pinned (src/clock.ts): it reads DEMO_NOW when the run starts and runs on
+// from there, so "on hold", "ready" and "the last 30 days" are the same on every run.
+// Copies go in .e2e/ (ignored), inside the repo so Vite serves the linked packages; removed after.
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
@@ -21,8 +27,10 @@ import {
 import { createServer, type AddressInfo } from "node:net";
 import { basename, join, relative } from "node:path";
 import { stripVTControlCharacters } from "node:util";
+import { DEMO_NOW, HOLD_DAYS } from "../apps/affiliates/demo.ts";
 
 const ROOT = join(import.meta.dirname, "..");
+const APPS = ["affiliates", "shop"] as const;
 
 /** What an app makes when it runs, left out of its copy (as Void's test helpers leave it out). */
 const GENERATED = new Set([
@@ -35,15 +43,25 @@ const GENERATED = new Set([
   "node_modules",
 ]);
 
+/** The run's seeded template, and what every test file's apps share. */
+export interface Template {
+  dir: string;
+  hostToken: string;
+  webhookSecret: string;
+  ipSalt: string;
+  /** The real time (ms) at which the service's clock reads DEMO_NOW. */
+  clockFrom: number;
+}
+
 export interface Apps {
   shop: string;
   affiliates: string;
-  /** The shared secret of the shop's calls to the service. */
   hostToken: string;
-  /** The shop's Stripe webhook signing secret: tests sign their Stripe events with it. */
   webhookSecret: string;
   /** Void's token for running the service's crons in development (guide/jobs.md). */
-  cronToken: () => string;
+  cronToken: string;
+  /** Now, by the service's clock. */
+  now: () => number;
   stop: () => Promise<void>;
 }
 
@@ -56,8 +74,8 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-/** A copy of apps/<app> in dir, its packages linked, its workers renamed with this run's id. */
-function copyApp(app: "affiliates" | "shop", dir: string, id: string): string {
+/** A copy of apps/<app> in dir, its packages linked, its workers renamed with this copy's id. */
+function copyApp(app: (typeof APPS)[number], dir: string, id: string): string {
   const source = join(ROOT, "apps", app);
   const root = join(dir, app);
   cpSync(source, root, {
@@ -74,7 +92,6 @@ function copyApp(app: "affiliates" | "shop", dir: string, id: string): string {
         symlinkSync(realpathSync(join(from, name)), join(root, "node_modules", entry, name));
     } else symlinkSync(realpathSync(from), join(root, "node_modules", entry));
   }
-  // This run's worker names, so the two copies' service bindings find each other.
   const config = join(root, "void.config.ts");
   writeFileSync(
     config,
@@ -116,7 +133,6 @@ function serve(cwd: string, port: number, env: Record<string, string>): Promise<
   let log = "";
   return new Promise((resolve, reject) => {
     const onData = (chunk: Buffer) => {
-      process.stderr.write(chunk);
       log += stripVTControlCharacters(chunk.toString());
       if (log.includes(`http://127.0.0.1:${port}/`)) resolve(child);
     };
@@ -127,8 +143,7 @@ function serve(cwd: string, port: number, env: Record<string, string>): Promise<
 }
 
 /**
- * Ready once the service can ask the shop who's signed in, through its binding: on its first
- * requests Vite optimizes dependencies and reloads, dropping calls in flight. The test runner's hook
+ * Ready once the service can ask the shop who's signed in, through its binding. The test runner's
  * timeout ends the wait.
  */
 async function untilReady(affiliates: string): Promise<void> {
@@ -147,55 +162,97 @@ const envFile = (values: Record<string, string>) =>
     .map(([key, value]) => `${key}=${value}\n`)
     .join("");
 
-/** Both apps, fresh. `env`: more settings for both (the Stripe tests' key, say). */
-export async function startApps(env: Record<string, string> = {}): Promise<Apps> {
+/** The service's clock settings (src/clock.ts) for this run. */
+const clockEnv = (template: Template) => ({
+  AFFILIATES_NOW: DEMO_NOW,
+  AFFILIATES_NOW_FROM: String(template.clockFrom),
+});
+
+/** Once per run: both apps migrated and seeded with the fixtures, in .e2e/<run>/template. */
+export async function prepareApps(): Promise<Template> {
   mkdirSync(join(ROOT, ".e2e"), { recursive: true });
   const dir = mkdtempSync(join(ROOT, ".e2e", "run-"));
-  const id = basename(dir).slice(4).toLowerCase();
+  const template: Template = {
+    dir: join(dir, "template"),
+    hostToken: randomBytes(32).toString("hex"),
+    webhookSecret: `whsec_${randomBytes(32).toString("hex")}`,
+    ipSalt: randomBytes(32).toString("hex"),
+    clockFrom: Date.now(),
+  };
+  await Promise.all(
+    APPS.map(async (app) => {
+      const root = copyApp(app, template.dir, "template");
+      // Void's generated types and config (the shop's seed reads its Better Auth schema), as after
+      // a fresh clone.
+      await run(root, ["exec", "void", "prepare"]);
+      await run(root, ["run", "db:migrate"]);
+      await run(root, ["run", "db:seed"], clockEnv(template));
+    }),
+  );
+  return template;
+}
+
+/** Remove the run's copies. */
+export function removeApps(template: Template): void {
+  rmSync(join(template.dir, ".."), {
+    recursive: true,
+    force: true,
+    maxRetries: 20,
+    retryDelay: 100,
+  });
+}
+
+/** Once per test file: both apps from the template, started. `env`: more settings for both. */
+export async function startApps(
+  template: Template,
+  env: Record<string, string> = {},
+): Promise<Apps> {
+  const dir = mkdtempSync(join(template.dir, "..", "file-"));
+  const id = basename(dir).slice(5).toLowerCase();
   const [shopPort, affiliatesPort] = [await freePort(), await freePort()];
   const shop = `http://127.0.0.1:${shopPort}`;
   const affiliates = `http://127.0.0.1:${affiliatesPort}`;
-  const hostToken = randomBytes(32).toString("hex");
-  const webhookSecret = `whsec_${randomBytes(32).toString("hex")}`;
-
-  const affiliatesRoot = copyApp("affiliates", dir, id);
-  const shopRoot = copyApp("shop", dir, id);
+  const roots = Object.fromEntries(
+    APPS.map((app) => {
+      const root = copyApp(app, dir, id);
+      // The template's seeded databases (.void/v3: Void's local state; the database's identity
+      // comes from void.lock.json, copied with the app).
+      cpSync(join(template.dir, app, ".void", "v3"), join(root, ".void", "v3"), {
+        recursive: true,
+      });
+      return [app, root];
+    }),
+  ) as Record<(typeof APPS)[number], string>;
   writeFileSync(
-    join(affiliatesRoot, ".env"),
+    join(roots.affiliates, ".env"),
     envFile({
-      AFFILIATES_HOST_TOKEN: hostToken,
+      AFFILIATES_HOST_TOKEN: template.hostToken,
       HOST_SITE_URL: shop,
-      AFFILIATES_IP_SALT: randomBytes(32).toString("hex"),
-      AFFILIATES_HOLD_DAYS: "30",
+      AFFILIATES_IP_SALT: template.ipSalt,
+      AFFILIATES_HOLD_DAYS: String(HOLD_DAYS),
+      ...clockEnv(template),
     }),
   );
   writeFileSync(
-    join(shopRoot, ".env"),
+    join(roots.shop, ".env"),
     envFile({
-      AFFILIATES_HOST_TOKEN: hostToken,
+      AFFILIATES_HOST_TOKEN: template.hostToken,
       AFFILIATES_SITE_URL: affiliates,
-      STRIPE_WEBHOOK_SECRET: webhookSecret,
-    }),
-  );
-  // Each new database, migrated, then given the demo seed.
-  await Promise.all(
-    [affiliatesRoot, shopRoot].map(async (root) => {
-      await run(root, ["run", "db:migrate"]);
-      await run(root, ["run", "db:seed"]);
+      STRIPE_WEBHOOK_SECRET: template.webhookSecret,
     }),
   );
   const servers = await Promise.all([
-    serve(affiliatesRoot, affiliatesPort, env),
-    serve(shopRoot, shopPort, env),
+    serve(roots.affiliates, affiliatesPort, env),
+    serve(roots.shop, shopPort, env),
   ]);
   await untilReady(affiliates);
   return {
     shop,
     affiliates,
-    hostToken,
-    webhookSecret,
-    cronToken: () =>
-      readFileSync(join(affiliatesRoot, ".void", "dev-trigger-token"), "utf8").trim(),
+    hostToken: template.hostToken,
+    webhookSecret: template.webhookSecret,
+    cronToken: readFileSync(join(roots.affiliates, ".void", "dev-trigger-token"), "utf8").trim(),
+    now: () => Date.parse(DEMO_NOW) + (Date.now() - template.clockFrom),
     async stop() {
       for (const server of servers) if (server.pid) process.kill(-server.pid, "SIGTERM");
       await new Promise((resolve) => setTimeout(resolve, 500));

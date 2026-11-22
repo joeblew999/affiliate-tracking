@@ -3,15 +3,18 @@
 // signed in on the shop. What they see is read off the pages. The shop's own calls to the service
 // and Stripe's webhook aren't pages: those go through the shop's client and Stripe's signing.
 import { createAuthClient } from "better-auth/client";
-import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
 import Stripe from "stripe";
-import { expect, inject } from "vite-plus/test";
+import { expect } from "vite-plus/test";
 import { affiliates } from "../../apps/affiliates/client.ts";
 import { DEMO_PASSWORD, demoPeople } from "../../apps/affiliates/demo.ts";
 
-/** The two apps this run started (setup.ts, ../apps.ts). */
-export const SHOP = inject("shop");
-export const AFFILIATES = inject("affiliates");
+/** This test file's two apps (each-file.ts, ../apps.ts); none in a suite that's skipped. */
+export const SHOP = globalThis.apps?.shop ?? "";
+export const AFFILIATES = globalThis.apps?.affiliates ?? "";
+
+/** Now, by the service's clock: DEMO_NOW when the run started, and running on. */
+export const now = () => globalThis.apps.now();
 
 const PASSWORD = "example-password-123";
 
@@ -20,7 +23,9 @@ const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 
 let launched: Promise<Browser> | undefined;
-const browser = () => (launched ??= chromium.launch());
+// Chromium's shared memory, /dev/shm, is small in containers (CI's included); without this its
+// tabs crash on long runs.
+const browser = () => (launched ??= chromium.launch({ args: ["--disable-dev-shm-usage"] }));
 
 /** A browser of their own, collecting the errors its pages show in the console. */
 export async function newBrowser(options: Parameters<Browser["newContext"]>[0] = {}) {
@@ -36,9 +41,13 @@ export async function newBrowser(options: Parameters<Browser["newContext"]>[0] =
   return { context, page, errors };
 }
 
-/** Open a page and wait until its scripts have loaded: a click before React takes over does nothing. */
+/**
+ * Open a page and wait until React has taken it over: a click before that does nothing. Void marks
+ * it (#app data-hydrated), and its own tests wait for that mark too.
+ */
 export async function open(page: Page, url: string): Promise<void> {
-  await page.goto(url, { waitUntil: "networkidle" });
+  await page.goto(url);
+  await page.locator('#app[data-hydrated="true"]').waitFor();
 }
 
 export interface Person {
@@ -116,32 +125,48 @@ async function partnerRow(name: string) {
   return page.getByRole("row").filter({ hasText: name });
 }
 
+/**
+ * Press a button on the page, done once it's gone (the action ran, and Void's re-run of the loader
+ * redrew the page), with Playwright's own waiting. If the action is refused, the page says why
+ * (a red line), and that's the error.
+ */
+async function pressUntilGone(page: Page, button: Locator): Promise<void> {
+  await button.click();
+  const refused = page.locator("p.text-destructive").first();
+  const outcome = await Promise.race([
+    button.waitFor({ state: "detached" }).then(() => null),
+    refused.waitFor().then(() => refused.innerText()),
+  ]);
+  if (outcome !== null) throw new Error(`refused: ${outcome}`);
+}
+
 /** Press one of the admin's buttons on a partner's row (Approve, Suspend, Reactivate). */
 export async function partnerButton(name: string, button: string): Promise<void> {
   const row = await partnerRow(name);
-  await row.getByRole("button", { name: button }).click();
-  await expect.poll(() => row.getByRole("button", { name: button }).count()).toBe(0);
+  await pressUntilGone(
+    (await admin()).page,
+    row.getByRole("button", { name: button, exact: true }),
+  );
 }
 
-/** Set a partner's renewals months, as an admin. */
+/** Set a partner's renewals months, as an admin; done once the saved value comes back. */
 export async function setRenewalMonths(name: string, months: number): Promise<void> {
   const label = `Months of renewals for ${name}`;
+  const { page } = await admin();
   const input = (await partnerRow(name)).getByLabel(label);
   await input.fill(String(months));
   await input.blur();
-  await expect
-    .poll(async () => (await partnerRow(name)).getByLabel(label).inputValue())
-    .toBe(String(months));
+  // The action, then the loader Void re-runs after it: then the page, opened again, has it.
+  await page.waitForLoadState("networkidle");
+  expect(await (await partnerRow(name)).getByLabel(label).inputValue()).toBe(String(months));
 }
 
-/** Have every sale of this partner reviewed by an admin. */
+/** Have every sale of this partner reviewed by an admin; done once their row says so. */
 export async function reviewEverySale(name: string): Promise<void> {
   const row = await partnerRow(name);
   await row.getByRole("button", { name: /^More for / }).click();
   await (await admin()).page.getByRole("menuitem", { name: "Review every sale" }).click();
-  await expect
-    .poll(async () => (await partnerRow(name)).getByText("every sale reviewed").count())
-    .toBe(1);
+  await row.getByText("every sale reviewed").waitFor();
 }
 
 export interface Partner extends Person {
@@ -256,15 +281,18 @@ export async function salesOf(name: string) {
 /** The sale of this paid checkout, found by its customer's email. */
 export async function saleOf(name: string, session: Record<string, unknown>) {
   const email = (session.customer_details as { email?: string } | null)?.email?.toLowerCase();
-  return (await salesOf(name)).find((s) => s.customer === email);
+  // A clawback shows its sale's customer too: the sale is the one that isn't a clawback.
+  return (await salesOf(name)).find((s) => s.customer === email && !s.notes.startsWith("clawback"));
 }
 
 /** An admin's decision on a sale (Approve, Reject, Back to pending), found by its customer. */
 export async function decideSale(customer: string, decision: string): Promise<void> {
   const panel = await adminTab(/^Sales/);
   const row = panel.getByRole("row").filter({ hasText: customer });
-  await row.getByRole("button", { name: decision }).click();
-  await expect.poll(() => row.getByRole("button", { name: decision }).count()).toBe(0);
+  await pressUntilGone(
+    (await admin()).page,
+    row.getByRole("button", { name: decision, exact: true }),
+  );
 }
 
 /** A partner's payouts, as the admin's Payouts tab shows them. */
@@ -321,7 +349,7 @@ export const shop = () =>
       fetch: (input, init) =>
         fetch(new URL(new URL(new Request(input).url).pathname, AFFILIATES), init),
     },
-    inject("hostToken"),
+    globalThis.apps.hostToken,
   );
 
 /** Follow a referral link as a browser does: the redirect, and the referral cookie it sets. */
@@ -362,7 +390,7 @@ export async function stripeEvent(
     id: `evt_${crypto.randomUUID().replaceAll("-", "")}`,
     object: "event",
     type,
-    created: Math.floor((Date.now() - daysAgo * 24 * 60 * 60 * 1000) / 1000),
+    created: Math.floor((now() - daysAgo * 24 * 60 * 60 * 1000) / 1000),
     data: { object },
     livemode: false,
     api_version: "2026-10-28",
@@ -371,7 +399,7 @@ export async function stripeEvent(
   });
   const signature = await Stripe.webhooks.generateTestHeaderStringAsync({
     payload,
-    secret: inject("webhookSecret"),
+    secret: globalThis.apps.webhookSecret,
   });
   const res = await fetch(`${SHOP}/api/auth/stripe/webhook`, {
     method: "POST",
@@ -422,8 +450,11 @@ export async function eventually(check: () => Promise<void>): Promise<void> {
 export async function runCron(cron: string): Promise<void> {
   const res = await fetch(`${AFFILIATES}/__void/scheduled`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-void-dev-trigger": inject("cronToken") },
-    body: JSON.stringify({ cron, scheduledTime: Date.now() }),
+    headers: {
+      "content-type": "application/json",
+      "x-void-dev-trigger": globalThis.apps.cronToken,
+    },
+    body: JSON.stringify({ cron, scheduledTime: now() }),
   });
   if (!res.ok) throw new Error(`cron ${cron}: ${res.status} ${await res.text()}`);
 }

@@ -17,6 +17,7 @@ import {
   saleOf,
   salesOf,
   setRenewalMonths,
+  now,
   stripeEvent,
   type Partner,
 } from "./helpers.ts";
@@ -114,7 +115,7 @@ test("renewals pay the first sale's partner for their recurring months, once per
     customer_email: "sub@buyer.test",
     customer_address: null,
     parent: { type: "subscription_details", subscription_details: { subscription } },
-    status_transitions: { paid_at: Math.floor((Date.now() - daysAgo * 86_400_000) / 1000) },
+    status_transitions: { paid_at: Math.floor((now() - daysAgo * 86_400_000) / 1000) },
     lines: { data: [] },
     payments: { data: [] },
   });

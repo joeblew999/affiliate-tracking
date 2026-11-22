@@ -1,11 +1,12 @@
 // Global setup for `vp run test:stripe`: real Stripe test mode. Needs STRIPE_TEST_SECRET_KEY in the
-// shell (a test-mode key: sk_test_… or rk_test_…; anything else is refused). Starts both apps fresh
-// (../apps.ts) with that key, a new test coupon (the partners' buyer discount), and the payout
-// currency set to the Stripe account's own, so the "other currency" sale really is in another
-// currency. Stops them and deletes the coupon after. Runs only when asked for by name.
+// shell (a test-mode key: sk_test_… or rk_test_…; anything else is refused). Prepares the seeded
+// apps as the dev tests do (../apps.ts), and has every file start them with that key, a new test
+// coupon (the partners' buyer discount), and the payout currency set to the Stripe account's own,
+// so the "other currency" sale really is in another currency. Deletes the coupon after. Runs only
+// when asked for by name.
 import Stripe from "stripe";
 import type { TestProject } from "vite-plus/test/node";
-import { startApps } from "../apps.ts";
+import { prepareApps, removeApps } from "../apps.ts";
 
 declare module "vite-plus/test" {
   interface ProvidedContext {
@@ -34,8 +35,9 @@ export default async function setup(project: TestProject) {
     duration: "once",
     name: "affiliates e2e",
   });
-
-  const apps = await startApps({
+  const template = await prepareApps();
+  project.provide("template", template);
+  project.provide("appEnv", {
     STRIPE_SECRET_KEY: key,
     AFFILIATES_COUPON_ID: coupon.id,
     AFFILIATES_PAYOUT_CURRENCY: payoutCurrency,
@@ -44,13 +46,8 @@ export default async function setup(project: TestProject) {
   project.provide("stripeKey", key);
   project.provide("payoutCurrency", payoutCurrency);
   project.provide("saleCurrency", payoutCurrency === "eur" ? "gbp" : "eur");
-  project.provide("shop", apps.shop);
-  project.provide("affiliates", apps.affiliates);
-  project.provide("hostToken", apps.hostToken);
-  project.provide("webhookSecret", apps.webhookSecret);
-  project.provide("cronToken", apps.cronToken());
   return async () => {
-    await apps.stop();
+    removeApps(template);
     await stripe.coupons.del(coupon.id);
   };
 }
