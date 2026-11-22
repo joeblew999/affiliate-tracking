@@ -9,6 +9,12 @@ export default defineConfig({
       // Each app's local .env, then the affiliate service's migrations on its local database. Once
       // per clone, and after pulling a new migration; safe to rerun.
       setup: { command: ["vpx scripts/setup.ts", "vp run affiliates#db:migrate"], cache: false },
+      // Demo data in both apps' local databases (it resets them): the people in
+      // apps/affiliates/demo.ts as shop accounts, and 90 days of the program (README, "Demo data").
+      demo: { command: ["vp run shop#db:seed", "vp run affiliates#db:seed"], cache: false },
+      // The same demo data in both deployed apps, replacing everything in their databases
+      // (scripts/demo-production.ts). For the demo deployment only; needs `void cloudflare login`.
+      "demo:production": { command: "vpx scripts/demo-production.ts", cache: false },
       // Both apps: the shop on http://localhost:5173, the affiliate service on http://localhost:5174.
       dev: { command: "vp run -r --parallel dev", cache: false },
       // Chromium for the browser tests (once per machine).

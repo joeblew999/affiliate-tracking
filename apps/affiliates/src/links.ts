@@ -3,7 +3,7 @@
 // site, never another site, so a link can't be used as an open redirect.
 import { clicks, links, sales } from "@schema";
 import { HTTPException } from "hono/http-exception";
-import { and, count, db, desc, eq, ne, sql } from "void/db";
+import { and, count, db, desc, eq, isNotNull, ne, sql } from "void/db";
 import { z } from "zod";
 
 export const MAX_ACTIVE_LINKS = 100;
@@ -23,24 +23,51 @@ export const NewLink = z.object({
     .default(null),
 });
 
+/**
+ * A partner's links, each with its clicks and sales (not refunded) and its commission net of
+ * clawbacks. Counted in grouped queries by link: a correlated subquery here once compared the
+ * click's own id instead of the link's, since Drizzle writes the outer column unqualified.
+ */
 export async function linksOf(partnerId: string, origin: string) {
-  const rows = await db
-    .select({
-      id: links.id,
-      slug: links.slug,
-      destination: links.destination,
-      campaign: links.campaign,
-      status: links.status,
-      createdAt: links.createdAt,
-      clicks: sql<number>`(SELECT COUNT(*) FROM ${clicks} WHERE ${clicks.linkId} = ${links.id})`,
-      sales: sql<number>`(SELECT COUNT(*) FROM ${sales} WHERE ${sales.linkId} = ${links.id} AND ${sales.status} != 'refunded' AND ${sales.kind} != 'clawback')`,
-      // Net of clawbacks, which carry their sale's link.
-      commissionCents: sql<number>`(SELECT COALESCE(SUM(${sales.commissionCents}), 0) FROM ${sales} WHERE ${sales.linkId} = ${links.id} AND ${sales.status} != 'refunded')`,
-    })
-    .from(links)
-    .where(eq(links.partnerId, partnerId))
-    .orderBy(desc(links.createdAt));
-  return rows.map((row) => ({ ...row, url: new URL(`/r/${row.slug}`, origin).toString() }));
+  const [rows, clickCounts, saleCounts] = await Promise.all([
+    db
+      .select({
+        id: links.id,
+        slug: links.slug,
+        destination: links.destination,
+        campaign: links.campaign,
+        status: links.status,
+        createdAt: links.createdAt,
+      })
+      .from(links)
+      .where(eq(links.partnerId, partnerId))
+      .orderBy(desc(links.createdAt)),
+    db
+      .select({ linkId: clicks.linkId, n: count() })
+      .from(clicks)
+      .where(and(eq(clicks.partnerId, partnerId), isNotNull(clicks.linkId)))
+      .groupBy(clicks.linkId),
+    db
+      .select({
+        linkId: sales.linkId,
+        n: sql<number>`COUNT(CASE WHEN ${sales.kind} != 'clawback' THEN 1 END)`,
+        commissionCents: sql<number>`COALESCE(SUM(${sales.commissionCents}), 0)`,
+      })
+      .from(sales)
+      .where(
+        and(eq(sales.partnerId, partnerId), isNotNull(sales.linkId), ne(sales.status, "refunded")),
+      )
+      .groupBy(sales.linkId),
+  ]);
+  const clicksOf = new Map(clickCounts.map((row) => [row.linkId, row.n]));
+  const salesOf = new Map(saleCounts.map((row) => [row.linkId, row]));
+  return rows.map((row) => ({
+    ...row,
+    clicks: clicksOf.get(row.id) ?? 0,
+    sales: salesOf.get(row.id)?.n ?? 0,
+    commissionCents: salesOf.get(row.id)?.commissionCents ?? 0,
+    url: new URL(`/r/${row.slug}`, origin).toString(),
+  }));
 }
 
 export async function createLink(

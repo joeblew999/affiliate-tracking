@@ -82,7 +82,7 @@ test("a capped rule stops paying for a customer once the cap is reached", async 
   expect(await commissionsOf(nick.partnerId, sold)).toEqual([2000, 1000, 0, 2000]);
 });
 
-test("the hold period approves old sales, except flagged, reviewed or rejected ones", async () => {
+test("the hold period approves old sales, except disputed, flagged, reviewed or rejected ones", async () => {
   const nick = await activePartner();
   const admin = await signInAdmin();
   const old = await sell(nick.partnerId, {}, 31);
@@ -92,6 +92,15 @@ test("the hold period approves old sales, except flagged, reviewed or rejected o
     { customer_details: { email: nick.email, address: null } },
     31,
   );
+  const disputed = await sell(nick.partnerId, {}, 31);
+  await stripeEvent("charge.dispute.created", {
+    id: `dp_${crypto.randomUUID()}`,
+    object: "dispute",
+    amount: 1000, // part of it: the sale stays, on hold while the dispute is open
+    charge: "ch_x",
+    payment_intent: disputed.payment_intent,
+    status: "needs_response",
+  });
   const rejected = await sell(nick.partnerId, {}, 31);
   const rejectedId = (await salesOf(nick.partnerId)).find(
     (s) => s.stripeSessionId === rejected.id,
@@ -113,6 +122,7 @@ test("the hold period approves old sales, except flagged, reviewed or rejected o
     (await salesOf(partnerId)).find((s) => s.stripeSessionId === sessionId)?.status;
   expect(await status(nick.partnerId, old.id)).toBe("approved");
   expect(await status(nick.partnerId, recent.id)).toBe("pending");
+  expect(await status(nick.partnerId, disputed.id)).toBe("pending");
   expect(await status(nick.partnerId, flagged.id)).toBe("pending");
   expect(await status(nick.partnerId, rejected.id)).toBe("rejected");
   expect(await status(reviewed.partnerId, reviewedSale.id)).toBe("pending");

@@ -74,12 +74,35 @@ vp run setup                          # each app's local .env, and the service's
 vp run dev                            # the shop on http://localhost:5173, the service on :5174
 ```
 
-Sign up on the shop as `admin@example.test` to be an admin (`ADMIN_EMAILS` in `apps/shop/.env`), or
-as anyone else to apply as a partner at http://localhost:5174. For demo data on the service's pages:
-`vp run affiliates#db:seed` (it resets the service's local database).
+`vp run demo` fills both apps' local databases with the demo (below; it resets them). Or sign up on
+the shop yourself: as `admin@example.test` to be an admin (`ADMIN_EMAILS` in `apps/shop/.env`), or
+as anyone else to apply as a partner at http://localhost:5174.
 
 The repo's tasks, each with a comment saying what it does, are in `vite.config.ts` (`run.tasks`);
 run one with `vp run <task>`. `vp check` formats, lints and type-checks.
+
+## Demo data
+
+90 days of a believable program, the same locally and on the demo deployment: partners in every
+state, their short links, about 2,000 clicks from several countries, devices and sites, signups,
+sales of three products (renewals, refunds in full and in part, flagged ones), monthly payouts, a
+clawback, commission rules and bonuses. The people are in `apps/affiliates/demo.ts`, shared by
+both apps' seeds (`apps/shop/db/seed.ts` makes them shop accounts, `apps/affiliates/db/seed.ts`
+makes the program), and dates count back from the day it's run.
+
+Every demo account signs in on the shop with the password `demo-password-2026`. These logins are
+public, for demos only:
+
+- `admin@demo.test`: the admin, at `/admin` on the service;
+- `maya@demo.test`: the busiest partner (also `leo@`, `priya@`, `tom@`, `ana@`; `ken@` is
+  suspended);
+- `sam@demo.test`: waiting for approval (also `lena@`);
+- `chris@demo.test`: a customer who hasn't applied, so sees the application form.
+
+`vp run demo` puts it in the local databases (`void db seed` in each app). `vp run
+demo:production` replaces everything in the deployed databases with it (`void db export`, then
+`void db execute --remote`; `scripts/demo-production.ts`). It's for the demo deployment only.
+`vp run screens` takes screenshots of every page, desktop and phone, signed in as these people.
 
 ## Tests
 

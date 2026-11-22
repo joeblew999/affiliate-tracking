@@ -75,6 +75,31 @@ test("a referral link sends the visitor to the shop, sets the cookie and counts 
   await eventually(async () => expect((await partnerMe(nick.cookie)).clicks).toBe(1));
 });
 
+test("a short link counts its own clicks and sales", async () => {
+  const nick = await activePartner();
+  const made = await service<{ link: { id: string; slug: string } }>(
+    "/api/partner/links",
+    nick.cookie,
+    { destination: "/pricing", campaign: "Newsletter", slug: null },
+  );
+  const followed = await follow(`/r/${made.body.link.slug}`);
+  expect(followed.location).toBe("http://localhost:5173/pricing");
+  await stripeEvent(
+    "checkout.session.completed",
+    paidSession({ affiliate_partner_id: nick.partnerId, affiliate_link_id: made.body.link.id }),
+  );
+  await eventually(async () => {
+    const { body } = await service<{ links: { id: string; clicks: number; sales: number }[] }>(
+      "/api/partner/links",
+      nick.cookie,
+    );
+    expect(body.links.find((link) => link.id === made.body.link.id)).toMatchObject({
+      clicks: 1,
+      sales: 1,
+    });
+  });
+});
+
 test("link previews and unknown links set nothing", async () => {
   const nick = await activePartner();
   const preview = await follow(`/r/${nick.code}`, "WhatsApp/2.23 A");
