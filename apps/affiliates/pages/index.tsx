@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { money } from "@/format";
+import { bind } from "@/components/bind";
 import { useAction } from "@/components/use-action";
 import type { Props } from "./index.server";
 
@@ -71,22 +72,11 @@ function Apply() {
         <Form form={form} className="grid gap-4">
           <div className="grid gap-2">
             <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              required
-              maxLength={100}
-              value={form.data.name}
-              onChange={(e) => form.setData("name", e.target.value)}
-            />
+            <Input id="name" required maxLength={100} {...bind(form, "name")} />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="application">How will you promote us?</Label>
-            <Textarea
-              id="application"
-              maxLength={2000}
-              value={form.data.application ?? ""}
-              onChange={(e) => form.setData("application", e.target.value)}
-            />
+            <Textarea id="application" maxLength={2000} {...bind(form, "application")} />
           </div>
           <Label className="flex items-center gap-2 font-normal">
             <Checkbox checked={terms} onCheckedChange={(checked) => setTerms(checked === true)} />I
@@ -104,14 +94,8 @@ function Apply() {
 /** A new short link: empty fields are left out (a link to the home page, a made-up name). */
 function NewLink() {
   const form = useForm("/?createLink", {}, { throwOnError: false, resetOnSuccess: true });
-  const text = (name: "destination" | "campaign" | "slug") => ({
-    value: form.data[name] ?? "",
-    onChange: (e: { target: { value: string } }) =>
-      form.setData(
-        name,
-        (name === "slug" ? e.target.value.toLowerCase() : e.target.value) || undefined,
-      ),
-  });
+  const text = (name: "destination" | "campaign" | "slug") =>
+    bind(form, name, { empty: undefined, as: (t) => (name === "slug" ? t.toLowerCase() : t) });
   return (
     <Form form={form} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
       <Input {...text("destination")} placeholder="Page, e.g. /pricing" aria-label="Goes to" />

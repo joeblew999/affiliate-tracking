@@ -4,7 +4,8 @@
   "type": "module",
   "exports": {
     "./client": "./client.ts",
-    "./demo": "./demo.ts"
+    "./demo": "./demo.ts",
+    "./bind": "./src/components/bind.ts"
   },
   "scripts": {
     "dev": "vp dev",

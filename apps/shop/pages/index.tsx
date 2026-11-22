@@ -1,6 +1,7 @@
 // The example shop: sign up, sign in and out with the shop's own Better Auth (void/client). The
 // affiliate program is its own app on its own address; it sees this sign-in.
 import { action, Form, useForm } from "@void/react";
+import { bind } from "affiliates/bind";
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -138,8 +139,7 @@ function SignIn({ back }: { back: string | null }) {
                   type="email"
                   autoComplete="email"
                   required
-                  value={signIn.data.email}
-                  onChange={(e) => signIn.setData("email", e.target.value)}
+                  {...bind(signIn, "email")}
                 />
               </Field>
               <Field label="Password" id="in-password">
@@ -148,8 +148,7 @@ function SignIn({ back }: { back: string | null }) {
                   type="password"
                   autoComplete="current-password"
                   required
-                  value={signIn.data.password}
-                  onChange={(e) => signIn.setData("password", e.target.value)}
+                  {...bind(signIn, "password")}
                 />
               </Field>
               <Button type="submit" disabled={signIn.pending}>
@@ -160,12 +159,7 @@ function SignIn({ back }: { back: string | null }) {
           <TabsContent value="up">
             <Form form={signUp} className="grid gap-4">
               <Field label="Name" id="up-name">
-                <Input
-                  id="up-name"
-                  autoComplete="name"
-                  value={signUp.data.name}
-                  onChange={(e) => signUp.setData("name", e.target.value)}
-                />
+                <Input id="up-name" autoComplete="name" {...bind(signUp, "name")} />
               </Field>
               <Field label="Email" id="up-email">
                 <Input
@@ -173,8 +167,7 @@ function SignIn({ back }: { back: string | null }) {
                   type="email"
                   autoComplete="email"
                   required
-                  value={signUp.data.email}
-                  onChange={(e) => signUp.setData("email", e.target.value)}
+                  {...bind(signUp, "email")}
                 />
               </Field>
               <Field label="Password" id="up-password">
@@ -184,8 +177,7 @@ function SignIn({ back }: { back: string | null }) {
                   autoComplete="new-password"
                   minLength={8}
                   required
-                  value={signUp.data.password}
-                  onChange={(e) => signUp.setData("password", e.target.value)}
+                  {...bind(signUp, "password")}
                 />
               </Field>
               <Button type="submit" disabled={signUp.pending}>

@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { date, minorUnits, money } from "@/format";
+import { bind } from "@/components/bind";
 import { useAction } from "@/components/use-action";
 import type { Props } from "./index.server";
 
@@ -504,8 +505,7 @@ function Rules({ rules, partners, payoutCurrency }: Props) {
                 placeholder="usd"
                 maxLength={3}
                 required
-                value={rule.data.currency ?? ""}
-                onChange={(e) => rule.setData("currency", e.target.value.toLowerCase() || null)}
+                {...bind(rule, "currency", { empty: null, as: (t) => t.toLowerCase() })}
               />
             </>
           )}
@@ -524,8 +524,7 @@ function Rules({ rules, partners, payoutCurrency }: Props) {
           </select>
           <Input
             placeholder="prod_… or price_… (empty: everything)"
-            value={rule.data.productId ?? ""}
-            onChange={(e) => rule.setData("productId", e.target.value.trim() || null)}
+            {...bind(rule, "productId", { empty: null, as: (t) => t.trim() })}
           />
           <Input
             type="number"
@@ -624,13 +623,7 @@ function Rules({ rules, partners, payoutCurrency }: Props) {
             cents={bonus.data.commissionCents || null}
             onCents={(cents) => bonus.setData("commissionCents", cents ?? 0)}
           />
-          <Input
-            maxLength={200}
-            placeholder="Launch week"
-            required
-            value={bonus.data.bonusNote ?? ""}
-            onChange={(e) => bonus.setData("bonusNote", e.target.value)}
-          />
+          <Input maxLength={200} placeholder="Launch week" required {...bind(bonus, "bonusNote")} />
           <Button type="submit" disabled={bonus.pending || active.length === 0}>
             Add bonus
           </Button>
