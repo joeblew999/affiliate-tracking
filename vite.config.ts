@@ -1,14 +1,9 @@
 // Root Vite+ config: the repo's tasks, and its test projects. `vp run <task>` from anywhere.
 import { defineConfig } from "vite-plus";
 
-// legacy/: the old library, kept only to port from (plans/2026-11-22-01-void-service.md); deleted at
-// step 5, so it isn't formatted or linted. README.md: the old one, rewritten at step 5.
-const notChecked = ["legacy/**", "README.md"];
-
 export default defineConfig({
-  fmt: { ignorePatterns: notChecked },
   // typeAware + typeCheck: `vp check` type-checks too (as in void-fbtee's root config).
-  lint: { ignorePatterns: notChecked, options: { typeAware: true, typeCheck: true } },
+  lint: { options: { typeAware: true, typeCheck: true } },
   run: {
     tasks: {
       // Each app's local .env, then the affiliate service's migrations on its local database. Once
@@ -21,6 +16,9 @@ export default defineConfig({
       // The tests against the running apps (e2e/dev/): your `vp run dev` if it's up, else they
       // start one and stop it after.
       "test:dev": { command: "vp test run --project dev", cache: false },
+      // Real Stripe test mode (e2e/stripe/): needs STRIPE_TEST_SECRET_KEY in the shell, and
+      // `vp run dev` stopped (it starts the apps itself, with the key). Run it on demand.
+      "test:stripe": { command: "vp test run --project stripe", cache: false },
     },
   },
   test: {
@@ -35,6 +33,17 @@ export default defineConfig({
           // void-fbtee's dev-server projects.
           testTimeout: 120_000,
           hookTimeout: 120_000,
+          fileParallelism: false,
+        },
+      },
+      {
+        test: {
+          name: "stripe",
+          include: ["e2e/stripe/*.test.ts"],
+          globalSetup: ["e2e/stripe/setup.ts"],
+          pool: "forks",
+          testTimeout: 120_000,
+          hookTimeout: 180_000,
           fileParallelism: false,
         },
       },

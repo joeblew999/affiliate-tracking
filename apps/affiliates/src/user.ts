@@ -3,6 +3,8 @@
 // so this app's subdomain receives it; on localhost cookies are shared across ports. This app
 // keeps no users, passwords or sessions of its own.
 import type { CloudContext } from "void";
+import { env } from "void/env";
+import { HOST_TOKEN_HEADER } from "./host-contract";
 
 export interface HostUser {
   id: string;
@@ -16,7 +18,11 @@ export async function currentUser(c: CloudContext): Promise<HostUser | null> {
   const cookie = c.req.header("cookie");
   if (!cookie) return null;
   const res = await c.env.HOST.fetch(
-    new Request("https://host.internal/api/auth/get-session", { headers: { cookie } }),
+    new Request("https://host.internal/api/auth/get-session", {
+      // The shared secret: every one of these calls comes from this Worker, so the host lets them
+      // past Better Auth's per-IP rate limit (apps/shop/auth.ts).
+      headers: { cookie, [HOST_TOKEN_HEADER]: env.AFFILIATES_HOST_TOKEN },
+    }),
   );
   if (!res.ok) return null;
   const body = (await res.json()) as {

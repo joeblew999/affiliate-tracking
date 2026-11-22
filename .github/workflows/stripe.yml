@@ -1,0 +1,24 @@
+# The Stripe end-to-end tests (e2e/stripe/), on demand: Actions → "Stripe end-to-end" → Run workflow.
+# They use real Stripe test mode, with the repository secret STRIPE_TEST_SECRET_KEY (a test-mode key;
+# the tests refuse anything else). Same command as on your machine: `vp run test:stripe`.
+name: Stripe end-to-end
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  stripe:
+    name: Stripe test mode
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - run: vp run test:stripe
+        env:
+          STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}

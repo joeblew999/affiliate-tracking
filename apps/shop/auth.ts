@@ -13,7 +13,7 @@ import { admin } from "better-auth/plugins";
 import Stripe from "stripe";
 import { defineAuth } from "void/auth";
 import { queues } from "void/queues";
-import { referralFrom } from "affiliates/client";
+import { HOST_TOKEN_HEADER, referralFrom } from "affiliates/client";
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 
@@ -36,8 +36,21 @@ export default defineAuth(({ defaults, env }) => {
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean),
   );
+  const hostToken = text(env.AFFILIATES_HOST_TOKEN);
   return {
     ...defaults,
+    // The affiliate service asks who is signed in on every request it serves, always from its own
+    // Worker, so per-IP limits would make all its users share one. Its calls to get-session carry
+    // the shared AFFILIATES_HOST_TOKEN and skip the limit; everything else keeps it (Void's
+    // guide/auth.md, "Rate limits").
+    rateLimit: {
+      ...defaults.rateLimit,
+      customRules: {
+        ...defaults.rateLimit?.customRules,
+        "/get-session": (request, rule) =>
+          hostToken && request.headers.get(HOST_TOKEN_HEADER) === hostToken ? false : rule,
+      },
+    },
     plugins: [
       ...(defaults.plugins ?? []),
       admin(),

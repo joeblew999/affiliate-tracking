@@ -1,9 +1,8 @@
 # 2026-11-22-01-void-service.md
 
-Status: approved 2026-11-22 ("get busy"); the example shop is the host for now, and the domain waits
-for step 6. Step 1 done (commit d567b58), then upgraded to Void 1.11.0 (released 2026-11-19): its
-check, lint, types and dev-server tests pass. The trial's `spike/` folder was removed once its code
-moved into `apps/`.
+Status: approved 2026-11-22 ("get busy"). Steps 1 to 5 done, on Void 1.11.0 (released 2026-11-19);
+the example shop is the host for now. Step 6 (deploy) waits for the domain. What's left is under
+"Follow-ups" at the end.
 
 ## What we're building
 
@@ -111,3 +110,23 @@ Each step ends with its tests passing locally; pushed when you say.
 - Which domain for the deployed pair (e.g. `shop.ubuntusoftware.net` and
   `affiliates.ubuntusoftware.net`)?
 - Is this the real product's host, or is the example host enough for now?
+
+## Follow-ups (found while building, not done yet)
+
+- **Partial refunds** count as full: any `charge.refunded` marks the sale refunded and its whole
+  commission is lost. The old library did the same. Better: reduce the commission by the refunded
+  share (`charge.amount_refunded / charge.amount`).
+- **A sale refunded after its transfer started** stays in that payout: the partner is paid for it.
+  The old library left this to manual reconciliation too. Better: a negative line (a clawback) on
+  the partner's next payout.
+- **Connect transfers** have no end-to-end test: Stripe test mode needs an onboarded Connect account,
+  which `vp run test:stripe` doesn't make yet. Manual payouts and currency conversion are covered.
+- **The Stripe end-to-end suite hasn't run yet**: it needs `STRIPE_TEST_SECRET_KEY`, which this
+  cloud session doesn't have. Run it on GitHub (Actions → "Stripe end-to-end") or locally.
+- **Void:** `vp run dev` starting two Void apps at once sometimes crashed one of them on the
+  debugger port (EADDRINUSE 9229) instead of moving to another; each app now sets its own
+  (`VOID_INSPECTOR_PORT`, read by Void 1.11.0 but not in its docs). Worth reporting to Void, with
+  the steps to see it.
+- **Deploy (step 6)** waits for the domain. It also needs: Better Auth's `crossSubDomainCookies` in
+  the shop, `AFFILIATES_COOKIE_DOMAIN` on the service, both apps' secrets, and the Stripe webhook
+  endpoint for the service.
