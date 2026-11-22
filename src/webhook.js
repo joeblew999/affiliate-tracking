@@ -5,6 +5,7 @@ import { currencyCode } from './money.js';
 import { resolvePaidAttribution } from './promotion.js';
 import { stripeId, stripeRequest } from './stripe.js';
 import { selfReferralReason } from './fraud.js';
+import { settleReferral, validUserId } from './referral.js';
 
 export async function recordConversion(session, event, env, lineItems = session?.line_items?.data || []) {
     if (!session) return null;
@@ -65,14 +66,15 @@ export async function recordConversion(session, event, env, lineItems = session?
         ? (await env.DB.prepare('SELECT id FROM links WHERE id=?1 AND affiliate_id=?2')
             .bind(session.metadata.affiliate_link_id, affiliateId).first())?.id || null
         : null;
+    const userId = validUserId(session.metadata?.affiliate_user_id) ? session.metadata.affiliate_user_id : null;
     await env.DB.prepare(`
         INSERT INTO conversions
           (affiliate_id, stripe_session_id, stripe_event_id, payment_intent,
            customer_email, amount_cents, commission_cents, status, created_at,
-           currency, customer_country, commission_pct, items_json, fraud_reason, link_id)
+           currency, customer_country, commission_pct, items_json, fraud_reason, link_id, user_id)
         VALUES (?1,?2,?3,?4,?5,?6,?7,
                 CASE WHEN EXISTS (SELECT 1 FROM refunded_payments WHERE payment_intent=?4)
-                     THEN 'refunded' ELSE 'pending' END,?8,?9,?10,?11,?12,?13,?14)
+                     THEN 'refunded' ELSE 'pending' END,?8,?9,?10,?11,?12,?13,?14,?15)
         ON CONFLICT(stripe_session_id) DO UPDATE SET
           payment_intent=COALESCE(conversions.payment_intent, excluded.payment_intent),
           status=CASE WHEN excluded.status='refunded' AND conversions.status IN ('pending','approved','paying')
@@ -95,8 +97,16 @@ export async function recordConversion(session, event, env, lineItems = session?
         aff.commission_pct,
         JSON.stringify(items),
         fraudReason,
-        linkId
+        linkId,
+        userId
     ).run();
+    if (userId && !recorded) {
+        await settleReferral(env, {
+            userId, affiliateId: Number(affiliateId), source: session.metadata.affiliate_source,
+            stripeCustomerId: stripeId(session.customer),
+            at: Number.isFinite(event?.created) ? event.created * 1000 : Date.now(),
+        });
+    }
     return session;
 }
 

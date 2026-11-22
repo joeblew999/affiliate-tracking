@@ -89,7 +89,7 @@ export class PromotionCodeError extends Error {
 }
 
 export function attachAffiliateAttribution(
-    params: URLSearchParams, request: Request, env: AffiliateEnv, options?: { promoCode?: string },
+    params: URLSearchParams, request: Request, env: AffiliateEnv, options?: { promoCode?: string; userId?: string },
 ): Promise<void>;
 
 type StripeReference = string | { id: string };
@@ -108,6 +108,7 @@ export interface CheckoutSession {
     allow_promotion_codes?: boolean | null;
     amount_total?: number | null;
     payment_intent?: StripeReference | null;
+    customer?: StripeReference | null;
     currency?: string | null;
     customer_details?: { email?: string | null; address?: { country?: string | null } | null } | null;
     line_items?: { data?: readonly CheckoutLineItem[] } | null;
@@ -133,3 +134,17 @@ export function releaseHeldConversions(env: AffiliateEnv, now?: number): Promise
 export const DEFAULT_LINK_PREFIX: '/r/';
 /** Redirects GET <prefix><slug> to the link's destination with ?ref= and aff_link=. Null for any other request. */
 export function handleAffiliateLink(request: Request, env: AffiliateEnv): Promise<Response | null>;
+export interface AffiliateReferral {
+    id: string;
+    user_id: string;
+    affiliate_id: number;
+    source: 'signup' | 'promo_code' | 'checkout';
+    converted_at: number | null;
+    code: string;
+    promo_code_id: string | null;
+}
+
+/** Ties a newly signed-up user to the affiliate in the referral cookie. Null when there is no valid cookie. */
+export function recordSignupReferral(
+    requestOrHeaders: Request | Headers | { headers: Headers }, env: AffiliateEnv, userId: string,
+): Promise<AffiliateReferral | null>;
