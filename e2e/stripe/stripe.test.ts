@@ -7,10 +7,10 @@ import { describe, expect, inject, test } from "vite-plus/test";
 import {
   activePartner,
   eventually,
-  host,
+  asShop,
   partnerMe,
   salesOf,
-  service,
+  asUser,
   signInAdmin,
   stripeEvent,
 } from "../dev/helpers";
@@ -58,22 +58,15 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
   test("approving a partner makes their promotion code in Stripe; typing it at checkout makes the sale theirs", async () => {
     const nick = await activePartner("Nick Stripe");
     const me = await partnerMe(nick.cookie);
-    const promo = (
-      await service<{ partner: { promoCode: string | null } }>("/api/partner/me", nick.cookie)
-    ).body.partner?.promoCode;
+    const promo = me.promoCode;
     expect(promo).toBe(me.code.toUpperCase());
     const found = await stripe().promotionCodes.list({ code: promo ?? "", limit: 1 });
     expect(found.data[0]?.metadata).toMatchObject({ partner_id: nick.partnerId });
 
-    const checkout = await host<{ metadata: Record<string, string>; promotionCode: string | null }>(
-      "/api/host/checkout",
-      {
-        userId: null,
-        ref: null,
-        promoCode: promo?.toLowerCase() ?? null,
-        ip: null,
-      },
-    );
+    const checkout = await asShop()("/api/host/checkout", {
+      method: "POST",
+      body: { userId: null, ref: null, promoCode: promo?.toLowerCase() ?? null, ip: null },
+    });
     expect(checkout).toEqual({
       metadata: expect.objectContaining({
         affiliate_partner_id: nick.partnerId,
@@ -95,18 +88,20 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
 
     await sell(nick.partnerId, intent);
     const [sale] = await salesOf(nick.partnerId);
-    expect(
-      (await service("/api/admin/sales/status", admin.cookie, { id: sale?.id, status: "approved" }))
-        .status,
-    ).toBe(200);
-    await service("/api/admin/payouts/run", admin.cookie, { partnerId: nick.partnerId });
+    await asUser(admin.cookie)("/api/sales/[id]", {
+      method: "PATCH",
+      params: { id: sale?.id ?? "" },
+      body: { status: "approved" },
+    });
+    await asUser(admin.cookie)("/api/payouts", {
+      method: "POST",
+      body: { partnerId: nick.partnerId },
+    });
 
     const expected = Math.round((1000 * txn.amount) / charge.amount); // 20% of 5000, converted
     await eventually(async () => {
-      const payouts = await service<{
-        payouts: { partnerId: string; status: string; amountCents: number; currency: string }[];
-      }>("/api/admin/payouts", admin.cookie);
-      expect(payouts.body.payouts.filter((p) => p.partnerId === nick.partnerId)).toEqual([
+      const { payouts } = await asUser(admin.cookie)("/api/payouts");
+      expect(payouts.filter((p) => p.partnerId === nick.partnerId)).toEqual([
         expect.objectContaining({
           status: "manual",
           amountCents: expected,

@@ -1,0 +1,10 @@
+{
+  // The tests type-check against the affiliate service itself: its path aliases, and Void's
+  // generated route types (.void/routes.d.ts), so a call's path, params, body and answer all come
+  // from the service's routes, through Void's typed fetch (void/client).
+  "extends": "../apps/affiliates/tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "void/env"]
+  },
+  "include": ["**/*.ts"]
+}

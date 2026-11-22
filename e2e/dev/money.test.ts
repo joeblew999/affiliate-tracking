@@ -8,7 +8,7 @@ import {
   paidSession,
   runCron,
   salesOf,
-  service,
+  asUser,
   signInAdmin,
   stripeEvent,
 } from "./helpers";
@@ -26,6 +26,10 @@ async function commissionsOf(
   );
 }
 
+/** Run payouts for one partner, as an admin (POST /api/payouts). */
+const payOutNow = (cookie: string, partnerId: string) =>
+  asUser(cookie)("/api/payouts", { method: "POST", body: { partnerId } });
+
 async function sell(partnerId: string, overrides: Record<string, unknown> = {}, daysAgo = 0) {
   const session = paidSession({ affiliate_partner_id: partnerId }, overrides);
   await stripeEvent("checkout.session.completed", session, { daysAgo });
@@ -36,10 +40,22 @@ async function sell(partnerId: string, overrides: Record<string, unknown> = {}, 
 test("a partner's rules: percent and the monthly tier", async () => {
   const nick = await activePartner();
   const admin = await signInAdmin();
-  const rule = (body: Record<string, unknown>) =>
-    service("/api/admin/rules", admin.cookie, { partnerId: nick.partnerId, ...body });
-  expect((await rule({ kind: "percent", percent: 30 })).status).toBe(200);
-  expect((await rule({ kind: "percent", percent: 40, minMonthlySales: 2 })).status).toBe(200);
+  const rule = (percent: number, minMonthlySales: number) =>
+    asUser(admin.cookie)("/api/commission_rules", {
+      method: "POST",
+      body: {
+        partnerId: nick.partnerId,
+        productId: null,
+        kind: "percent",
+        percent,
+        fixedCents: null,
+        currency: null,
+        minMonthlySales,
+        capPerCustomerCents: null,
+      },
+    });
+  await rule(30, 0);
+  await rule(40, 2);
 
   // Both are for this partner and any product, so equally specific: the highest tier reached
   // wins, then the oldest rule. Sales 1 and 2 (0 and 1 before them this month): the 30% rule.
@@ -55,11 +71,18 @@ test("a partner's rules: percent and the monthly tier", async () => {
 test("a capped rule stops paying for a customer once the cap is reached", async () => {
   const nick = await activePartner();
   const admin = await signInAdmin();
-  await service("/api/admin/rules", admin.cookie, {
-    partnerId: nick.partnerId,
-    kind: "percent",
-    percent: 50,
-    capPerCustomerCents: 3000,
+  await asUser(admin.cookie)("/api/commission_rules", {
+    method: "POST",
+    body: {
+      partnerId: nick.partnerId,
+      productId: null,
+      kind: "percent",
+      percent: 50,
+      fixedCents: null,
+      currency: null,
+      minMonthlySales: 0,
+      capPerCustomerCents: 3000,
+    },
   });
   const buyer = { customer_details: { email: "repeat@buyer.test", address: null } };
   const sold = [
@@ -94,15 +117,17 @@ test("the hold period approves old sales, except disputed, flagged, reviewed or 
   const rejectedId = (await salesOf(nick.partnerId)).find(
     (s) => s.stripeSessionId === rejected.id,
   )?.id;
-  expect(
-    (await service("/api/admin/sales/status", admin.cookie, { id: rejectedId, status: "rejected" }))
-      .status,
-  ).toBe(200);
+  await asUser(admin.cookie)("/api/sales/[id]", {
+    method: "PATCH",
+    params: { id: rejectedId ?? "" },
+    body: { status: "rejected" },
+  });
 
   const reviewed = await activePartner("Rita");
-  await service("/api/admin/partners/update", admin.cookie, {
-    id: reviewed.partnerId,
-    reviewRequired: true,
+  await asUser(admin.cookie)("/api/partners/[id]", {
+    method: "PATCH",
+    params: { id: reviewed.partnerId },
+    body: { reviewRequired: true },
   });
   const reviewedSale = await sell(reviewed.partnerId, {}, 31);
 
@@ -120,9 +145,10 @@ test("the hold period approves old sales, except disputed, flagged, reviewed or 
 test("renewals pay the first sale's partner for their recurring months, once per invoice", async () => {
   const nick = await activePartner();
   const admin = await signInAdmin();
-  await service("/api/admin/partners/update", admin.cookie, {
-    id: nick.partnerId,
-    recurringMonths: 2,
+  await asUser(admin.cookie)("/api/partners/[id]", {
+    method: "PATCH",
+    params: { id: nick.partnerId },
+    body: { recurringMonths: 2 },
   });
   const subscription = `sub_${crypto.randomUUID().replaceAll("-", "")}`;
   await sell(
@@ -170,26 +196,17 @@ test("a payout run pays each partner's approved sales and bonuses, through the q
   const admin = await signInAdmin();
   const sold = await sell(nick.partnerId, { amount_total: 5000 }, 31); // 1000 commission
   await runCron(DAILY);
-  expect(
-    (
-      await service("/api/admin/bonus", admin.cookie, {
-        partnerId: nick.partnerId,
-        commissionCents: 2500,
-        bonusNote: "Launch week",
-      })
-    ).status,
-  ).toBe(200);
-  const run = await service<{ queued: number }>("/api/admin/payouts/run", admin.cookie, {
-    partnerId: nick.partnerId,
+  await asUser(admin.cookie)("/api/sales", {
+    method: "POST",
+    body: { partnerId: nick.partnerId, commissionCents: 2500, bonusNote: "Launch week" },
   });
-  expect(run.body.queued).toBe(1);
+  const run = await payOutNow(admin.cookie, nick.partnerId);
+  expect(run.queued).toBe(1);
 
   await eventually(async () => {
-    const payouts = await service<{
-      payouts: { partnerId: string; status: string; amountCents: number }[];
-    }>("/api/admin/payouts", admin.cookie);
+    const { payouts } = await asUser(admin.cookie)("/api/payouts");
     // No Connect account: a manual payout, for an admin to pay.
-    expect(payouts.body.payouts.filter((p) => p.partnerId === nick.partnerId)).toEqual([
+    expect(payouts.filter((p) => p.partnerId === nick.partnerId)).toEqual([
       expect.objectContaining({ status: "manual", amountCents: 3500 }),
     ]);
   });
@@ -198,13 +215,10 @@ test("a payout run pays each partner's approved sales and bonuses, through the q
   expect(paid.find((s) => s.stripeSessionId === sold.id)?.payoutId).toBeTruthy();
 
   // Nothing left: running again pays nothing more.
-  await service("/api/admin/payouts/run", admin.cookie, { partnerId: nick.partnerId });
+  await payOutNow(admin.cookie, nick.partnerId);
   await new Promise((resolve) => setTimeout(resolve, 1500));
-  const after = await service<{ payouts: { partnerId: string }[] }>(
-    "/api/admin/payouts",
-    admin.cookie,
-  );
-  expect(after.body.payouts.filter((p) => p.partnerId === nick.partnerId)).toHaveLength(1);
+  const after = await asUser(admin.cookie)("/api/payouts");
+  expect(after.payouts.filter((p) => p.partnerId === nick.partnerId)).toHaveLength(1);
 });
 
 test("a refund takes its share: off a sale not yet paid, else as a clawback on the next payout", async () => {
@@ -219,17 +233,12 @@ test("a refund takes its share: off a sale not yet paid, else as a clawback on t
       payment_intent: session.payment_intent,
     });
   const payoutsOf = async () =>
-    (
-      await service<{ payouts: { partnerId: string; amountCents: number }[] }>(
-        "/api/admin/payouts",
-        admin.cookie,
-      )
-    ).body.payouts
+    (await asUser(admin.cookie)("/api/payouts")).payouts
       .filter((p) => p.partnerId === nick.partnerId)
       .map((p) => p.amountCents)
       .sort((a, b) => a - b);
   const payOut = async (expected: number[]) => {
-    await service("/api/admin/payouts/run", admin.cookie, { partnerId: nick.partnerId });
+    await payOutNow(admin.cookie, nick.partnerId);
     await eventually(async () => expect(await payoutsOf()).toEqual(expected));
   };
 
@@ -262,7 +271,7 @@ test("a refund takes its share: off a sale not yet paid, else as a clawback on t
   expect(await byId()).toMatchObject({ status: "paid", commissionCents: 700, refundedCents: 4000 });
 
   // Owed less than the clawback: nothing paid. A new sale's 1000 nets 500 at the next payout.
-  await service("/api/admin/payouts/run", admin.cookie, { partnerId: nick.partnerId });
+  await payOutNow(admin.cookie, nick.partnerId);
   await new Promise((resolve) => setTimeout(resolve, 1500));
   expect(await payoutsOf()).toEqual([700]);
   await sell(nick.partnerId, { amount_total: 5000 }, 31);

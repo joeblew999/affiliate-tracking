@@ -1,13 +1,14 @@
-import { applyInput, partners } from "@schema";
+import { partnerApplication, partners } from "@schema";
 import { HTTPException } from "hono/http-exception";
 import { defineHandler } from "void";
-import { db } from "void/db";
-import { requireUser } from "@/access";
+import { db, desc } from "void/db";
+import { requireAdmin, requireUser } from "@/access";
 import { partnerForUser } from "@/partners";
 
 /** The terms a partner accepts when applying; bump when they change. */
 export const TERMS_VERSION = "2026-11-22";
 
+/** Their default link's code, /r/<code>: from their name, made unique. */
 function codeFor(name: string): string {
   const base =
     name
@@ -18,10 +19,17 @@ function codeFor(name: string): string {
   return `${base}-${crypto.randomUUID().slice(0, 4)}`;
 }
 
-// A signed-in host user applies to be a partner. Pending until an admin approves.
-export const POST = defineHandler.withValidator({
-  body: applyInput,
-})(async (c, { body }) => {
+// Every partner, newest first (admins).
+export const GET = defineHandler(async (c) => {
+  requireAdmin(c);
+  return { partners: await db.select().from(partners).orderBy(desc(partners.createdAt)) };
+});
+
+// A signed-in shop user applies to be a partner. Pending until an admin approves.
+export const POST = defineHandler.withValidator({ body: partnerApplication })(async (
+  c,
+  { body },
+) => {
   const user = requireUser(c);
   if (await partnerForUser(user.id)) throw new HTTPException(409, { message: "Already applied" });
   const [partner] = await db

@@ -17,6 +17,11 @@ import {
 
 export { HOST_TOKEN_HEADER, REF_COOKIE };
 
+/** What the host sends when a user signs up (its queue message too). */
+export type Signup = z.input<typeof SignupInput>;
+/** What the service answers at checkout: the metadata and discount to add. */
+export type Checkout = z.output<typeof CheckoutOutput>;
+
 /** The referral cookie's value from a Cookie header, or null. Pass only this, never the whole header. */
 export function referralFrom(cookieHeader: string | null | undefined): string | null {
   for (const part of (cookieHeader ?? "").split(";")) {

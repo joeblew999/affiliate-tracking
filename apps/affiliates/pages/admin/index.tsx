@@ -175,9 +175,11 @@ function Partners({ partners }: Allowed) {
     }[];
   } | null>(null);
   const status = (id: string, value: "active" | "suspended") =>
-    run(() => fetch("/api/admin/partners/status", { method: "POST", body: { id, status: value } }));
+    run(() =>
+      fetch("/api/partners/[id]", { method: "PATCH", params: { id }, body: { status: value } }),
+    );
   const update = (id: string, body: { commissionPct?: number; reviewRequired?: boolean }) =>
-    run(() => fetch("/api/admin/partners/update", { method: "POST", body: { id, ...body } }));
+    run(() => fetch("/api/partners/[id]", { method: "PATCH", params: { id }, body }));
   return (
     <Section
       title="Partners"
@@ -268,8 +270,8 @@ function Partners({ partners }: Allowed) {
                       disabled={busy}
                       onClick={() =>
                         void run(async () => {
-                          const { links } = await fetch("/api/admin/partners/links", {
-                            query: { partnerId: p.id },
+                          const { links } = await fetch("/api/partners/[id]/links", {
+                            params: { id: p.id },
                           });
                           setLinksFor({ name: p.name ?? p.email, links });
                         })
@@ -314,7 +316,7 @@ function Partners({ partners }: Allowed) {
 function Sales({ sales }: Allowed) {
   const { run, busy, feedback } = useAction();
   const decide = (id: string, status: "approved" | "rejected" | "pending") =>
-    run(() => fetch("/api/admin/sales/status", { method: "POST", body: { id, status } }));
+    run(() => fetch("/api/sales/[id]", { method: "PATCH", params: { id }, body: { status } }));
   return (
     <Section
       title="Sales"
@@ -424,7 +426,7 @@ function Payouts({ payouts }: Allowed) {
         disabled={busy}
         onClick={() =>
           void run(async () => {
-            const { queued } = await fetch("/api/admin/payouts/run", { method: "POST", body: {} });
+            const { queued } = await fetch("/api/payouts", { method: "POST", body: {} });
             return queued;
           }, "Payouts queued. They appear here as each finishes.")
         }
@@ -500,7 +502,7 @@ function Rules({ rules, partners, payoutCurrency }: Allowed) {
             ...common,
           };
     void run(async () => {
-      await fetch("/api/admin/rules", { method: "POST", body });
+      await fetch("/api/commission_rules", { method: "POST", body });
       formEl.reset();
     }, "Rule added.");
   }
@@ -509,7 +511,7 @@ function Rules({ rules, partners, payoutCurrency }: Allowed) {
     const form = new FormData(event.currentTarget);
     const formEl = event.currentTarget;
     void run(async () => {
-      await fetch("/api/admin/bonus", {
+      await fetch("/api/sales", {
         method: "POST",
         body: {
           partnerId: field(form, "partnerId"),
@@ -607,9 +609,10 @@ function Rules({ rules, partners, payoutCurrency }: Allowed) {
                       onClick={() =>
                         void run(
                           () =>
-                            fetch("/api/admin/rules/archive", {
-                              method: "POST",
-                              body: { id: r.id },
+                            fetch("/api/commission_rules/[id]", {
+                              method: "PATCH",
+                              params: { id: r.id },
+                              body: { active: false },
                             }),
                           "Rule archived.",
                         )

@@ -1,15 +1,12 @@
 // New users, passed to the affiliate service (auth.ts sends them). Retried when the call fails.
 import { defineQueue } from "void";
 import { env as vars } from "void/env";
-import { affiliates } from "affiliates/client";
+import { affiliates, type Signup } from "affiliates/client";
 
-interface Signup {
-  userId: string;
-  /** The referral cookie's value at sign-up, or null. */
-  ref: string | null;
-}
+/** A new user: the affiliate service's sign-up call, as its contract defines it. */
+type Message = Signup;
 
-export default defineQueue<Signup>(async (batch, env) => {
+export default defineQueue<Message>(async (batch, env) => {
   const service = affiliates(env.AFFILIATES, vars.AFFILIATES_HOST_TOKEN);
   for (const msg of batch.messages) {
     await service.signup(msg.body);

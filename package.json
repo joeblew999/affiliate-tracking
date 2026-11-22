@@ -8,7 +8,8 @@
     "stripe": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "void": "catalog:"
   },
   "packageManager": "pnpm@12.18.0"
 }

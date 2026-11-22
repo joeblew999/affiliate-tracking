@@ -1,6 +1,8 @@
 import { readFileSync } from "node:fs";
+import { FetchError, fetch as voidFetch } from "void/client";
+import { HOST_TOKEN_HEADER } from "../../apps/affiliates/client";
 import Stripe from "stripe";
-import { expect, inject } from "vite-plus/test";
+import { inject } from "vite-plus/test";
 import { AFFILIATES, SHOP } from "./setup";
 
 export interface Account {
@@ -49,41 +51,41 @@ export async function signInAdmin(): Promise<Account> {
   return account(await auth("sign-up", { email, password, name: "Admin" }));
 }
 
-/** JSON from the affiliate service, as the given user. */
-export async function service<T>(
-  path: string,
-  cookie: string,
-  body?: unknown,
-): Promise<{ status: number; body: T }> {
-  const res = await fetch(`${AFFILIATES}${path}`, {
-    method: body === undefined ? "GET" : "POST",
-    headers: { cookie, ...(body === undefined ? {} : { "content-type": "application/json" }) },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  return { status: res.status, body: (await res.json()) as T };
+/**
+ * Void's typed fetch (void/client) to the affiliate service, as the user this cookie signs in: the
+ * path, params, body and answer are the service's own routes' types (e2e/tsconfig.json).
+ */
+export function asUser(cookie: string): typeof voidFetch {
+  return withHeaders({ cookie });
 }
 
-/** A host-only call, with the shop's token. */
-export async function host<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(`${AFFILIATES}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json", "x-affiliates-host-token": inject("hostToken") },
-    body: JSON.stringify(body),
-  });
-  expect(res.status).toBe(200);
-  return (await res.json()) as T;
+/** The shop's own calls to the service (/api/host/*), with its token. */
+export function asShop(): typeof voidFetch {
+  return withHeaders({ [HOST_TOKEN_HEADER]: inject("hostToken") });
 }
 
-interface PartnerMe {
-  partner: {
-    id: string;
-    code: string;
-    status: string;
-    link: string;
-    clicks: number;
-    sales: number;
-    commissionCents: number;
-  } | null;
+function withHeaders(headers: Record<string, string>): typeof voidFetch {
+  const call = (path: string, options: { headers?: Record<string, string> } = {}) =>
+    voidFetch(
+      path as never,
+      {
+        ...options,
+        baseURL: AFFILIATES,
+        headers: { ...headers, ...options.headers },
+      } as never,
+    );
+  return call as typeof voidFetch;
+}
+
+/** A call's HTTP status: 200 when it answered, else the status it failed with. */
+export async function statusOf(call: Promise<unknown>): Promise<number> {
+  try {
+    await call;
+    return 200;
+  } catch (err) {
+    if (err instanceof FetchError && err.status) return err.status;
+    throw err;
+  }
 }
 
 /** A shop user who applied and an admin approved: an active partner. */
@@ -91,27 +93,24 @@ export async function activePartner(
   name = "Nick",
 ): Promise<Account & { partnerId: string; code: string }> {
   const user = await signUp(name);
-  const applied = await service<{ id: string; code: string }>("/api/partner/apply", user.cookie, {
-    name,
-    acceptTerms: true,
+  const applied = await asUser(user.cookie)("/api/partners", {
+    method: "POST",
+    body: { name, acceptTerms: true },
   });
-  expect(applied.status).toBe(200);
   const admin = await signInAdmin();
-  expect(
-    (
-      await service("/api/admin/partners/status", admin.cookie, {
-        id: applied.body.id,
-        status: "active",
-      })
-    ).status,
-  ).toBe(200);
-  return { ...user, partnerId: applied.body.id, code: applied.body.code };
+  await asUser(admin.cookie)("/api/partners/[id]", {
+    method: "PATCH",
+    params: { id: applied.id },
+    body: { status: "active" },
+  });
+  return { ...user, partnerId: applied.id, code: applied.code };
 }
 
-export async function partnerMe(cookie: string): Promise<NonNullable<PartnerMe["partner"]>> {
-  const me = await service<PartnerMe>("/api/partner/me", cookie);
-  if (!me.body.partner) throw new Error("not a partner");
-  return me.body.partner;
+/** The signed-in user's partner record (GET /api/partners/me). */
+export async function partnerMe(cookie: string) {
+  const { partner } = await asUser(cookie)("/api/partners/me");
+  if (!partner) throw new Error("not a partner");
+  return partner;
 }
 
 /**
@@ -195,26 +194,9 @@ export async function runCron(cron: string): Promise<void> {
   if (!res.ok) throw new Error(`cron ${cron}: ${res.status} ${await res.text()}`);
 }
 
-export interface Sale {
-  id: string;
-  stripeSessionId: string | null;
-  stripeInvoiceId: string | null;
-  partnerId: string;
-  kind: string;
-  status: string;
-  commissionCents: number;
-  refundedCents: number;
-  refundOf: string | null;
-  fraudReason: string | null;
-  payoutId: string | null;
-}
-
 /** The partner's sales, as an admin sees them, newest first. */
-export async function salesOf(partnerId: string): Promise<Sale[]> {
+export async function salesOf(partnerId: string) {
   const admin = await signInAdmin();
-  const res = await service<{ sales: Sale[] }>(
-    `/api/admin/sales?partnerId=${partnerId}`,
-    admin.cookie,
-  );
-  return res.body.sales;
+  const { sales } = await asUser(admin.cookie)("/api/sales", { query: { partnerId } });
+  return sales;
 }

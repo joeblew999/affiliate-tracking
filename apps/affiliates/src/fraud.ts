@@ -1,10 +1,10 @@
 // A sale looks like a partner buying through their own referral when the buyer's email is the
 // partner's, or the buyer checked out from an IP the partner used this service from. Flagged sales
 // stay pending for an admin; the hold period never approves them.
-import { partnerIpHashes } from "@schema";
+import { partnerIpHashes, type sales } from "@schema";
 import { db, eq } from "void/db";
 
-type FraudReason = "self_email" | "self_ip";
+type FraudReason = NonNullable<(typeof sales.$inferSelect)["fraudReason"]>;
 
 export async function selfReferralReason(
   partner: { id: string; email: string },

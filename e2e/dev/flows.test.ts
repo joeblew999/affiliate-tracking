@@ -4,21 +4,17 @@ import { expect, test } from "vite-plus/test";
 import {
   activePartner,
   eventually,
-  host,
+  asShop,
   paidSession,
   partnerMe,
   salesOf,
-  service,
+  asUser,
+  statusOf,
   signInAdmin,
   signUp,
   stripeEvent,
 } from "./helpers";
 import { AFFILIATES } from "./setup";
-
-interface Checkout {
-  metadata: Record<string, string>;
-  promotionCode: string | null;
-}
 
 /** Follow a referral link as a browser would: the redirect and the referral cookie it sets. */
 async function follow(path: string, userAgent = "Mozilla/5.0 (Macintosh) Safari/605.1.15") {
@@ -36,32 +32,24 @@ async function follow(path: string, userAgent = "Mozilla/5.0 (Macintosh) Safari/
 
 test("applying makes a pending partner; only an admin can approve", async () => {
   const user = await signUp("Pat");
-  const applied = await service<{ id: string; status: string }>("/api/partner/apply", user.cookie, {
-    name: "Pat",
-    acceptTerms: true,
-  });
-  expect(applied.body.status).toBe("pending");
-  expect(
-    (await service("/api/partner/apply", user.cookie, { name: "Pat", acceptTerms: true })).status,
-  ).toBe(409);
-  expect(
-    (
-      await service("/api/admin/partners/status", user.cookie, {
-        id: applied.body.id,
-        status: "active",
-      })
-    ).status,
-  ).toBe(403);
-  expect((await service("/api/admin/partners", "")).status).toBe(401);
+  const apply = () =>
+    asUser(user.cookie)("/api/partners", {
+      method: "POST",
+      body: { name: "Pat", acceptTerms: true },
+    });
+  const applied = await apply();
+  expect(applied.status).toBe("pending");
+  expect(await statusOf(apply())).toBe(409);
+  const approve = (cookie: string) =>
+    asUser(cookie)("/api/partners/[id]", {
+      method: "PATCH",
+      params: { id: applied.id },
+      body: { status: "active" },
+    });
+  expect(await statusOf(approve(user.cookie))).toBe(403);
+  expect(await statusOf(asUser("")("/api/partners"))).toBe(401);
   const admin = await signInAdmin();
-  expect(
-    (
-      await service("/api/admin/partners/status", admin.cookie, {
-        id: applied.body.id,
-        status: "active",
-      })
-    ).status,
-  ).toBe(200);
+  expect(await statusOf(approve(admin.cookie))).toBe(200);
   expect((await partnerMe(user.cookie)).status).toBe("active");
 });
 
@@ -77,23 +65,19 @@ test("a referral link sends the visitor to the shop, sets the cookie and counts 
 
 test("a short link counts its own clicks and sales", async () => {
   const nick = await activePartner();
-  const made = await service<{ link: { id: string; slug: string } }>(
-    "/api/partner/links",
-    nick.cookie,
-    { destination: "/pricing", campaign: "Newsletter" },
-  );
-  const followed = await follow(`/r/${made.body.link.slug}`);
+  const made = await asUser(nick.cookie)("/api/links", {
+    method: "POST",
+    body: { destination: "/pricing", campaign: "Newsletter" },
+  });
+  const followed = await follow(`/r/${made.link.slug}`);
   expect(followed.location).toBe("http://localhost:5173/pricing");
   await stripeEvent(
     "checkout.session.completed",
-    paidSession({ affiliate_partner_id: nick.partnerId, affiliate_link_id: made.body.link.id }),
+    paidSession({ affiliate_partner_id: nick.partnerId, affiliate_link_id: made.link.id }),
   );
   await eventually(async () => {
-    const { body } = await service<{ links: { id: string; clicks: number; sales: number }[] }>(
-      "/api/partner/links",
-      nick.cookie,
-    );
-    expect(body.links.find((link) => link.id === made.body.link.id)).toMatchObject({
+    const { links } = await asUser(nick.cookie)("/api/links");
+    expect(links.find((link) => link.id === made.link.id)).toMatchObject({
       clicks: 1,
       sales: 1,
     });
@@ -106,11 +90,14 @@ test("a user who signs up with the referral cookie stays the partner's at checko
   const buyer = await signUp("Buyer", cookie ?? "");
   // The shop tells the service through a queue (apps/shop/queues/affiliate-signups.ts).
   await eventually(async () => {
-    const checkout = await host<Checkout>("/api/host/checkout", {
-      userId: buyer.id,
-      ref: null,
-      promoCode: null,
-      ip: null,
+    const checkout = await asShop()("/api/host/checkout", {
+      method: "POST",
+      body: {
+        userId: buyer.id,
+        ref: null,
+        promoCode: null,
+        ip: null,
+      },
     });
     expect(checkout.metadata).toMatchObject({
       affiliate_partner_id: nick.partnerId,
@@ -122,22 +109,28 @@ test("a user who signs up with the referral cookie stays the partner's at checko
 
 test("checkout without a referral uses the cookie, and nothing without either", async () => {
   const nick = await activePartner();
-  const viaCookie = await host<Checkout>("/api/host/checkout", {
-    userId: null,
-    ref: nick.partnerId,
-    promoCode: null,
-    ip: "203.0.113.9",
+  const viaCookie = await asShop()("/api/host/checkout", {
+    method: "POST",
+    body: {
+      userId: null,
+      ref: nick.partnerId,
+      promoCode: null,
+      ip: "203.0.113.9",
+    },
   });
   expect(viaCookie.metadata).toMatchObject({
     affiliate_partner_id: nick.partnerId,
     affiliate_source: "cookie",
   });
   expect(viaCookie.metadata.affiliate_buyer_ip_hash).toMatch(/^[0-9a-f]{64}$/);
-  const nothing = await host<Checkout>("/api/host/checkout", {
-    userId: null,
-    ref: "made-up",
-    promoCode: null,
-    ip: null,
+  const nothing = await asShop()("/api/host/checkout", {
+    method: "POST",
+    body: {
+      userId: null,
+      ref: "made-up",
+      promoCode: null,
+      ip: null,
+    },
   });
   expect(nothing).toEqual({ metadata: {}, promotionCode: null });
 });
@@ -179,11 +172,8 @@ test("a refund or dispute in full marks the sale refunded, even when it arrives 
   await stripeEvent("charge.dispute.created", dispute);
   await stripeEvent("checkout.session.completed", early);
 
-  const all = await service<{ sales: { stripeSessionId: string; status: string }[] }>(
-    "/api/admin/sales",
-    admin.cookie,
-  );
-  const status = (id: unknown) => all.body.sales.find((s) => s.stripeSessionId === id)?.status;
+  const { sales } = await asUser(admin.cookie)("/api/sales", { query: {} });
+  const status = (id: unknown) => sales.find((s) => s.stripeSessionId === id)?.status;
   expect([status(sale.id), status(early.id)]).toEqual(["refunded", "refunded"]);
   expect((await partnerMe(nick.cookie)).sales).toBe(0);
 
@@ -201,28 +191,27 @@ test("a partner buying for themselves is flagged", async () => {
     { customer_details: { email: nick.email.toUpperCase(), address: null } },
   );
   await stripeEvent("checkout.session.completed", session);
-  const all = await service<{ sales: { stripeSessionId: string; fraudReason: string | null }[] }>(
-    "/api/admin/sales",
-    admin.cookie,
-  );
-  expect(all.body.sales.find((s) => s.stripeSessionId === session.id)?.fraudReason).toBe(
-    "self_email",
-  );
+  const { sales } = await asUser(admin.cookie)("/api/sales", { query: {} });
+  expect(sales.find((s) => s.stripeSessionId === session.id)?.fraudReason).toBe("self_email");
 });
 
 test("a suspended partner's referrals and links stop counting", async () => {
   const nick = await activePartner();
   const admin = await signInAdmin();
-  await service("/api/admin/partners/status", admin.cookie, {
-    id: nick.partnerId,
-    status: "suspended",
+  await asUser(admin.cookie)("/api/partners/[id]", {
+    method: "PATCH",
+    params: { id: nick.partnerId },
+    body: { status: "suspended" },
   });
   expect((await follow(`/r/${nick.code}`)).cookie).toBeNull();
-  const checkout = await host<Checkout>("/api/host/checkout", {
-    userId: null,
-    ref: nick.partnerId,
-    promoCode: null,
-    ip: null,
+  const checkout = await asShop()("/api/host/checkout", {
+    method: "POST",
+    body: {
+      userId: null,
+      ref: nick.partnerId,
+      promoCode: null,
+      ip: null,
+    },
   });
   expect(checkout.metadata).toEqual({});
   const session = paidSession({ affiliate_partner_id: nick.partnerId });

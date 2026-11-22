@@ -1,7 +1,7 @@
 // Partners' short links: /r/<slug> to a page on the host's site (routes/r/[slug].ts), each with its
 // own clicks and sales. Up to 100 active per partner. A destination is always a path on the host's
 // site, never another site, so a link can't be used as an open redirect.
-import { clicks, linkInput, links, sales } from "@schema";
+import { clicks, links, newLink, sales } from "@schema";
 import { HTTPException } from "hono/http-exception";
 import { and, count, db, desc, eq, isNotNull, ne, sum } from "void/db";
 import { z } from "zod";
@@ -65,7 +65,7 @@ export async function linksOf(partnerId: string, origin: string) {
 
 export async function createLink(
   partner: { id: string; code: string },
-  input: z.output<typeof linkInput>,
+  input: z.output<typeof newLink>,
 ) {
   const slug = (input.slug ?? `${partner.code}-${crypto.randomUUID().slice(0, 4)}`).toLowerCase();
   const [active] = await db

@@ -14,7 +14,15 @@ plan is `plans/2026-11-22-01-void-service.md`.
 
 - `apps/affiliates`: the affiliate service. Partners apply, admins approve; referral links and short
   links; clicks, signups and sales; commission rules and bonuses; renewals; the hold period; payouts
-  through Stripe Connect; the partner's and the admin's pages.
+  through Stripe Connect; the partner's and the admin's pages. Laid out as `void gen` lays out a
+  Void app:
+  - each table in its own `db/schema/<table>.ts`, with the request validators derived from it
+    (`void/drizzle-zod`);
+  - an API route per table, `routes/api/<table>/index.ts` (list, create) and `[id].ts` (change one);
+  - custom SQL in its own `void gen migration`.
+
+  The pages and the tests call those routes through Void's typed `fetch`, so a route's path, body and
+  answer come from the route itself.
 - `apps/shop`: an example host. Void's Better Auth with its admin and Stripe plugins, wired to the
   service. It shows what a real host does, and the tests run against it.
 - `e2e/`: the tests, against both apps running for real.
@@ -116,7 +124,8 @@ demo:production` replaces everything in the deployed databases with it (`void db
 
 No fakes: the tests run against both apps with their real local database, queues and sign-in.
 
-- `vp run test:dev`: the flows, the money and the pages in a browser (`e2e/dev/`). Uses your
+- `vp run test:dev`: the flows, the money and the pages in a browser (`e2e/dev/`). They type-check
+  against the service (`e2e/tsconfig.json`) and call it with Void's typed `fetch`. Uses your
   `vp run dev` if it's running, else starts one. Needs Chromium once: `vp run install:browser`.
   Cached by Vite+: with no file it reads changed, it replays the last result at once. While working
   on one thing, run just its file: `vp test run --project dev e2e/dev/money.test.ts`.

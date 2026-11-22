@@ -95,7 +95,7 @@ function Apply() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     void run(() =>
-      fetch("/api/partner/apply", {
+      fetch("/api/partners", {
         method: "POST",
         body: {
           name: field(form, "name"),
@@ -151,7 +151,7 @@ function Dashboard({ partner, links, stats, earnings, program }: Props) {
     const form = new FormData(event.currentTarget);
     const formEl = event.currentTarget;
     void run(async () => {
-      await fetch("/api/partner/links", {
+      await fetch("/api/links", {
         method: "POST",
         body: {
           destination: field(form, "destination") || "/",
@@ -199,7 +199,7 @@ function Dashboard({ partner, links, stats, earnings, program }: Props) {
               disabled={busy}
               onClick={() =>
                 void run(async () => {
-                  const { url } = await fetch("/api/partner/connect", { method: "POST" });
+                  const { url } = await fetch("/api/partners/connect", { method: "POST" });
                   window.location.href = url;
                 })
               }
@@ -279,9 +279,10 @@ function Dashboard({ partner, links, stats, earnings, program }: Props) {
                         disabled={busy}
                         onClick={() =>
                           void run(() =>
-                            fetch("/api/partner/links/archive", {
-                              method: "POST",
-                              body: { id: link.id },
+                            fetch("/api/links/[id]", {
+                              method: "PATCH",
+                              params: { id: link.id },
+                              body: { status: "archived" },
                             }),
                           )
                         }
