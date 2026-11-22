@@ -8,5 +8,8 @@ export default defineConfig({
     services: [{ binding: "AFFILIATES", service: "affiliates" }],
     // Deployed at (Cloudflare manages its DNS record and certificate):
     routes: [{ pattern: "shop.ubuntusoftware.net", custom_domain: true }],
+    // Only there: no workers.dev address and no preview URLs (as set in Cloudflare).
+    workers_dev: false,
+    preview_urls: false,
   },
 });

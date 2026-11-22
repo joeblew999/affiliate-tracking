@@ -13,7 +13,9 @@
         "pattern": "shop.ubuntusoftware.net",
         "custom_domain": true
       }
-    ]
+    ],
+    "workers_dev": false,
+    "preview_urls": false
   },
   "resolved": {
     "name": "shop",
@@ -23,13 +25,13 @@
         "service": "affiliates"
       }
     ],
-    "compatibility_date": "2026-02-24",
     "routes": [
       {
         "pattern": "shop.ubuntusoftware.net",
         "custom_domain": true
       }
     ],
+    "compatibility_date": "2026-02-24",
     "account_id": "7384af54e33b8a54ff240371ea368440",
     "d1_databases": [
       {
@@ -38,7 +40,9 @@
         "database_id": "ff970b5b-47a1-4176-b6b1-ddbb57699b8a",
         "migrations_dir": "./db/migrations"
       }
-    ]
+    ],
+    "workers_dev": false,
+    "preview_urls": false
   },
-  "text": "{\n  \"name\": \"shop\",\n  \"services\": [\n    {\n      \"binding\": \"AFFILIATES\",\n      \"service\": \"affiliates\"\n    }\n  ],\n  \"compatibility_date\": \"2026-02-24\",\n  \"routes\": [\n    {\n      \"pattern\": \"shop.ubuntusoftware.net\",\n      \"custom_domain\": true\n    }\n  ],\n  \"account_id\": \"7384af54e33b8a54ff240371ea368440\",\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"shop-db\",\n      \"database_id\": \"ff970b5b-47a1-4176-b6b1-ddbb57699b8a\",\n      \"migrations_dir\": \"./db/migrations\"\n    }\n  ]\n}\n"
+  "text": "{\n  \"name\": \"shop\",\n  \"services\": [\n    {\n      \"binding\": \"AFFILIATES\",\n      \"service\": \"affiliates\"\n    }\n  ],\n  \"routes\": [\n    {\n      \"pattern\": \"shop.ubuntusoftware.net\",\n      \"custom_domain\": true\n    }\n  ],\n  \"compatibility_date\": \"2026-02-24\",\n  \"account_id\": \"7384af54e33b8a54ff240371ea368440\",\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"shop-db\",\n      \"database_id\": \"ff970b5b-47a1-4176-b6b1-ddbb57699b8a\",\n      \"migrations_dir\": \"./db/migrations\"\n    }\n  ],\n  \"workers_dev\": false,\n  \"preview_urls\": false\n}\n"
 }

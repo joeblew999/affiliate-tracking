@@ -12,5 +12,8 @@ export default defineConfig({
     services: [{ binding: "HOST", service: "shop" }],
     // Deployed at: a subdomain of the shop's, so they share its cookies (README, "Two addresses").
     routes: [{ pattern: "affiliates.shop.ubuntusoftware.net", custom_domain: true }],
+    // Only there: no workers.dev address and no preview URLs (as set in Cloudflare).
+    workers_dev: false,
+    preview_urls: false,
   },
 });
