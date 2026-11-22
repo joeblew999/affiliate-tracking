@@ -36,6 +36,8 @@ export interface AffiliateEnv {
     AFFILIATE_RECURRING_MONTHS?: string;
     /** Smallest amount owed (minor units) that is paid out; less waits for a later run. */
     AFFILIATE_MIN_PAYOUT_CENTS?: string;
+    /** Optional Workers Analytics Engine binding; every click is also written there. */
+    AFFILIATE_ANALYTICS?: { writeDataPoint(point: { indexes?: string[]; blobs?: string[]; doubles?: number[] }): void };
     AFFILIATE_PUBLIC_LIMITER?: {
         limit(options: { key: string }): Promise<{ success: boolean }>;
     };

@@ -53,6 +53,7 @@ pnpm wrangler d1 migrations apply DB --remote
 # pnpm wrangler d1 execute DB --file=migrations/0011_payout_currency.sql --remote
 # pnpm wrangler d1 execute DB --file=migrations/0012_commission_rules.sql --remote
 # pnpm wrangler d1 execute DB --file=migrations/0013_affiliate_user.sql --remote
+# pnpm wrangler d1 execute DB --file=migrations/0014_click_details.sql --remote
 
 # 3. Set secrets
 pnpm wrangler secret put AFFILIATE_SESSION_SECRET
@@ -368,6 +369,7 @@ Built in, nothing to configure:
   (`self_ip`). Only salted IP hashes are stored. Flagged sales stay pending
   for an admin, show the reason in the admin dashboard, and are never
   approved by the hold period.
+
 ### Short links (`handleAffiliateLink`)
 
 Besides `?ref=code`, each affiliate can have up to 100 short links, each with
@@ -407,6 +409,7 @@ POST /api/affiliate/link-archive {"id":"<link id>"}
 In the admin dashboard, the **Links** button on each partner opens the same list
 and form. Admins can also do the same through `GET /api/admin/links?affiliate_id=1`,
 `POST /api/admin/links {"affiliate_id":1, ...}` and `POST /api/admin/link-archive`.
+
 ### Signup referrals (`recordSignupReferral`)
 
 If your site has user accounts, record the referral when the user signs up.
@@ -451,6 +454,7 @@ The rules:
 
 Referrals live in the `referrals` table (one row per user, UUID ids); each
 conversion records its `user_id`.
+
 ### Payout currency
 
 Stripe transfers come out of your platform balance, which Stripe holds in
@@ -465,6 +469,7 @@ proportion. Each conversion keeps `payout_cents`, `payout_currency` and
 be traced back to Stripe. A commission that can't be converted (unknown
 currency, no settled charge, or a balance in another currency) stops the run
 with HTTP 409 for reconciliation, as before; nothing is guessed.
+
 ### Commission rules, bonuses and minimum payout
 
 Without rules every affiliate earns their `commission_pct` on the whole order,
@@ -510,6 +515,7 @@ them, and adds bonuses; bonus lines show in Conversions with their note.
 
 Set `AFFILIATE_MIN_PAYOUT_CENTS` (e.g. `"5000"`) to hold back affiliates who are
 owed less; their commissions roll over to a later run.
+
 ### Using your own sign-in (Better Auth and others)
 
 If your site already signs people in, pass that to `handleAffiliateApi`
@@ -538,6 +544,38 @@ const affRes = await handleAffiliateApi(request, env, ctx, { auth: {
   partners, and the `x-admin-token` header for scripts. Without `auth`
   nothing changes.
 - If a hook throws, the request gets 503 and the error is only logged.
+
+### Performance: click analytics and the funnel
+
+Each click now records its country (Cloudflare's `request.cf.country`), a
+device class (mobile, tablet, desktop) and the referring site's host, never
+the full referrer URL. The admin dashboard's **Performance** tab shows clicks
+per day, top countries, devices and referring sites, and the funnel for each
+partner: clicks, signups, customers, sales, revenue, and commission pending,
+approved and paid (per currency) for the last 7, 30, 90 or 365 days.
+
+```bash
+GET /api/admin/stats?days=30                # every partner (admin)
+GET /api/admin/stats?days=30&affiliate_id=1
+GET /api/affiliate/stats?days=30            # the signed-in partner's own numbers
+```
+
+`examples/partner-stats.html` is a ready page showing a signed-in partner
+their own funnel, clicks per day and where their clicks come from.
+
+The charts are read from D1, so they need no API token. Signups appear when
+signup referrals (`referrals` table) are in use, and per-link numbers when
+short links (`links` table) are; otherwise those fields are `null` / absent.
+To also send every click to Workers Analytics Engine for your own analysis,
+add a binding named `AFFILIATE_ANALYTICS`:
+
+```toml
+[[analytics_engine_datasets]]
+binding = "AFFILIATE_ANALYTICS"
+dataset = "affiliate_clicks"
+```
+
+Each data point: index = affiliate id; blobs = code, country, device, referrer host.
 
 ### Partner access and onboarding
 
@@ -574,6 +612,10 @@ context to the helpers directly.
 | `src/route.js` | Route table + `handleAffiliateApi` |
 | `src/auth.js` | Pluggable sign-in for partners and admins |
 | `src/ref.js` | Ref middleware (`applyAffiliateRef`) + cookie parsing |
+| `src/analytics.js` | Click details, funnel and chart queries |
+| `examples/partner-stats.html` | Partner page: funnel, clicks per day, countries, devices, referring sites |
+| `functions/api/admin/stats.js` | Funnel and charts for admins |
+| `functions/api/affiliate/stats.js` | Funnel and charts for the signed-in partner |
 | `src/checkout.js` | Checkout attribution (`attachAffiliateAttribution`) |
 | `src/links.js` | Short links (`handleAffiliateLink`) |
 | `examples/partner-links.html` | Partner page: create, list and archive links |

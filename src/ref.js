@@ -16,6 +16,7 @@ import { hostCookieName } from './cookie.js';
 import { requestIpHash } from './ip.js';
 import { isAutomatedRequest, CLICK_WINDOW_MS } from './fraud.js';
 import { affiliateLink } from './links.js';
+import { clickDetails, writeClickEvent } from './analytics.js';
 
 export const DEFAULT_REF_COOKIE = 'affiliate_ref';
 const REF_COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
@@ -105,7 +106,7 @@ export async function applyAffiliateRef(request, env, respond, ctx) {
     // link (page reloads, multi-page browsing) is not a second click.
     const existing = readAffiliateRef(request, env);
     if (existing !== aff.code || (link && readAffiliateLink(request, env) !== link.id)) {
-        const click = recordClick(request, env, aff.id, link?.id || null);
+        const click = recordClick(request, env, aff, link?.id || null);
         if (ctx?.waitUntil) ctx.waitUntil(click);
         else await click;
     }
@@ -140,17 +141,22 @@ export async function applyAffiliateRef(request, env, respond, ctx) {
     return new Response(assetRes.body, { status: assetRes.status, headers });
 }
 
-async function recordClick(request, env, affiliateId, linkId) {
+async function recordClick(request, env, aff, linkId) {
     try {
         const ipHash = await requestIpHash(request, env);
+        const details = clickDetails(request);
         const now = Date.now();
         // One click per IP per affiliate per window; a request without an IP
         // can't be deduplicated and is counted.
-        await env.DB.prepare(`INSERT INTO clicks (affiliate_id, ip_hash, created_at, link_id)
-            SELECT ?1, ?2, ?3, ?5
+        const result = await env.DB.prepare(`INSERT INTO clicks
+            (affiliate_id, ip_hash, created_at, link_id, country, device, referrer_host)
+            SELECT ?1, ?2, ?3, ?5, ?6, ?7, ?8
             WHERE ?2 IS NULL OR NOT EXISTS (
                 SELECT 1 FROM clicks WHERE affiliate_id=?1 AND ip_hash=?2 AND created_at > ?4)
-        `).bind(affiliateId, ipHash, now, now - CLICK_WINDOW_MS, linkId).run();
+        `).bind(aff.id, ipHash, now, now - CLICK_WINDOW_MS, linkId,
+            details.country, details.device, details.referrer_host).run();
+        // Analytics Engine gets the same clicks the table counts.
+        if (result?.meta?.changes !== 0) writeClickEvent(env, { affiliateId: aff.id, code: aff.code, linkId, details });
     } catch (err) {
         console.error('Affiliate click insert failed:', err.message);
     }
