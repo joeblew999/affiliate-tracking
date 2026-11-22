@@ -97,7 +97,9 @@ the shop yourself: as `admin@example.test` to be an admin (`ADMIN_EMAILS` in `ap
 as anyone else to apply as a partner at http://localhost:5174.
 
 The repo's tasks, each with a comment saying what it does, are in `vite.config.ts` (`run.tasks`);
-run one with `vp run <task>`. `vp check` formats, lints and type-checks.
+run one with `vp run <task>`. `vp check` formats, lints and type-checks each file; `vp run typecheck` checks each TypeScript
+project whole (both apps, the tests, the root scripts), which catches what only shows up in one of
+them.
 
 ## Demo data
 
@@ -136,7 +138,7 @@ No fakes: the tests run against both apps with their real local database, queues
   `STRIPE_TEST_SECRET_KEY` (a test-mode key) in the shell, with `vp run dev` stopped. On GitHub:
   Actions → "Stripe end-to-end" → Run workflow, with that key as a repository secret.
 
-CI (`.github/workflows/ci.yml`) runs `vp check` and `vp run test:dev`, as above.
+CI (`.github/workflows/ci.yml`) runs `vp check`, `vp run typecheck` and `vp run test:dev`, as above.
 
 ## Deploy
 

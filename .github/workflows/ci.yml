@@ -1,4 +1,4 @@
-# The same commands as on your machine (README, "Develop"): format, lint and types; then both apps
+# The same commands as on your machine (README, "Develop"): format and lint, and every TypeScript project type-checked whole; then both apps
 # running with their real local database, queues and sign-in, and the tests against them, browser
 # tests included.
 name: CI
@@ -27,5 +27,6 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: vp check
+      - run: vp run typecheck
       - run: vp run install:browser
       - run: vp run test:dev

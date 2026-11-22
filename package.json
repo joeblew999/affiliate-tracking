@@ -9,6 +9,7 @@
     "devalue": "catalog:",
     "playwright": "1.65.0",
     "stripe": "catalog:",
+    "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",
     "vitest": "catalog:",

@@ -21,6 +21,22 @@ export default defineConfig({
       // The same demo data in both deployed apps, replacing everything in their databases
       // (scripts/demo-production.ts). For the demo deployment only; needs `void cloudflare login`.
       "demo:production": { command: "vpx scripts/demo-production.ts", cache: false },
+      // Each TypeScript project checked whole, as the editor sees it: both apps, the tests (which
+      // compile the service's code with their own config) and the root scripts. `vp check` checks
+      // each file once, in the first project that has it, so it can't see a file that means
+      // something else in another project; this does.
+      typecheck: {
+        command: [
+          "tsc --noEmit -p apps/affiliates",
+          "tsc --noEmit -p apps/shop",
+          "tsc --noEmit -p e2e",
+          "tsc --noEmit -p .",
+        ],
+        cache: {
+          input: [{ auto: true }, "!**/.wrangler/**", "!**/node_modules/.cache/**"],
+          output: [],
+        },
+      },
       // Both apps: the shop on http://localhost:5173, the affiliate service on http://localhost:5174.
       dev: { command: "vp run -r --parallel dev", cache: false },
       // Chromium for the browser tests (once per machine).
