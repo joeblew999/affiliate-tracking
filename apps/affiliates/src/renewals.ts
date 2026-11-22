@@ -52,12 +52,7 @@ async function paymentIntentOf(invoice: Stripe.Invoice): Promise<string | null> 
   return null;
 }
 
-type RenewalResult = { recorded: true; saleId: string } | { recorded: false; reason: string };
-
-export async function recordRenewal(
-  invoice: Stripe.Invoice,
-  event: Stripe.Event,
-): Promise<RenewalResult> {
+export async function recordRenewal(invoice: Stripe.Invoice, event: Stripe.Event) {
   if (!invoice.id) return { recorded: false, reason: "no invoice id" };
   if (invoice.billing_reason === "subscription_create")
     return { recorded: false, reason: "first invoice: the checkout sale" };

@@ -1,9 +1,11 @@
 // What the service records about a visitor: a salted hash of the IP (never the IP), the country
 // Cloudflare saw, a device class and the referring site's host (never the full URL). And whether the
 // request is a link preview or crawler rather than a person: those record nothing.
+import type { clicks } from "@schema";
 import { env } from "void/env";
 
-type DeviceClass = "tablet" | "mobile" | "desktop";
+/** The device classes a click records (its schema's device column). */
+type DeviceClass = NonNullable<(typeof clicks.$inferSelect)["device"]>;
 
 const encoder = new TextEncoder();
 

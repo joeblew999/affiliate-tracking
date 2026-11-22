@@ -13,12 +13,6 @@ import type { Partner } from "./partners";
 
 type Rule = typeof commissionRules.$inferSelect;
 
-export interface Commission {
-  commissionCents: number;
-  commissionPct: number | null;
-  detail: CommissionLine[] | null;
-}
-
 export interface CommissionItem {
   productId: string | null;
   priceId: string | null;
@@ -64,14 +58,11 @@ function ruleCommission(rule: Rule, baseCents: number, quantity: number, currenc
 
 export async function computeCommission(
   partner: Pick<Partner, "id" | "commissionPct">,
-  sale: {
-    amountCents: number;
-    currency: string;
-    customerEmail: string | null;
+  sale: Pick<typeof sales.$inferSelect, "amountCents" | "currency" | "customerEmail"> & {
     at: number;
     items: readonly CommissionItem[];
   },
-): Promise<Commission> {
+) {
   const rules = await db
     .select()
     .from(commissionRules)

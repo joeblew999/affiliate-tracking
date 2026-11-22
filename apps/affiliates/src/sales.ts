@@ -24,8 +24,6 @@ export const META = {
   buyerIpHash: "affiliate_buyer_ip_hash",
 } as const;
 
-type SaleResult = { recorded: true; saleId: string } | { recorded: false; reason: string };
-
 async function lineItems(session: Stripe.Checkout.Session): Promise<Stripe.LineItem[]> {
   // The webhook doesn't carry them. Without a Stripe key (local dev) the sale has no items.
   if (!hasStripe()) return [];
@@ -61,10 +59,7 @@ async function promotionPartner(session: Stripe.Checkout.Session) {
   return [...owners.values()][0] ?? null;
 }
 
-export async function recordCheckoutSale(
-  session: Stripe.Checkout.Session,
-  event: Stripe.Event,
-): Promise<SaleResult> {
+export async function recordCheckoutSale(session: Stripe.Checkout.Session, event: Stripe.Event) {
   if (session.payment_status === "unpaid") return { recorded: false, reason: "not paid" };
   const [existing] = await db
     .select({ id: sales.id })

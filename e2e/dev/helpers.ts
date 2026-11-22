@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { PAGES_PROTOCOL_VERSION } from "@void/edge";
 import { unflatten } from "devalue";
-import { fetch as voidFetch } from "void/client";
+import { createAuthClient } from "better-auth/client";
+import { affiliates } from "../../apps/affiliates/client";
 import type { ActionUrl, ResolveActionBody } from "void/routes";
 import type { Props as AdminPage } from "../../apps/affiliates/pages/admin/index.server";
 import type { Props as PartnerPage } from "../../apps/affiliates/pages/index.server";
@@ -9,65 +10,58 @@ import Stripe from "stripe";
 import { inject } from "vite-plus/test";
 import { AFFILIATES, SHOP } from "./setup";
 
-export interface Account {
-  cookie: string;
-  email: string;
-  id: string;
-}
-
-async function auth(
-  path: "sign-up" | "sign-in",
-  body: Record<string, string>,
-  cookie = "",
-): Promise<Response> {
-  return fetch(`${SHOP}/api/auth/${path}/email`, {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: SHOP, ...(cookie ? { cookie } : {}) },
-    body: JSON.stringify(body),
-  });
-}
+/** The shop's Better Auth, as a browser uses it: typed from Better Auth, the cookies it sets kept. */
+const shopAuth = createAuthClient({ baseURL: SHOP, fetchOptions: { headers: { origin: SHOP } } });
 
 const cookiesOf = (res: Response) => res.headers.getSetCookie().map((c) => c.split(";")[0] ?? "");
 
-/** Signed in on the shop: the service asks the shop about this cookie (localhost shares it). */
-async function account(res: Response): Promise<Account> {
-  if (!res.ok) throw new Error(`shop auth: ${res.status} ${await res.text()}`);
-  const body = (await res.json()) as { user: { id: string; email: string } };
-  return {
-    cookie: cookiesOf(res).join("; "),
-    email: body.user.email,
-    id: body.user.id,
-  };
+/** A shop sign-in or sign-up's user and session cookie; it throws if refused. */
+async function account(
+  call: (options: { onResponse: (ctx: { response: Response }) => void }) => Promise<{
+    data: { user: { id: string; email: string } } | null;
+    error: { message?: string } | null;
+  }>,
+) {
+  let cookie = "";
+  const { data, error } = await call({
+    onResponse: ({ response }) => {
+      cookie = cookiesOf(response).join("; ");
+    },
+  });
+  if (!data) throw new Error(`shop auth: ${error?.message}`);
+  return { cookie, email: data.user.email, id: data.user.id };
 }
+export type Account = Awaited<ReturnType<typeof account>>;
 
 /** A fresh shop user, signed in. `cookie` is sent with the sign-up (a referral cookie, say). */
 export async function signUp(name = "Test User", cookie = ""): Promise<Account> {
   const email = `${crypto.randomUUID()}@example.test`;
-  return account(await auth("sign-up", { email, password: "example-password-123", name }, cookie));
+  return account((options) =>
+    shopAuth.signUp.email(
+      { email, password: "example-password-123", name },
+      { ...options, headers: cookie ? { cookie } : {} },
+    ),
+  );
 }
 
 /** The shop's admin (ADMIN_EMAILS in apps/shop/.env), signed in. */
 export async function signInAdmin(): Promise<Account> {
   const email = "admin@example.test";
   const password = "example-password-123";
-  const signedIn = await auth("sign-in", { email, password });
-  if (signedIn.ok) return account(signedIn);
-  return account(await auth("sign-up", { email, password, name: "Admin" }));
+  return account((options) => shopAuth.signIn.email({ email, password }, options)).catch(() =>
+    account((options) => shopAuth.signUp.email({ email, password, name: "Admin" }, options)),
+  );
 }
 
-/** The shop's own calls to the service (/api/host/*): Void's typed fetch, with the shop's token. */
-export function asShop(): typeof voidFetch {
-  const call = (path: string, options: { headers?: Record<string, string> } = {}) =>
-    voidFetch(
-      path as never,
-      {
-        ...options,
-        baseURL: AFFILIATES,
-        headers: { authorization: `Bearer ${inject("hostToken")}`, ...options.headers },
-      } as never,
-    );
-  return call as typeof voidFetch;
-}
+/** The shop's own client for the service (affiliates/client), reaching it by URL with its token. */
+export const shop = () =>
+  affiliates(
+    {
+      fetch: (input, init) =>
+        fetch(new URL(new URL(new Request(input).url).pathname, AFFILIATES), init),
+    },
+    inject("hostToken"),
+  );
 
 /** The service's pages, each with its loader's props type. */
 interface Pages {

@@ -27,7 +27,8 @@ export function referralFrom(cookieHeader: string | null | undefined): string | 
   return parse(cookieHeader ?? "", REF_COOKIE)[REF_COOKIE] || null;
 }
 
-export function affiliates(binding: Fetcher, token: string) {
+/** `binding`: the service binding, or anything with its fetch (the tests reach the service by URL). */
+export function affiliates(binding: Pick<Fetcher, "fetch">, token: string) {
   async function call<I extends z.ZodType, O extends z.ZodType>(
     path: string,
     input: I,

@@ -1,7 +1,7 @@
 // The admin page: partners (approve, suspend, settings, links), sales (approve, reject), payouts
 // (run them), commission rules and bonuses, and performance.
 import { action, Form, useForm, useRouter } from "@void/react";
-import type { Href } from "void/routes";
+import type { Href, ResolveActionBody } from "void/routes";
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { viewAs } from "@/components/view-as";
@@ -30,16 +30,16 @@ import { bind } from "@/components/bind";
 import { useAction } from "@/components/use-action";
 import type { Props } from "./index.server";
 
-/** A new rule: a percent of the sale, for every partner and product, until changed. */
-const NO_RULE = {
-  kind: "percent" as "percent" | "fixed",
-  percent: null as number | null,
-  fixedCents: null as number | null,
-  currency: null as string | null,
-  partnerId: null as string | null,
-  productId: null as string | null,
+/** A new rule, typed as the addRule action takes it: a percent, for every partner and product. */
+const NO_RULE: ResolveActionBody<"/admin?addRule"> = {
+  kind: "percent",
+  percent: null,
+  fixedCents: null,
+  currency: null,
+  partnerId: null,
+  productId: null,
   minMonthlySales: 0,
-  capPerCustomerCents: null as number | null,
+  capPerCustomerCents: null,
 };
 
 /**

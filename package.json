@@ -5,6 +5,7 @@
   "devDependencies": {
     "@types/node": "26.6.6",
     "@void/edge": "catalog:",
+    "better-auth": "catalog:",
     "devalue": "catalog:",
     "playwright": "1.65.0",
     "stripe": "catalog:",

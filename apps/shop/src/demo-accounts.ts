@@ -1,6 +1,19 @@
-// The shop page's one-tap demo sign-ins: two of the demo people (affiliates/demo), and the partner
-// program's page each goes to.
+// The shop page's one-tap demo sign-ins, from the demo people (affiliates/demo): its admin, and its
+// first active partner (Maya), each with the partner program's page they go to.
+import { demoPeople } from "affiliates/demo";
+
+const admin = demoPeople.find((p) => p.role === "admin");
+const partner = demoPeople.find((p) => p.partner?.status === "active");
+
 export const demoAccounts = [
-  { label: "Sign in as the admin", email: "admin@demo.test", path: "/admin" },
-  { label: "Sign in as Maya, a partner", email: "maya@demo.test", path: "/" },
-] as const;
+  ...(admin ? [{ label: "Sign in as the admin", email: admin.email, path: "/admin" }] : []),
+  ...(partner
+    ? [
+        {
+          label: `Sign in as ${partner.name.split(" ")[0]}, a partner`,
+          email: partner.email,
+          path: "/",
+        },
+      ]
+    : []),
+];

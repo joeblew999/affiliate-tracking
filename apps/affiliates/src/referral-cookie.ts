@@ -2,12 +2,12 @@
 // the referral links (routes/r/[slug].ts); the host passes it on at signup and checkout
 // (client.ts: referralFrom).
 
+import type { clicks } from "@schema";
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export interface Referral {
-  partnerId: string;
-  linkId: string | null;
-}
+/** Which partner, and which of their links: as a click records them. */
+export type Referral = Pick<typeof clicks.$inferSelect, "partnerId" | "linkId">;
 
 /** The referral cookie's value: the partner, and the link when it was one of theirs. */
 export function referralValue(referral: Referral): string {

@@ -65,7 +65,9 @@ export const actions = {
   ),
   demo: defineHandler.withValidator({
     body: z.object({
-      email: z.enum(demoAccounts.map((a) => a.email)),
+      email: z
+        .string()
+        .refine((email) => demoAccounts.some((a) => a.email === email), "not a demo account"),
       back: z.string().nullable(),
     }),
   })((c, { body }) =>

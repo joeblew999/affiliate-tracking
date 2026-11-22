@@ -7,7 +7,7 @@ import { describe, expect, inject, test } from "vite-plus/test";
 import {
   activePartner,
   eventually,
-  asShop,
+  shop,
   partnerMe,
   salesOf,
   act,
@@ -64,9 +64,11 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
     const found = await stripe().promotionCodes.list({ code: promo ?? "", limit: 1 });
     expect(found.data[0]?.metadata).toMatchObject({ partner_id: nick.partnerId });
 
-    const checkout = await asShop()("/api/host/checkout", {
-      method: "POST",
-      body: { userId: null, ref: null, promoCode: promo?.toLowerCase() ?? null, ip: null },
+    const checkout = await shop().checkout({
+      userId: null,
+      ref: null,
+      promoCode: promo?.toLowerCase() ?? null,
+      ip: null,
     });
     expect(checkout).toEqual({
       metadata: expect.objectContaining({

@@ -37,6 +37,8 @@ catalog:
   stripe: 23.2.0
   # The version Void 1.11.0 runs on; apps import its HTTPException.
   hono: 4.13.19
+  # Better Auth: the shop's sign-in; the service and the tests take its types.
+  better-auth: 1.7.27
 
 peerDependencyRules:
   allowAny:

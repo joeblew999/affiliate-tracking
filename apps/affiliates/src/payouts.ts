@@ -21,11 +21,6 @@ import { refundShare } from "./refunds";
 import { hasStripe, stripe } from "./stripe";
 
 type Payout = typeof payouts.$inferSelect;
-type PayoutOutcome =
-  | { status: "sent" | "manual"; payoutId: string; amountCents: number }
-  | { status: "nothing owed" }
-  | { status: "failed"; payoutId: string; reason: string };
-
 const transferGroup = (payoutId: string) => `affiliates_payout_${payoutId}`;
 
 /** Step 1: the payout-currency amount of each approved, unclaimed sale that doesn't have one. */
@@ -260,7 +255,7 @@ async function transfer(payout: Payout, destination: string): Promise<string> {
   return made.id;
 }
 
-export async function payPartner(partnerId: string): Promise<PayoutOutcome> {
+export async function payPartner(partnerId: string) {
   await settle(partnerId);
   const payout = await claim(partnerId);
   if (!payout) return { status: "nothing owed" };

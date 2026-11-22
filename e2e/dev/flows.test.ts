@@ -4,7 +4,7 @@ import { expect, test } from "vite-plus/test";
 import {
   activePartner,
   eventually,
-  asShop,
+  shop,
   paidSession,
   partnerMe,
   salesOf,
@@ -83,14 +83,11 @@ test("a user who signs up with the referral cookie stays the partner's at checko
   const buyer = await signUp("Buyer", cookie ?? "");
   // The shop tells the service through a queue (apps/shop/queues/affiliate-signups.ts).
   await eventually(async () => {
-    const checkout = await asShop()("/api/host/checkout", {
-      method: "POST",
-      body: {
-        userId: buyer.id,
-        ref: null,
-        promoCode: null,
-        ip: null,
-      },
+    const checkout = await shop().checkout({
+      userId: buyer.id,
+      ref: null,
+      promoCode: null,
+      ip: null,
     });
     expect(checkout.metadata).toMatchObject({
       affiliate_partner_id: nick.partnerId,
@@ -102,28 +99,22 @@ test("a user who signs up with the referral cookie stays the partner's at checko
 
 test("checkout without a referral uses the cookie, and nothing without either", async () => {
   const nick = await activePartner();
-  const viaCookie = await asShop()("/api/host/checkout", {
-    method: "POST",
-    body: {
-      userId: null,
-      ref: nick.partnerId,
-      promoCode: null,
-      ip: "203.0.113.9",
-    },
+  const viaCookie = await shop().checkout({
+    userId: null,
+    ref: nick.partnerId,
+    promoCode: null,
+    ip: "203.0.113.9",
   });
   expect(viaCookie.metadata).toMatchObject({
     affiliate_partner_id: nick.partnerId,
     affiliate_source: "cookie",
   });
   expect(viaCookie.metadata.affiliate_buyer_ip_hash).toMatch(/^[0-9a-f]{64}$/);
-  const nothing = await asShop()("/api/host/checkout", {
-    method: "POST",
-    body: {
-      userId: null,
-      ref: "made-up",
-      promoCode: null,
-      ip: null,
-    },
+  const nothing = await shop().checkout({
+    userId: null,
+    ref: "made-up",
+    promoCode: null,
+    ip: null,
   });
   expect(nothing).toEqual({ metadata: {}, promotionCode: null });
 });
@@ -191,14 +182,11 @@ test("a suspended partner's referrals and links stop counting", async () => {
   const admin = await signInAdmin();
   await act(admin.cookie, "/admin?changePartner", { id: nick.partnerId, status: "suspended" });
   expect((await follow(`/r/${nick.code}`)).cookie).toBeNull();
-  const checkout = await asShop()("/api/host/checkout", {
-    method: "POST",
-    body: {
-      userId: null,
-      ref: nick.partnerId,
-      promoCode: null,
-      ip: null,
-    },
+  const checkout = await shop().checkout({
+    userId: null,
+    ref: nick.partnerId,
+    promoCode: null,
+    ip: null,
   });
   expect(checkout.metadata).toEqual({});
   const session = paidSession({ affiliate_partner_id: nick.partnerId });
