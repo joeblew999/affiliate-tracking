@@ -25,7 +25,7 @@ export default defineConfig({
       // compile the service's code with their own config) and the root scripts. `vp check` checks
       // each file once, in the first project that has it, so it can't see a file that means
       // something else in another project; this does.
-      typecheck: {
+      "check:types": {
         command: [
           "tsc --noEmit -p apps/affiliates",
           "tsc --noEmit -p apps/shop",

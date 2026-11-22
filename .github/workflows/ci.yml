@@ -27,6 +27,6 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: vp check
-      - run: vp run typecheck
+      - run: vp run check:types
       - run: vp run install:browser
       - run: vp run test:dev
