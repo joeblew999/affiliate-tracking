@@ -50,6 +50,7 @@ pnpm wrangler d1 migrations apply DB --remote
 # pnpm wrangler d1 execute DB --file=migrations/0008_links.sql --remote
 # pnpm wrangler d1 execute DB --file=migrations/0009_referrals.sql --remote
 # pnpm wrangler d1 execute DB --file=migrations/0010_renewals.sql --remote
+# pnpm wrangler d1 execute DB --file=migrations/0011_payout_currency.sql --remote
 
 # 3. Set secrets
 pnpm wrangler secret put AFFILIATE_SESSION_SECRET
@@ -448,6 +449,20 @@ The rules:
 
 Referrals live in the `referrals` table (one row per user, UUID ids); each
 conversion records its `user_id`.
+### Payout currency
+
+Stripe transfers come out of your platform balance, which Stripe holds in
+your settlement currency. Set it with `AFFILIATE_PAYOUT_CURRENCY` (default
+`usd`); Stripe then converts to each partner's bank currency on their side.
+
+Commissions on sales in other currencies are converted at the rate Stripe
+actually used when it settled that sale: the payout run reads the sale's
+charge and balance transaction and converts the commission in the same
+proportion. Each conversion keeps `payout_cents`, `payout_currency` and
+`fx_source` (the `txn_…` balance transaction), so every converted amount can
+be traced back to Stripe. A commission that can't be converted (unknown
+currency, no settled charge, or a balance in another currency) stops the run
+with HTTP 409 for reconciliation, as before; nothing is guessed.
 
 ### Partner access and onboarding
 
@@ -508,6 +523,7 @@ context to the helpers directly.
 | `src/fraud.js` | Bot and link-preview detection, self-referral check |
 | `src/ip.js` | Salted IP hashing |
 | `functions/api/admin/payouts-run.js` | Stripe Transfer or manual payout |
+| `src/settlement.js` | Commission amounts in the payout currency |
 | `functions/api/admin/payouts-reconcile.js` | Pending batch reconciliation |
 | `tests/unit/` | Unit tests (crypto, auth, gate, email) |
 | `migrations/0001_affiliates.sql` | Complete schema: affiliates, applications, clicks, conversions, and durable payout batches |
@@ -536,6 +552,7 @@ routes itself — see `src/route.js` for the exact paths.
 | `AFFILIATE_LINK_PREFIX` | optional | Path prefix of short links (default `/r/`) |
 | `AFFILIATE_LINK_BASE_URL` | optional | Origin shown in short-link URLs, e.g. a short domain (default `SITE_URL`) |
 | `AFFILIATE_RECURRING_MONTHS` | optional | Months after the first sale that renewals earn commission (default 12, `0` = first payment only) |
+| `AFFILIATE_PAYOUT_CURRENCY` | optional | Currency payouts are sent in, your Stripe settlement currency (default `usd`) |
 
 ## Tests
 
@@ -556,6 +573,9 @@ STRIPE_TEST_SECRET_KEY=sk_test_… pnpm test:e2e
   test clock renews 13 times; checks 12 months of commission, no double
   recording, and that a real refund cancels only its own renewal. Takes a few
   minutes, because Stripe processes each clock step.
+- `e2e/payout-currency.e2e.js`: a real card payment in a foreign currency
+  settles into the platform balance; a payout run converts the commission at
+  the rate on that balance transaction and records `fx_source`.
 
 Covers: token sign/verify with purpose scoping, tamper rejection, admin gate,
 constant-time comparison, HTML escaping, cookie headers, applications,
@@ -595,8 +615,7 @@ Money includes `currency_decimals` for Stripe's minor-unit representation.
 product/status/date filters. The CSV streams in bounded batches, uses safe
 order/payout references, excludes customer identities, and escapes spreadsheet
 formula prefixes. Both reporting endpoints require an active affiliate session.
-Payout transfers remain USD-only; newly claimed foreign/unknown-currency
-commissions return HTTP 409 for reconciliation instead of being paid as USD.
+Payouts are sent in the platform's currency (see "Payout currency" below).
 
 ## Admin dashboard and local demo
 
