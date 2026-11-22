@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "952dc281-ad14-4fa3-b6cd-1a9ad2976eb2",
+  "id": "2d63e89d-6559-474c-9df5-99d5859a52ac",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "clicks": {
@@ -690,6 +690,29 @@
           "notNull": true,
           "autoincrement": false
         },
+        "refunded_cents": {
+          "name": "refunded_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "disputed_cents": {
+          "name": "disputed_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "dispute_status": {
+          "name": "dispute_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "integer",
@@ -825,6 +848,36 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "gross_commission_cents": {
+          "name": "gross_commission_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "refunded_cents": {
+          "name": "refunded_cents",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "refund_version": {
+          "name": "refund_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "refund_of": {
+          "name": "refund_of",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "commission_pct": {
@@ -968,6 +1021,12 @@
           "name": "sales_user",
           "columns": ["user_id"],
           "isUnique": false
+        },
+        "sales_one_clawback_per_refund": {
+          "name": "sales_one_clawback_per_refund",
+          "columns": ["refund_of", "refund_version"],
+          "isUnique": true,
+          "where": "\"sales\".\"refund_of\" IS NOT NULL"
         }
       },
       "foreignKeys": {

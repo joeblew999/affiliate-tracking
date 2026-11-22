@@ -7,12 +7,16 @@
 //   3. Pay: a Stripe transfer to the partner's Connect account. Its transfer_group is the payout's
 //      own, and Stripe is asked for that group's transfer before sending, so a retry at any age
 //      never pays twice. Without a Connect account the payout is manual: an admin pays it.
-//   4. Finish: payout sent (or manual), its sales paid. A sale refunded before the transfer sends the
-//      payout back: failed, its other sales approved again for the next run.
+//   4. Finish: payout sent (or manual), its sales paid. A refund of one of its sales before the
+//      transfer starts sends the payout back instead: failed, its sales approved again with the
+//      refund taken off them (src/refunds.ts), for the next run. A refund after that is a clawback
+//      the next payout nets off. Clawbacks are approved lines with a negative amount, so a partner
+//      owed less than they were clawed back is paid nothing until their sales make it up.
 // Every step can be run again after a crash and picks up where it was.
 import { partners, payouts, sales } from "@schema";
-import { and, db, eq, isNotNull, isNull, ne, sql, sum } from "void/db";
+import { and, db, eq, inArray, isNotNull, isNull, ne, sql, sum } from "void/db";
 import { env } from "void/env";
+import { alias } from "void/schema-d1";
 import { hasStripe, stripe } from "./stripe";
 
 export type Payout = typeof payouts.$inferSelect;
@@ -127,17 +131,58 @@ export async function claim(partnerId: string): Promise<Payout | null> {
   return pendingPayout(partnerId);
 }
 
-/** Step 4 when a sale in it was refunded first: the payout failed, its other sales back to approved. */
+const inPayout = (payoutId: string) =>
+  db.select({ id: sales.id }).from(sales).where(eq(sales.payoutId, payoutId));
+
+/** Clawbacks of this payout's sales made since it was claimed: refunds that came in meanwhile. */
+async function refundedSinceClaim(payoutId: string): Promise<boolean> {
+  const claw = alias(sales, "claw");
+  const [found] = await db
+    .select({ id: claw.id })
+    .from(claw)
+    .where(
+      and(
+        eq(claw.kind, "clawback"),
+        isNull(claw.payoutId),
+        inArray(claw.refundOf, inPayout(payoutId)),
+      ),
+    )
+    .limit(1);
+  return Boolean(found);
+}
+
+/**
+ * Step 4 when a sale in it was refunded first: the payout failed; the clawbacks made meanwhile
+ * dropped and their refunds taken off the sales themselves instead; the sales approved again (or
+ * refunded, if in full) and settled again at the next run. Each sale's refundVersion goes up, so a
+ * refund being applied at the same moment starts again from the sale as it now is.
+ */
 async function release(payout: Payout, reason: string): Promise<void> {
+  const taken = sql<number>`CASE WHEN ${sales.amountCents} > 0 THEN CAST(ROUND(${sales.grossCommissionCents} * MIN(${sales.refundedCents}, ${sales.amountCents}) * 1.0 / ${sales.amountCents}) AS INTEGER) ELSE 0 END`;
+  const isSale = inArray(sales.kind, ["checkout", "renewal"]);
   await db.batch([
     db
       .update(payouts)
       .set({ status: "failed", lastError: reason })
       .where(and(eq(payouts.id, payout.id), eq(payouts.status, "pending"))),
     db
+      .delete(sales)
+      .where(
+        and(
+          eq(sales.kind, "clawback"),
+          isNull(sales.payoutId),
+          inArray(sales.refundOf, inPayout(payout.id)),
+        ),
+      ),
+    db
       .update(sales)
       .set({
-        status: sql`CASE WHEN ${sales.status} = 'paying' THEN 'approved' ELSE ${sales.status} END`,
+        status: sql`CASE WHEN ${isSale} AND ${sales.refundedCents} >= ${sales.amountCents} THEN 'refunded' WHEN ${sales.status} = 'paying' THEN 'approved' ELSE ${sales.status} END`,
+        commissionCents: sql`CASE WHEN ${isSale} THEN ${sales.grossCommissionCents} - ${taken} ELSE ${sales.commissionCents} END`,
+        payoutCurrency: sql`CASE WHEN ${isSale} THEN NULL ELSE ${sales.payoutCurrency} END`,
+        payoutCents: sql`CASE WHEN ${isSale} THEN NULL ELSE ${sales.payoutCents} END`,
+        fxSource: sql`CASE WHEN ${isSale} THEN NULL ELSE ${sales.fxSource} END`,
+        refundVersion: sql`${sales.refundVersion} + 1`,
         payoutId: null,
       })
       .where(eq(sales.payoutId, payout.id)),
@@ -186,12 +231,7 @@ export async function payPartner(partnerId: string): Promise<PayoutOutcome> {
   await settle(partnerId);
   const payout = await claim(partnerId);
   if (!payout) return { status: "nothing owed" };
-  const [refunded] = await db
-    .select({ id: sales.id })
-    .from(sales)
-    .where(and(eq(sales.payoutId, payout.id), eq(sales.status, "refunded")))
-    .limit(1);
-  if (refunded && !payout.transferStartedAt) {
+  if (!payout.transferStartedAt && (await refundedSinceClaim(payout.id))) {
     await release(payout, "a sale in it was refunded before paying; run payouts again");
     return {
       status: "failed",

@@ -111,7 +111,7 @@ export async function partnerMe(cookie: string): Promise<NonNullable<PartnerMe["
   return me.body.partner;
 }
 
-/** A Stripe event, signed with the service's local webhook secret, sent to its webhook endpoint. */
+/** A Stripe event, signed with the service's local webhook secret, sent to its webhook endpoint; fails unless it's accepted. */
 export async function stripeEvent(
   type: string,
   object: Record<string, unknown>,
@@ -132,11 +132,13 @@ export async function stripeEvent(
     payload,
     secret: inject("webhookSecret"),
   });
-  return fetch(`${AFFILIATES}/api/stripe/webhook`, {
+  const res = await fetch(`${AFFILIATES}/api/stripe/webhook`, {
     method: "POST",
     headers: { "stripe-signature": signature },
     body: payload,
   });
+  if (!res.ok) throw new Error(`${type}: ${res.status} ${await res.text()}`);
+  return res;
 }
 
 /** A paid Checkout Session as Stripe sends it, carrying the given metadata. */
@@ -195,6 +197,8 @@ export interface Sale {
   kind: string;
   status: string;
   commissionCents: number;
+  refundedCents: number;
+  refundOf: string | null;
   fraudReason: string | null;
   payoutId: string | null;
 }

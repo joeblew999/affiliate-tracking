@@ -30,6 +30,7 @@ export const POST = defineHandler.withValidator({
       amountCents: 0,
       currency,
       commissionCents: body.amountCents,
+      grossCommissionCents: body.amountCents,
       payoutCurrency: currency,
       payoutCents: body.amountCents,
       bonusNote: body.note,

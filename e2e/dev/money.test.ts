@@ -213,3 +213,68 @@ test("a payout run pays each partner's approved sales and bonuses, through the q
   );
   expect(after.body.payouts.filter((p) => p.partnerId === nick.partnerId)).toHaveLength(1);
 });
+
+test("a refund takes its share: off a sale not yet paid, else as a clawback on the next payout", async () => {
+  const nick = await activePartner();
+  const admin = await signInAdmin();
+  const refund = (session: Record<string, unknown>, refunded: number) =>
+    stripeEvent("charge.refunded", {
+      id: `ch_${crypto.randomUUID().replaceAll("-", "")}`,
+      object: "charge",
+      amount: 5000,
+      amount_refunded: refunded, // Stripe's running total
+      payment_intent: session.payment_intent,
+    });
+  const payoutsOf = async () =>
+    (
+      await service<{ payouts: { partnerId: string; amountCents: number }[] }>(
+        "/api/admin/payouts",
+        admin.cookie,
+      )
+    ).body.payouts
+      .filter((p) => p.partnerId === nick.partnerId)
+      .map((p) => p.amountCents)
+      .sort((a, b) => a - b);
+  const payOut = async (expected: number[]) => {
+    await service("/api/admin/payouts/run", admin.cookie, { partnerId: nick.partnerId });
+    await eventually(async () => expect(await payoutsOf()).toEqual(expected));
+  };
+
+  // 30% refunded before it's paid: 1000 commission becomes 700, and it's still approved.
+  const sold = await sell(nick.partnerId, { amount_total: 5000 }, 31);
+  await refund(sold, 1500);
+  await refund(sold, 1500); // sent again: no change
+  await runCron(DAILY);
+  const byId = async () =>
+    (await salesOf(nick.partnerId)).find((s) => s.stripeSessionId === sold.id);
+  expect(await byId()).toMatchObject({
+    status: "approved",
+    commissionCents: 700,
+    refundedCents: 1500,
+  });
+  await payOut([700]);
+
+  // Another 50% refunded after it was paid: what was paid stays, 500 more is clawed back.
+  await refund(sold, 4000);
+  await refund(sold, 4000);
+  const sales = await salesOf(nick.partnerId);
+  const clawbacks = sales.filter((s) => s.kind === "clawback");
+  expect(clawbacks).toEqual([
+    expect.objectContaining({
+      refundOf: (await byId())?.id,
+      status: "approved",
+      commissionCents: -500,
+    }),
+  ]);
+  expect(await byId()).toMatchObject({ status: "paid", commissionCents: 700, refundedCents: 4000 });
+
+  // Owed less than the clawback: nothing paid. A new sale's 1000 nets 500 at the next payout.
+  await service("/api/admin/payouts/run", admin.cookie, { partnerId: nick.partnerId });
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  expect(await payoutsOf()).toEqual([700]);
+  await sell(nick.partnerId, { amount_total: 5000 }, 31);
+  await runCron(DAILY);
+  await payOut([500, 700]);
+  const after = await salesOf(nick.partnerId);
+  expect(after.filter((s) => s.kind === "clawback").map((s) => s.status)).toEqual(["paid"]);
+});

@@ -107,6 +107,9 @@ CREATE INDEX `referrals_partner` ON `referrals` (`partner_id`,`created_at`);--> 
 CREATE INDEX `referrals_customer` ON `referrals` (`stripe_customer_id`);--> statement-breakpoint
 CREATE TABLE `refunded_payments` (
 	`payment_intent` text PRIMARY KEY NOT NULL,
+	`refunded_cents` integer DEFAULT 0 NOT NULL,
+	`disputed_cents` integer DEFAULT 0 NOT NULL,
+	`dispute_status` text,
 	`created_at` integer NOT NULL
 );
 --> statement-breakpoint
@@ -128,6 +131,10 @@ CREATE TABLE `sales` (
 	`amount_cents` integer NOT NULL,
 	`currency` text NOT NULL,
 	`commission_cents` integer NOT NULL,
+	`gross_commission_cents` integer NOT NULL,
+	`refunded_cents` integer DEFAULT 0 NOT NULL,
+	`refund_version` integer DEFAULT 0 NOT NULL,
+	`refund_of` text,
 	`commission_pct` real,
 	`commission_detail` text,
 	`items` text DEFAULT '[]' NOT NULL,
@@ -155,4 +162,5 @@ CREATE INDEX `sales_payout` ON `sales` (`payout_id`);--> statement-breakpoint
 CREATE INDEX `sales_customer` ON `sales` (`stripe_customer_id`,`created_at`);--> statement-breakpoint
 CREATE INDEX `sales_subscription` ON `sales` (`stripe_subscription_id`,`created_at`);--> statement-breakpoint
 CREATE INDEX `sales_link` ON `sales` (`link_id`);--> statement-breakpoint
-CREATE INDEX `sales_user` ON `sales` (`user_id`);
+CREATE INDEX `sales_user` ON `sales` (`user_id`);--> statement-breakpoint
+CREATE UNIQUE INDEX `sales_one_clawback_per_refund` ON `sales` (`refund_of`,`refund_version`) WHERE "sales"."refund_of" IS NOT NULL;

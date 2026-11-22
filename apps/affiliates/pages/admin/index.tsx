@@ -303,6 +303,16 @@ function Sales({ sales }: Allowed) {
               <TableCell>{s.partnerName ?? "—"}</TableCell>
               <TableCell>
                 {s.kind === "bonus" ? `Bonus: ${s.bonusNote ?? ""}` : (s.customerEmail ?? "—")}
+                {s.kind === "clawback" && (
+                  <div className="text-xs text-muted-foreground">
+                    clawback: a refund after it was paid out
+                  </div>
+                )}
+                {s.refundedCents > 0 && s.kind !== "clawback" && (
+                  <div className="text-xs text-muted-foreground">
+                    {money(s.refundedCents, s.currency)} refunded
+                  </div>
+                )}
                 {s.kind === "renewal" && (
                   <div className="text-xs text-muted-foreground">renewal</div>
                 )}

@@ -79,7 +79,11 @@ export default defineSeed<typeof import("./schema")>(async ({ db, schema }) => {
     customerCountry: "TH",
     amountCents: cents,
     currency: "usd",
-    commissionCents: Math.round(cents * 0.2),
+    // A refunded demo sale was refunded in full, so it earns nothing.
+    commissionCents: status === "refunded" ? 0 : Math.round(cents * 0.2),
+    grossCommissionCents: Math.round(cents * 0.2),
+    refundedCents: status === "refunded" ? cents : 0,
+    refundVersion: status === "refunded" ? 1 : 0,
     commissionPct: 20,
     items: [{ productId: null, name: "Pro plan", variant: "Monthly", quantity: 1 }],
     createdAt: now - daysAgo * DAY,

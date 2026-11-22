@@ -157,7 +157,12 @@ export const payouts = sqliteTable(
   ],
 );
 
-/** A sale (first purchase or renewal) or a bonus, and the commission it earns a partner. */
+/**
+ * A sale (first purchase or renewal), a bonus, or a clawback, and the commission it earns a partner.
+ * A refund or dispute takes its share of the commission: off the sale itself while the sale isn't in
+ * a payout (commissionCents goes down), else as a clawback, a negative line the partner's next payout
+ * nets off (src/refunds.ts).
+ */
 export const sales = sqliteTable(
   "sales",
   {
@@ -165,8 +170,8 @@ export const sales = sqliteTable(
     partnerId: text()
       .notNull()
       .references(() => partners.id),
-    kind: text({ enum: ["checkout", "renewal", "bonus"] }).notNull(),
-    /** rejected: an admin said no; never approved automatically. */
+    kind: text({ enum: ["checkout", "renewal", "bonus", "clawback"] }).notNull(),
+    /** rejected: an admin said no; never approved automatically. refunded: refunded in full. */
     status: text({ enum: ["pending", "approved", "rejected", "paying", "paid", "refunded"] })
       .notNull()
       .default("pending"),
@@ -184,7 +189,16 @@ export const sales = sqliteTable(
     /** What the customer paid, after discounts, in the sale's currency. */
     amountCents: integer().notNull(),
     currency: text().notNull(),
+    /** What the sale earns now: before any refund, less what refunds took while it wasn't paid. */
     commissionCents: integer().notNull(),
+    /** What it earned before any refund. */
+    grossCommissionCents: integer().notNull(),
+    /** How much of amountCents was refunded or is disputed, by Stripe's latest count. */
+    refundedCents: integer().notNull().default(0),
+    /** Goes up by one each time refundedCents changes: a clawback names the version it's for. */
+    refundVersion: integer().notNull().default(0),
+    /** For a clawback: the sale it takes back from. */
+    refundOf: text(),
     commissionPct: real(),
     /** How the commission was worked out: [{ ruleId, productId, baseCents, commissionCents }]. */
     commissionDetail: text({ mode: "json" }).$type<CommissionLine[]>(),
@@ -213,12 +227,22 @@ export const sales = sqliteTable(
     index("sales_subscription").on(t.stripeSubscriptionId, t.createdAt),
     index("sales_link").on(t.linkId),
     index("sales_user").on(t.userId),
+    uniqueIndex("sales_one_clawback_per_refund")
+      .on(t.refundOf, t.refundVersion)
+      .where(sql`${t.refundOf} IS NOT NULL`),
   ],
 );
 
-/** A payment refunded or disputed before or after its sale was recorded. */
+/**
+ * What's been refunded or disputed of a payment, by Stripe's latest count; kept whether its sale
+ * arrives before or after. Refunds only go up (Stripe sends the running total). A dispute counts
+ * while open or lost, not once won.
+ */
 export const refundedPayments = sqliteTable("refunded_payments", {
   paymentIntent: text().primaryKey(),
+  refundedCents: integer().notNull().default(0),
+  disputedCents: integer().notNull().default(0),
+  disputeStatus: text({ enum: ["open", "won", "lost"] }),
   createdAt: now(),
 });
 

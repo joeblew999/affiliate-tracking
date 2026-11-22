@@ -3,15 +3,16 @@
 // Who gets a sale: a partner's promotion code the customer actually paid with, else the partner the
 // checkout carried (the user's referral, else the referral cookie: routes/api/host/checkout.ts).
 // Idempotent by Checkout Session: a resent event changes nothing, and a sale keeps the partner it
-// was first recorded with. A refund or dispute marks its sales refunded, and is remembered even when
-// it arrives before the sale.
-import { refundedPayments, sales, type SaleItem } from "@schema";
+// was first recorded with. A refund or dispute that arrived before the sale is applied to it as it's
+// recorded (src/refunds.ts).
+import { sales, type SaleItem } from "@schema";
 import type Stripe from "stripe";
-import { and, db, eq, inArray, sql } from "void/db";
+import { db, eq } from "void/db";
 import { computeCommission, type CommissionItem } from "./commission";
 import { selfReferralReason } from "./fraud";
 import { activePartner, partnerForPromotion } from "./partners";
 import { settleReferral } from "./referrals";
+import { applyRefunds } from "./refunds";
 import { hasStripe, idOf, stripe } from "./stripe";
 
 /** The checkout metadata keys this service sets (routes/api/host/checkout.ts) and reads back here. */
@@ -107,17 +108,11 @@ export async function recordCheckoutSale(
   const linkId = metadata[META.linkId] && carried?.id === partner.id ? metadata[META.linkId] : null;
   const userId = metadata[META.userId] ?? null;
 
-  const refunded = paymentIntent
-    ? sql<
-        "refunded" | "pending"
-      >`CASE WHEN EXISTS (SELECT 1 FROM refunded_payments WHERE payment_intent = ${paymentIntent}) THEN 'refunded' ELSE 'pending' END`
-    : "pending";
   const [row] = await db
     .insert(sales)
     .values({
       partnerId: partner.id,
       kind: "checkout",
-      status: refunded,
       stripeSessionId: session.id,
       stripeEventId: event.id,
       paymentIntent,
@@ -131,6 +126,7 @@ export async function recordCheckoutSale(
       amountCents,
       currency,
       commissionCents: commission.commissionCents,
+      grossCommissionCents: commission.commissionCents,
       commissionPct: commission.commissionPct,
       commissionDetail: commission.detail,
       items,
@@ -140,6 +136,7 @@ export async function recordCheckoutSale(
     .onConflictDoNothing({ target: sales.stripeSessionId })
     .returning({ id: sales.id });
   if (!row) return { recorded: false, reason: "already recorded" };
+  if (paymentIntent) await applyRefunds(paymentIntent);
   if (userId)
     await settleReferral({
       userId,
@@ -151,30 +148,8 @@ export async function recordCheckoutSale(
   return { recorded: true, saleId: row.id };
 }
 
-/** A refund or dispute: remembered, and its sales not yet paid out marked refunded. */
-export async function recordRefund(paymentIntent: string): Promise<number> {
-  const [, updated] = await db.batch([
-    db.insert(refundedPayments).values({ paymentIntent }).onConflictDoNothing(),
-    db
-      .update(sales)
-      .set({ status: "refunded" })
-      .where(
-        and(
-          eq(sales.paymentIntent, paymentIntent),
-          inArray(sales.status, ["pending", "approved", "paying"]),
-        ),
-      )
-      .returning({ id: sales.id }),
-  ]);
-  return updated.length;
-}
-
 /** The payment intent a refund or dispute event is about. */
-export async function refundedPaymentIntent(
-  event: Stripe.ChargeRefundedEvent | Stripe.ChargeDisputeCreatedEvent,
-): Promise<string | null> {
-  if (event.type === "charge.refunded") return idOf(event.data.object.payment_intent);
-  const dispute = event.data.object;
+export async function disputedPaymentIntent(dispute: Stripe.Dispute): Promise<string | null> {
   const direct = idOf(dispute.payment_intent);
   if (direct) return direct;
   if (typeof dispute.charge === "string" && hasStripe())

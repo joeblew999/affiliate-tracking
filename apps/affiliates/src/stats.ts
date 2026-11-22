@@ -2,7 +2,7 @@
 // sales) and money by status in each currency; clicks per day; top countries, devices and referring
 // sites. For one partner (their dashboard) or all of them (admins), over the last N days (UTC).
 import { clicks, partners, referrals, sales } from "@schema";
-import { and, count, db, desc, eq, gte, isNotNull, lte, ne, sql, type SQL } from "void/db";
+import { and, count, db, desc, eq, gte, inArray, isNotNull, lte, ne, sql, type SQL } from "void/db";
 import { z } from "zod";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -67,13 +67,16 @@ export async function stats(partnerId: string | null, days: number) {
         customers: sql<number>`COUNT(DISTINCT lower(${sales.customerEmail}))`,
       })
       .from(sales)
-      .where(and(saleScope, ne(sales.status, "refunded"), ne(sales.kind, "bonus")))
+      .where(
+        and(saleScope, ne(sales.status, "refunded"), inArray(sales.kind, ["checkout", "renewal"])),
+      )
       .groupBy(sales.partnerId),
     db
       .select({
         partnerId: sales.partnerId,
         currency: sales.currency,
-        revenueCents: sql<number>`SUM(CASE WHEN ${sales.status} != 'refunded' THEN ${sales.amountCents} ELSE 0 END)`,
+        // Revenue after refunds; commission net of clawbacks, which are approved lines below zero.
+        revenueCents: sql<number>`SUM(${sales.amountCents} - MIN(${sales.refundedCents}, ${sales.amountCents}))`,
         pendingCents: sql<number>`SUM(CASE WHEN ${sales.status} = 'pending' THEN ${sales.commissionCents} ELSE 0 END)`,
         approvedCents: sql<number>`SUM(CASE WHEN ${sales.status} = 'approved' THEN ${sales.commissionCents} ELSE 0 END)`,
         paidCents: sql<number>`SUM(CASE WHEN ${sales.status} IN ('paying', 'paid') THEN ${sales.commissionCents} ELSE 0 END)`,

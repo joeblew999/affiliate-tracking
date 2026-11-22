@@ -1,6 +1,6 @@
 import { clicks, sales } from "@schema";
 import { defineHandler } from "void";
-import { and, count, db, eq, ne, sum } from "void/db";
+import { and, count, db, eq, ne, sql, sum } from "void/db";
 import { requireUser } from "@/access";
 import { partnerForUser } from "@/partners";
 
@@ -15,7 +15,10 @@ export const GET = defineHandler(async (c) => {
     .from(clicks)
     .where(eq(clicks.partnerId, partner.id));
   const [saleTotals] = await db
-    .select({ n: count(), commissionCents: sum(sales.commissionCents) })
+    .select({
+      n: sql<number>`COUNT(CASE WHEN ${sales.kind} != 'clawback' THEN 1 END)`,
+      commissionCents: sum(sales.commissionCents),
+    })
     .from(sales)
     .where(and(eq(sales.partnerId, partner.id), ne(sales.status, "refunded")));
   const { id, code, status, name, commissionPct, promoCode } = partner;

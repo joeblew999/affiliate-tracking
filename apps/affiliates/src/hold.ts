@@ -1,5 +1,5 @@
-// The hold period: a pending sale is approved once it's AFFILIATES_HOLD_DAYS old, unless it was
-// refunded or disputed, flagged by the fraud checks, its partner isn't active, or the partner's sales
+// The hold period: a pending sale is approved once it's AFFILIATES_HOLD_DAYS old, unless it's
+// refunded in full (status refunded), under an open dispute, flagged by the fraud checks, its partner isn't active, or the partner's sales
 // are always reviewed by hand. Unset: an admin approves every sale. Run daily (crons/daily.ts).
 import { partners, refundedPayments, sales } from "@schema";
 import { and, db, eq, inArray, isNull, lte, notExists, or, sql } from "void/db";
@@ -29,7 +29,12 @@ export async function releaseHeldSales(now = Date.now()): Promise<number> {
             db
               .select({ x: sql`1` })
               .from(refundedPayments)
-              .where(eq(refundedPayments.paymentIntent, sales.paymentIntent)),
+              .where(
+                and(
+                  eq(refundedPayments.paymentIntent, sales.paymentIntent),
+                  eq(refundedPayments.disputeStatus, "open"),
+                ),
+              ),
           ),
         ),
       ),

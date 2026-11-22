@@ -5,9 +5,10 @@ import { readFileSync } from "node:fs";
 export const SHOP = "http://localhost:5173";
 export const AFFILIATES = "http://localhost:5174";
 
+/** Whether something serves url. Nothing there refuses at once; a dev server's first page can be slow. */
 export async function answers(url: string): Promise<boolean> {
   try {
-    await fetch(url, { signal: AbortSignal.timeout(2000) });
+    await fetch(url, { signal: AbortSignal.timeout(30_000) });
     return true;
   } catch {
     return false;

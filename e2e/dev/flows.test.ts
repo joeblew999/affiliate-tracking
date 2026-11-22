@@ -7,6 +7,7 @@ import {
   host,
   paidSession,
   partnerMe,
+  salesOf,
   service,
   signInAdmin,
   signUp,
@@ -149,7 +150,7 @@ test("a paid checkout becomes a sale once; unsigned events are refused", async (
   expect(unsigned.status).toBe(400);
 });
 
-test("a refund marks the sale refunded, even when it arrives first", async () => {
+test("a refund or dispute in full marks the sale refunded, even when it arrives first; a won dispute undoes it", async () => {
   const nick = await activePartner();
   const admin = await signInAdmin();
   const sale = paidSession({ affiliate_partner_id: nick.partnerId });
@@ -157,16 +158,21 @@ test("a refund marks the sale refunded, even when it arrives first", async () =>
   await stripeEvent("charge.refunded", {
     id: "ch_1",
     object: "charge",
+    amount: 5000,
+    amount_refunded: 5000,
     payment_intent: sale.payment_intent,
   });
 
   const early = paidSession({ affiliate_partner_id: nick.partnerId });
-  await stripeEvent("charge.dispute.created", {
+  const dispute = {
     id: "dp_1",
     object: "dispute",
+    amount: 5000,
     charge: "ch_2",
     payment_intent: early.payment_intent,
-  });
+    status: "needs_response",
+  };
+  await stripeEvent("charge.dispute.created", dispute);
   await stripeEvent("checkout.session.completed", early);
 
   const all = await service<{ sales: { stripeSessionId: string; status: string }[] }>(
@@ -176,6 +182,11 @@ test("a refund marks the sale refunded, even when it arrives first", async () =>
   const status = (id: unknown) => all.body.sales.find((s) => s.stripeSessionId === id)?.status;
   expect([status(sale.id), status(early.id)]).toEqual(["refunded", "refunded"]);
   expect((await partnerMe(nick.cookie)).sales).toBe(0);
+
+  // The dispute is won: the sale earns its commission again, back through the hold period.
+  await stripeEvent("charge.dispute.closed", { ...dispute, status: "won" });
+  const won = (await salesOf(nick.partnerId)).find((s) => s.stripeSessionId === early.id);
+  expect(won).toMatchObject({ status: "pending", commissionCents: 1000, refundedCents: 0 });
 });
 
 test("a partner buying for themselves is flagged", async () => {

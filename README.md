@@ -58,7 +58,7 @@ What the example shop does, in `apps/shop`:
    and the service's `AFFILIATES_COOKIE_DOMAIN` to the same domain.
 5. In Stripe, add a webhook endpoint for the service, `https://affiliates.example.com/api/stripe/webhook`,
    for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`,
-   `charge.refunded` and `charge.dispute.created`; its signing secret is the service's
+   `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`; its signing secret is the service's
    `STRIPE_WEBHOOK_SECRET`.
 
 The service's settings, each with a line saying what it does, are in `apps/affiliates/env.ts`; the

@@ -113,12 +113,16 @@ Each step ends with its tests passing locally; pushed when you say.
 
 ## Follow-ups (found while building, not done yet)
 
-- **Partial refunds** count as full: any `charge.refunded` marks the sale refunded and its whole
-  commission is lost. The old library did the same. Better: reduce the commission by the refunded
-  share (`charge.amount_refunded / charge.amount`).
-- **A sale refunded after its transfer started** stays in that payout: the partner is paid for it.
-  The old library left this to manual reconciliation too. Better: a negative line (a clawback) on
-  the partner's next payout.
+- **Done 2026-11-22: refunds** (`apps/affiliates/src/refunds.ts`). A partial refund takes its share
+  of the commission, not all of it; a refund after a sale is paid out is a clawback the partner's
+  next payout nets off; a won dispute gives the commission back. The old library had none of this.
+  Not covered by a test: a refund landing between a payout's claim and its transfer (the payout is
+  sent back), since the queue runs a payout too quickly for a test to land one in between.
+- **Dev queue delivery** (seen 2026-11-22, not yet explained): in one `vp run dev` session that had
+  reloaded after Vite re-bundled its dependencies, every real `payouts` queue message failed in about
+  5 ms before the handler ran, while the same message sent through `/__void/queue` worked. A fresh
+  `vp run dev` was fine. To find out: whether Void's local queue consumer keeps the module from before
+  the reload; if so, report it to Void with the steps.
 - **Connect transfers** have no end-to-end test: Stripe test mode needs an onboarded Connect account,
   which `vp run test:stripe` doesn't make yet. Manual payouts and currency conversion are covered.
 - **The Stripe end-to-end suite hasn't run yet**: it needs `STRIPE_TEST_SECRET_KEY`, which this

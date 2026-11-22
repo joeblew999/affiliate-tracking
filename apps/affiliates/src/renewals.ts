@@ -9,6 +9,7 @@ import type Stripe from "stripe";
 import { and, asc, db, eq, or, sql } from "void/db";
 import { env } from "void/env";
 import { computeCommission } from "./commission";
+import { applyRefunds } from "./refunds";
 import { hasStripe, idOf, stripe } from "./stripe";
 
 export const DEFAULT_RECURRING_MONTHS = 12;
@@ -121,11 +122,6 @@ export async function recordRenewal(
     .values({
       partnerId: first.partner.id,
       kind: "renewal",
-      status: paymentIntent
-        ? sql<
-            "refunded" | "pending"
-          >`CASE WHEN EXISTS (SELECT 1 FROM refunded_payments WHERE payment_intent = ${paymentIntent}) THEN 'refunded' ELSE 'pending' END`
-        : "pending",
       stripeInvoiceId: invoice.id,
       stripeEventId: event.id,
       paymentIntent,
@@ -138,6 +134,7 @@ export async function recordRenewal(
       amountCents: invoice.amount_paid,
       currency,
       commissionCents: commission.commissionCents,
+      grossCommissionCents: commission.commissionCents,
       commissionPct: commission.commissionPct,
       commissionDetail: commission.detail,
       items,
@@ -146,5 +143,7 @@ export async function recordRenewal(
     })
     .onConflictDoNothing({ target: sales.stripeInvoiceId })
     .returning({ id: sales.id });
-  return row ? { recorded: true, saleId: row.id } : { recorded: false, reason: "already recorded" };
+  if (!row) return { recorded: false, reason: "already recorded" };
+  if (paymentIntent) await applyRefunds(paymentIntent);
+  return { recorded: true, saleId: row.id };
 }

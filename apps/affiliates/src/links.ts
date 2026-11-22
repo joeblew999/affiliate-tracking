@@ -33,7 +33,8 @@ export async function linksOf(partnerId: string, origin: string) {
       status: links.status,
       createdAt: links.createdAt,
       clicks: sql<number>`(SELECT COUNT(*) FROM ${clicks} WHERE ${clicks.linkId} = ${links.id})`,
-      sales: sql<number>`(SELECT COUNT(*) FROM ${sales} WHERE ${sales.linkId} = ${links.id} AND ${sales.status} != 'refunded')`,
+      sales: sql<number>`(SELECT COUNT(*) FROM ${sales} WHERE ${sales.linkId} = ${links.id} AND ${sales.status} != 'refunded' AND ${sales.kind} != 'clawback')`,
+      // Net of clawbacks, which carry their sale's link.
       commissionCents: sql<number>`(SELECT COALESCE(SUM(${sales.commissionCents}), 0) FROM ${sales} WHERE ${sales.linkId} = ${links.id} AND ${sales.status} != 'refunded')`,
     })
     .from(links)
