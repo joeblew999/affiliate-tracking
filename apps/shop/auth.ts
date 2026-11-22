@@ -37,8 +37,18 @@ export default defineAuth(({ defaults, env }) => {
       .filter(Boolean),
   );
   const hostToken = text(env.AFFILIATES_HOST_TOKEN);
+  const cookieDomain = text(env.AUTH_COOKIE_DOMAIN);
   return {
     ...defaults,
+    // The session cookie for the parent domain, so the affiliate service receives it (README).
+    ...(cookieDomain
+      ? {
+          advanced: {
+            ...defaults.advanced,
+            crossSubDomainCookies: { enabled: true, domain: cookieDomain },
+          },
+        }
+      : {}),
     // The affiliate service asks who is signed in on every request it serves, always from its own
     // Worker, so per-IP limits would make all its users share one. Its calls to get-session carry
     // the shared AFFILIATES_HOST_TOKEN and skip the limit; everything else keeps it (Void's

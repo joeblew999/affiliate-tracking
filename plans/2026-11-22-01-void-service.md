@@ -118,6 +118,12 @@ Each step ends with its tests passing locally; pushed when you say.
   next payout nets off; a won dispute gives the commission back. The old library had none of this.
   Not covered by a test: a refund landing between a payout's claim and its transfer (the payout is
   sent back), since the queue runs a payout too quickly for a test to land one in between.
+- **Void: `void cloudflare login` can't sign in on a headless Linux machine** (Void 1.11.0, seen
+  2026-11-22 in a Claude cloud session): it always sets `CLOUDFLARE_AUTH_USE_KEYRING=true`
+  (`dist/cloudflare-auth-*.mjs`, `cloudflareAuthEnvironment`), and on Linux that needs `secret-tool`
+  and a running keyring service, which servers and containers don't have. The only other route is
+  `CLOUDFLARE_API_TOKEN`. Worth reporting to Void: allow storing the sign-in in a file there, as `cf
+  auth login --no-use-keyring` does.
 - **Dev queue delivery** (seen 2026-11-22, not yet explained): in one `vp run dev` session that had
   reloaded after Vite re-bundled its dependencies, every real `payouts` queue message failed in about
   5 ms before the handler ran, while the same message sent through `/__void/queue` worked. A fresh

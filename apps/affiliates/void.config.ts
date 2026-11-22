@@ -10,5 +10,7 @@ export default defineConfig({
     // belongs to). Here the example shop, apps/shop; a deployment for another app names that app's
     // Worker instead.
     services: [{ binding: "HOST", service: "shop" }],
+    // Deployed at: a subdomain of the shop's, so they share its cookies (README, "Two addresses").
+    routes: [{ pattern: "affiliates.shop.ubuntusoftware.net", custom_domain: true }],
   },
 });
