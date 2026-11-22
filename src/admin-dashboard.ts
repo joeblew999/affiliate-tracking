@@ -2,7 +2,6 @@
 // need a particular site generator or frontend framework.
 import type { AdminDashboardAppearance, AffiliateRouteContext } from './types.ts';
 import { escapeHtml } from '../functions/api/_email.ts';
-import { errorMessage } from './errors.ts';
 
 const html = String.raw`<!doctype html>
 <html lang="en">
@@ -66,6 +65,7 @@ __STYLESHEETS__
       <label>Currency<input name="currency" value="usd" maxlength="3" required></label>
       <label>Note<input name="note" maxlength="200" placeholder="Launch week" required></label>
     </div><button class="primary" type="submit">Add bonus</button><p class="note">Bonuses are approved straight away and paid with the partner's next payout, in your payout currency.</p></form>
+  </section>
   <section id="performance-panel" hidden>
     <div class="toolbar row spread"><h2>Performance</h2><div class="row"><label for="stats-days" class="muted">Period</label><select id="stats-days"><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option><option value="365">Last 365 days</option></select></div></div>
     <div class="card"><span class="muted">Clicks per day</span><svg id="clicks-chart" role="img" aria-label="Clicks per day" width="100%" height="120" viewBox="0 0 600 120" preserveAspectRatio="none"></svg></div>
@@ -278,20 +278,20 @@ __STYLESHEETS__
     const formButtons = [$('create-form').querySelector('button'), $('refresh'), $('show-create')];
     formButtons.forEach(button => button.disabled = true);
     try { const message = await handler(); if (message) { await load(); feedback(message); } }
-    catch (error: unknown) { if (error.status === 401) signedOut(); feedback(errorMessage(error), true); }
+    catch (error) { if (error.status === 401) signedOut(); feedback(error.message, true); }
     finally { busy = false; formButtons.forEach(button => button.disabled = false); render(); }
   }
   async function signIn(path, body) {
     $('login-error').textContent = '';
     const buttons = $('login').querySelectorAll('button'); buttons.forEach(button => button.disabled = true);
     try { await api(path, body); $('admin-token').value = ''; await load(); }
-    catch (error: unknown) { $('login-error').textContent = errorMessage(error); }
+    catch (error) { $('login-error').textContent = error.message; }
     finally { buttons.forEach(button => button.disabled = false); }
   }
   $('login-form').addEventListener('submit', event => { event.preventDefault(); signIn('/api/admin/login', { token: $('admin-token').value }); });
   $('demo-admin').addEventListener('click', () => signIn('/api/admin/dev-login', {}));
-  $('demo-affiliate').addEventListener('click', async () => { try { await api('/api/affiliate/dev-login', {}); window.location.href = '/affiliates/dashboard/'; } catch (error: unknown) { $('login-error').textContent = errorMessage(error); } });
-  $('sign-out').addEventListener('click', async () => { try { await api('/api/admin/logout', {}); signedOut(); } catch (error: unknown) { feedback(errorMessage(error), true); } });
+  $('demo-affiliate').addEventListener('click', async () => { try { await api('/api/affiliate/dev-login', {}); window.location.href = '/affiliates/dashboard/'; } catch (error) { $('login-error').textContent = error.message; } });
+  $('sign-out').addEventListener('click', async () => { try { await api('/api/admin/logout', {}); signedOut(); } catch (error) { feedback(error.message, true); } });
   $('refresh').addEventListener('click', () => mutate(async () => 'Data refreshed.'));
   $('partner-filter').addEventListener('change', render); $('conversion-filter').addEventListener('change', render);
   $('stats-days').addEventListener('change', async () => { try { state.stats = await api('/api/admin/stats?days=' + $('stats-days').value); renderStats(); } catch (error) { feedback(error.message, true); } });
@@ -303,6 +303,7 @@ __STYLESHEETS__
     const form = new FormData(formEl); const body = { affiliate_id: linksFor.id, destination: form.get('destination') };
     if (form.get('campaign')) body.campaign = form.get('campaign'); if (form.get('slug')) body.slug = String(form.get('slug')).toLowerCase();
     const data = await api('/api/admin/links', body); formEl.reset(); await showLinks(); return 'Created ' + data.link.url;
+  }); });
   $('rule-form').elements.kind.addEventListener('change', event => {
     const fixed = event.target.value === 'fixed'; const form = $('rule-form').elements;
     form.percent.disabled = fixed; form.fixed.disabled = !fixed; form.currency.disabled = !fixed;
@@ -337,7 +338,7 @@ __STYLESHEETS__
   async function start() {
     try { const dev = await api('/api/affiliate/dev'); localDemo = dev.enabled === true; } catch {}
     $('local-login').hidden = !localDemo; $('demo-notice').hidden = !localDemo;
-    try { await load(); } catch (error: unknown) { signedOut(); if (error.status !== 401) $('login-error').textContent = errorMessage(error); }
+    try { await load(); } catch (error) { signedOut(); if (error.status !== 401) $('login-error').textContent = error.message; }
   }
   start();
 })();
