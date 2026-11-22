@@ -59,10 +59,14 @@ test("a partner applies, an admin approves, the partner makes and archives a lin
   await open(admin.page, `${AFFILIATES}/admin`);
   const row = admin.page.getByRole("row").filter({ hasText: pat.email });
   await row.getByRole("button", { name: "Approve" }).click();
-  await eventually(async () => expect(await row.getByText("active").count()).toBe(1));
+  await eventually(async () =>
+    expect(await row.getByText("active").filter({ visible: true }).count()).toBe(1),
+  );
 
   await partner.page.reload({ waitUntil: "networkidle" });
-  await eventually(async () => expect(await partner.page.getByText("Your link:").count()).toBe(1));
+  await eventually(async () =>
+    expect(await partner.page.getByText("Your link", { exact: true }).count()).toBe(1),
+  );
   await partner.page.getByLabel("Goes to").fill("/pricing");
   await partner.page.getByLabel("Campaign").fill("Newsletter");
   await partner.page.getByRole("button", { name: "Create link" }).click();
@@ -101,7 +105,9 @@ test("an admin uses every tab: sales, payouts, rules, bonuses, performance", asy
   await admin.page.getByRole("tab", { name: "Sales" }).click();
   const sale = admin.page.getByRole("row").filter({ hasText: buyer });
   await sale.getByRole("button", { name: "Approve" }).click();
-  await eventually(async () => expect(await sale.getByText("approved").count()).toBe(1));
+  await eventually(async () =>
+    expect(await sale.getByText("approved").filter({ visible: true }).count()).toBe(1),
+  );
 
   await admin.page.getByRole("tab", { name: "Rules & bonuses" }).click();
   await admin.page.getByPlaceholder("Percent").fill("35");

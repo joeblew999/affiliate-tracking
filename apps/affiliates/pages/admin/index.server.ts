@@ -8,7 +8,8 @@ import { currentUser } from "@/user";
 // The admin page: everything, for the host's admins only.
 export const loader = defineHandler(async (c) => {
   const user = await currentUser(c);
-  if (user?.role !== "admin") return { allowed: false as const };
+  const shopUrl = env.HOST_SITE_URL;
+  if (user?.role !== "admin") return { allowed: false as const, shopUrl };
   const [partnerRows, saleRows, payoutRows, ruleRows, performance] = await Promise.all([
     db.select().from(partners).orderBy(desc(partners.createdAt)),
     db
@@ -31,6 +32,7 @@ export const loader = defineHandler(async (c) => {
   ]);
   return {
     allowed: true as const,
+    shopUrl,
     email: user.email,
     payoutCurrency: env.AFFILIATES_PAYOUT_CURRENCY,
     partners: partnerRows,

@@ -11,6 +11,7 @@
     "jsx": "react-jsx",
     "lib": ["ES2025", "DOM", "DOM.Iterable"],
     "paths": {
+      "@/*": ["./src/*"],
       "void/routes": ["./.void/routes.d.ts"],
       "void/queues": ["./.void/queues.d.ts"]
     }

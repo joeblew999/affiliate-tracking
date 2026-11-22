@@ -19,6 +19,9 @@ export default defineConfig({
       // Real Stripe test mode (e2e/stripe/): needs STRIPE_TEST_SECRET_KEY in the shell, and
       // `vp run dev` stopped (it starts the apps itself, with the key). Run it on demand.
       "test:stripe": { command: "vp test run --project stripe", cache: false },
+      // Screenshots of every page of both apps, desktop and phone, in .screens/, with demo data
+      // made through the apps (scripts/screens.ts). Needs `vp run dev` running.
+      screens: { command: "vpx scripts/screens.ts", cache: false },
     },
   },
   test: {

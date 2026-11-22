@@ -1,10 +1,11 @@
 // The partner's page. Signed out: sign in on the shop. Signed in: apply; then wait for approval;
 // then the dashboard: their link and buyer code, totals, short links, and the last 30 days.
 import { useRouter } from "@void/react";
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
 import { fetch } from "void/client";
+import { AppHeader } from "@/components/app-header";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
-import { Badge } from "@/components/ui/badge";
+import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -48,54 +49,47 @@ function field(form: FormData, name: string): string {
 
 export default function PartnerPage(props: Props) {
   const { user, partner } = props;
-  if (!user) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Affiliate program</CardTitle>
-          <CardDescription>
-            Sign in on{" "}
-            <a className="underline" href={props.shopUrl}>
-              the shop
-            </a>{" "}
-            first, then come back here.
-          </CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Affiliate program</h1>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          {user.email}
-          {user.isAdmin && (
-            <a className="underline" href="/admin">
-              Admin
-            </a>
-          )}
-        </div>
-      </header>
-      {!partner && <Apply />}
-      {partner?.status === "pending" && (
-        <Notice title="Application received" text="An admin will review it soon." />
-      )}
-      {partner?.status === "suspended" && (
-        <Notice title="Suspended" text="Your partner account is suspended. Contact the shop." />
-      )}
-      {partner?.status === "active" && <Dashboard {...props} />}
-    </div>
+    <>
+      <AppHeader email={user?.email} shopUrl={props.shopUrl}>
+        {user?.isAdmin && (
+          <a className="hover:text-foreground" href="/admin">
+            Admin
+          </a>
+        )}
+      </AppHeader>
+      <main className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
+        {!user && (
+          <Notice
+            title="Partner program"
+            text="Recommend the shop and earn commission on every sale your link brings. Sign in on the shop first, then come back here to apply."
+          >
+            <Button nativeButton={false} render={<a href={props.shopUrl} />}>
+              Sign in on the shop
+            </Button>
+          </Notice>
+        )}
+        {user && !partner && <Apply />}
+        {partner?.status === "pending" && (
+          <Notice title="Application received" text="An admin will review it soon." />
+        )}
+        {partner?.status === "suspended" && (
+          <Notice title="Suspended" text="Your partner account is suspended. Contact the shop." />
+        )}
+        {partner?.status === "active" && <Dashboard {...props} />}
+      </main>
+    </>
   );
 }
 
-function Notice({ title, text }: { title: string; text: string }) {
+function Notice({ title, text, children }: { title: string; text: string; children?: ReactNode }) {
   return (
-    <Card>
+    <Card className="mx-auto max-w-lg">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <CardDescription>{text}</CardDescription>
       </CardHeader>
+      {children && <CardContent>{children}</CardContent>}
     </Card>
   );
 }
@@ -118,10 +112,12 @@ function Apply() {
     );
   }
   return (
-    <Card>
+    <Card className="mx-auto max-w-lg">
       <CardHeader>
         <CardTitle>Become a partner</CardTitle>
-        <CardDescription>Share your link; earn commission on every sale it brings.</CardDescription>
+        <CardDescription>
+          Share your link and earn commission on every sale it brings.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="grid gap-4">
@@ -147,10 +143,15 @@ function Apply() {
   );
 }
 
-function Dashboard({ partner, links, stats }: Props) {
+function Dashboard({ partner, links, stats, earnings, program }: Props) {
   const { run, error, busy } = useAction();
   if (!partner || !stats) return null;
   const funnel = stats.funnel[0];
+  const totals = earnings.length
+    ? earnings
+    : [{ currency: "usd", onHoldCents: 0, readyCents: 0, paidCents: 0 }];
+  const sum = (key: "onHoldCents" | "readyCents" | "paidCents") =>
+    totals.map((m) => money(m[key], m.currency)).join(" + ");
   function createLink(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -167,34 +168,40 @@ function Dashboard({ partner, links, stats }: Props) {
       formEl.reset();
     });
   }
+  const activeLinks = links.filter((link) => link.status === "active");
   return (
     <>
       <Card>
         <CardHeader>
-          <CardTitle>{partner.name}</CardTitle>
+          <CardTitle>Your link</CardTitle>
           <CardDescription>
-            Your link: <code>{partner.link}</code> · {partner.commissionPct}% commission
-            {partner.promoCode && (
-              <>
-                {" "}
-                · buyer code <code>{partner.promoCode}</code>
-              </>
-            )}
+            {partner.commissionPct}% commission on every sale it brings
+            {partner.promoCode && <>. Buyers can also use your code {partner.promoCode}</>}.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-6 text-sm">
-          <span>{funnel?.clicks ?? 0} clicks</span>
-          <span>{funnel?.signups ?? 0} signups</span>
-          <span>{funnel?.sales ?? 0} sales</span>
-          {(funnel?.money ?? []).map((m) => (
-            <span key={m.currency}>
-              {money(m.pendingCents + m.approvedCents, m.currency)} owed ·{" "}
-              {money(m.paidCents, m.currency)} paid
-            </span>
-          ))}
+        <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <code className="min-w-0 flex-1 rounded-md bg-muted px-3 py-2 text-sm break-all">
+            {partner.link}
+          </code>
+          <CopyButton value={partner.link} />
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat
+          title="On hold"
+          value={sum("onHoldCents")}
+          note={
+            program.holdDays
+              ? `Approved ${program.holdDays} days after each sale`
+              : "Waiting for approval"
+          }
+        />
+        <Stat title="Ready to pay" value={sum("readyCents")} note="Paid with the next payout">
           {!partner.paidOut && (
             <Button
               variant="outline"
+              size="sm"
               disabled={busy}
               onClick={() =>
                 void run(async () => {
@@ -206,48 +213,72 @@ function Dashboard({ partner, links, stats }: Props) {
               Set up payouts
             </Button>
           )}
+        </Stat>
+        <Stat title="Paid" value={sum("paidCents")} note="All time" />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Last 30 days</CardTitle>
+          <CardDescription>
+            {funnel?.clicks ?? 0} clicks, {funnel?.signups ?? 0} signups, {funnel?.sales ?? 0} sales
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <ClicksChart days={stats.clicksByDay} />
+          <div className="grid gap-6 sm:grid-cols-3">
+            <TopList title="Countries" rows={stats.topCountries} />
+            <TopList title="Devices" rows={stats.topDevices} />
+            <TopList title="Referring sites" rows={stats.topReferrers} />
+          </div>
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Links</CardTitle>
+          <CardTitle>Short links</CardTitle>
           <CardDescription>
-            Short links to any page of the shop, each with its own clicks and sales.
+            Links to any page of the shop, each with its own clicks and sales.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <form onSubmit={createLink} className="grid gap-2 sm:grid-cols-4">
-            <Input name="destination" placeholder="/pricing" aria-label="Goes to" />
+          <form onSubmit={createLink} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
+            <Input name="destination" placeholder="Page, e.g. /pricing" aria-label="Goes to" />
             <Input name="campaign" placeholder="Campaign" aria-label="Campaign" />
             <Input name="slug" placeholder="Short name (optional)" aria-label="Short name" />
             <Button type="submit" disabled={busy}>
               Create link
             </Button>
           </form>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Link</TableHead>
-                <TableHead>Campaign</TableHead>
-                <TableHead className="text-right">Clicks</TableHead>
-                <TableHead className="text-right">Sales</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {links
-                .filter((link) => link.status === "active")
-                .map((link) => (
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          {activeLinks.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Link</TableHead>
+                  <TableHead className="hidden sm:table-cell">Campaign</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">Clicks</TableHead>
+                  <TableHead className="text-right">Sales</TableHead>
+                  <TableHead />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {activeLinks.map((link) => (
                   <TableRow key={link.id}>
-                    <TableCell>
-                      <code>{link.url}</code>
-                      <div className="text-xs text-muted-foreground">to {link.destination}</div>
+                    <TableCell className="max-w-[14rem] sm:max-w-none">
+                      <div className="truncate font-medium">{link.url}</div>
+                      <div className="truncate text-xs text-muted-foreground">
+                        to {link.destination}
+                        <span className="sm:hidden"> · {link.campaign ?? "no campaign"}</span>
+                      </div>
                     </TableCell>
-                    <TableCell>{link.campaign ?? "—"}</TableCell>
-                    <TableCell className="text-right tabular-nums">{link.clicks}</TableCell>
+                    <TableCell className="hidden sm:table-cell">{link.campaign ?? "—"}</TableCell>
+                    <TableCell className="hidden text-right tabular-nums sm:table-cell">
+                      {link.clicks}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{link.sales}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right whitespace-nowrap">
+                      <CopyButton value={link.url} variant="ghost" />
                       <Button
                         variant="ghost"
                         size="sm"
@@ -266,30 +297,36 @@ function Dashboard({ partner, links, stats }: Props) {
                     </TableCell>
                   </TableRow>
                 ))}
-            </TableBody>
-          </Table>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Last 30 days</CardTitle>
-          <CardDescription>
-            <Badge variant="secondary">
-              {stats.clicksByDay.reduce((sum, d) => sum + d.clicks, 0)} clicks
-            </Badge>
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <ClicksChart days={stats.clicksByDay} />
-          <div className="grid gap-4 sm:grid-cols-3">
-            <TopList title="Countries" rows={stats.topCountries} />
-            <TopList title="Devices" rows={stats.topDevices} />
-            <TopList title="Referring sites" rows={stats.topReferrers} />
-          </div>
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </>
+  );
+}
+
+function Stat({
+  title,
+  value,
+  note,
+  children,
+}: {
+  title: string;
+  value: string;
+  note: string;
+  children?: ReactNode;
+}) {
+  return (
+    <Card size="sm">
+      <CardHeader>
+        <CardDescription>{title}</CardDescription>
+        <CardTitle className="text-2xl tabular-nums">{value}</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        {note}
+        {children}
+      </CardContent>
+    </Card>
   );
 }

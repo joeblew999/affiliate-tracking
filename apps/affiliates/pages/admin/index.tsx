@@ -3,10 +3,18 @@
 import { useRouter } from "@void/react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { fetch } from "void/client";
+import { MoreHorizontal } from "lucide-react";
+import { AppHeader } from "@/components/app-header";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -57,50 +65,64 @@ const selectClass = "h-9 rounded-md border bg-transparent px-2 text-sm";
 export default function AdminPage(props: Props) {
   if (!props.allowed) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Admins only</CardTitle>
-          <CardDescription>
-            Sign in on the shop with an admin account.{" "}
-            <a className="underline" href="/">
-              Back
-            </a>
-          </CardDescription>
-        </CardHeader>
-      </Card>
+      <>
+        <AppHeader shopUrl={props.shopUrl} />
+        <main className="mx-auto max-w-lg px-4 py-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Admins only</CardTitle>
+              <CardDescription>
+                Sign in on the shop with an admin account.{" "}
+                <a className="underline" href="/">
+                  Back
+                </a>
+              </CardDescription>
+            </CardHeader>
+          </Card>
+        </main>
+      </>
     );
   }
+  const applications = props.partners.filter((p) => p.status === "pending").length;
+  const toReview = props.sales.filter((s) => s.status === "pending").length;
   return (
-    <div className="space-y-6">
-      <header className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Affiliate program: admin</h1>
-        <span className="text-sm text-muted-foreground">{props.email}</span>
-      </header>
-      <Tabs defaultValue="partners">
-        <TabsList>
-          <TabsTrigger value="partners">Partners</TabsTrigger>
-          <TabsTrigger value="sales">Sales</TabsTrigger>
-          <TabsTrigger value="payouts">Payouts</TabsTrigger>
-          <TabsTrigger value="rules">Rules &amp; bonuses</TabsTrigger>
-          <TabsTrigger value="performance">Performance</TabsTrigger>
-        </TabsList>
-        <TabsContent value="partners">
-          <Partners {...props} />
-        </TabsContent>
-        <TabsContent value="sales">
-          <Sales {...props} />
-        </TabsContent>
-        <TabsContent value="payouts">
-          <Payouts {...props} />
-        </TabsContent>
-        <TabsContent value="rules">
-          <Rules {...props} />
-        </TabsContent>
-        <TabsContent value="performance">
-          <Performance {...props} />
-        </TabsContent>
-      </Tabs>
-    </div>
+    <>
+      <AppHeader email={props.email} shopUrl={props.shopUrl}>
+        <a className="hover:text-foreground" href="/">
+          Partner page
+        </a>
+      </AppHeader>
+      <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+        <Tabs defaultValue="partners">
+          <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
+            <TabsTrigger value="partners">
+              Partners{applications > 0 && <Badge variant="secondary">{applications} new</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="sales">
+              Sales{toReview > 0 && <Badge variant="secondary">{toReview} pending</Badge>}
+            </TabsTrigger>
+            <TabsTrigger value="payouts">Payouts</TabsTrigger>
+            <TabsTrigger value="rules">Rules &amp; bonuses</TabsTrigger>
+            <TabsTrigger value="performance">Performance</TabsTrigger>
+          </TabsList>
+          <TabsContent value="partners">
+            <Partners {...props} />
+          </TabsContent>
+          <TabsContent value="sales">
+            <Sales {...props} />
+          </TabsContent>
+          <TabsContent value="payouts">
+            <Payouts {...props} />
+          </TabsContent>
+          <TabsContent value="rules">
+            <Rules {...props} />
+          </TabsContent>
+          <TabsContent value="performance">
+            <Performance {...props} />
+          </TabsContent>
+        </Tabs>
+      </main>
+    </>
   );
 }
 
@@ -164,30 +186,33 @@ function Partners({ partners }: Allowed) {
         <TableHeader>
           <TableRow>
             <TableHead>Partner</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Code</TableHead>
-            <TableHead>Commission</TableHead>
-            <TableHead>Application</TableHead>
+            <TableHead className="hidden sm:table-cell">Status</TableHead>
+            <TableHead className="hidden md:table-cell">Code</TableHead>
+            <TableHead className="hidden md:table-cell">Commission %</TableHead>
+            <TableHead className="hidden lg:table-cell">Application</TableHead>
             <TableHead />
           </TableRow>
         </TableHeader>
         <TableBody>
           {partners.map((p) => (
             <TableRow key={p.id}>
-              <TableCell>
+              <TableCell className="whitespace-normal">
                 {p.name ?? "—"}
-                <div className="text-xs text-muted-foreground">{p.email}</div>
+                <div className="mt-1 sm:hidden">
+                  <StatusBadge status={p.status} />
+                </div>
+                <div className="text-xs text-muted-foreground [overflow-wrap:anywhere]">
+                  {p.email}
+                </div>
               </TableCell>
-              <TableCell>
+              <TableCell className="hidden sm:table-cell">
                 <StatusBadge status={p.status} />
                 {p.reviewRequired && (
                   <div className="text-xs text-muted-foreground">every sale reviewed</div>
                 )}
               </TableCell>
-              <TableCell>
-                <code>{p.code}</code>
-              </TableCell>
-              <TableCell>
+              <TableCell className="hidden md:table-cell">{p.code}</TableCell>
+              <TableCell className="hidden md:table-cell">
                 <Input
                   aria-label={`Commission % for ${p.name ?? p.email}`}
                   className="w-20"
@@ -201,7 +226,7 @@ function Partners({ partners }: Allowed) {
                   }}
                 />
               </TableCell>
-              <TableCell className="max-w-xs text-sm text-muted-foreground">
+              <TableCell className="hidden max-w-xs text-sm whitespace-normal text-muted-foreground lg:table-cell">
                 {p.application ?? "—"}
               </TableCell>
               <TableCell className="space-x-1 text-right whitespace-nowrap">
@@ -220,29 +245,36 @@ function Partners({ partners }: Allowed) {
                     Suspend
                   </Button>
                 )}
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() => void update(p.id, { reviewRequired: !p.reviewRequired })}
-                >
-                  {p.reviewRequired ? "Stop reviewing" : "Review every sale"}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const { links } = await fetch("/api/admin/partners/links", {
-                        query: { partnerId: p.id },
-                      });
-                      setLinksFor({ name: p.name ?? p.email, links });
-                    })
-                  }
-                >
-                  Links
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={
+                      <Button size="icon-sm" variant="ghost" aria-label={`More for ${p.email}`} />
+                    }
+                  >
+                    <MoreHorizontal />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      disabled={busy}
+                      onClick={() => void update(p.id, { reviewRequired: !p.reviewRequired })}
+                    >
+                      {p.reviewRequired ? "Stop reviewing every sale" : "Review every sale"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      disabled={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          const { links } = await fetch("/api/admin/partners/links", {
+                            query: { partnerId: p.id },
+                          });
+                          setLinksFor({ name: p.name ?? p.email, links });
+                        })
+                      }
+                    >
+                      Show links
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </TableCell>
             </TableRow>
           ))}
@@ -287,22 +319,28 @@ function Sales({ sales }: Allowed) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Partner</TableHead>
+            <TableHead className="hidden sm:table-cell">Date</TableHead>
+            <TableHead className="hidden sm:table-cell">Partner</TableHead>
             <TableHead>Customer</TableHead>
-            <TableHead className="text-right">Paid</TableHead>
+            <TableHead className="hidden text-right sm:table-cell">Paid</TableHead>
             <TableHead className="text-right">Commission</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead className="hidden sm:table-cell">Status</TableHead>
             <TableHead />
           </TableRow>
         </TableHeader>
         <TableBody>
           {sales.map((s) => (
             <TableRow key={s.id}>
-              <TableCell>{date(s.createdAt)}</TableCell>
-              <TableCell>{s.partnerName ?? "—"}</TableCell>
-              <TableCell>
+              <TableCell className="hidden sm:table-cell">{date(s.createdAt)}</TableCell>
+              <TableCell className="hidden sm:table-cell">{s.partnerName ?? "—"}</TableCell>
+              <TableCell className="whitespace-normal [overflow-wrap:anywhere]">
+                <div className="text-xs text-muted-foreground sm:hidden">
+                  {date(s.createdAt)}, {s.partnerName ?? "—"}
+                </div>
                 {s.kind === "bonus" ? `Bonus: ${s.bonusNote ?? ""}` : (s.customerEmail ?? "—")}
+                <div className="mt-1 sm:hidden">
+                  <StatusBadge status={s.status} />
+                </div>
                 {s.kind === "clawback" && (
                   <div className="text-xs text-muted-foreground">
                     clawback: a refund after it was paid out
@@ -324,41 +362,43 @@ function Sales({ sales }: Allowed) {
                   </div>
                 )}
               </TableCell>
-              <TableCell className="text-right tabular-nums">
+              <TableCell className="hidden text-right tabular-nums sm:table-cell">
                 {money(s.amountCents, s.currency)}
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {money(s.commissionCents, s.currency)}
               </TableCell>
-              <TableCell>
+              <TableCell className="hidden sm:table-cell">
                 <StatusBadge status={s.status} />
               </TableCell>
-              <TableCell className="space-x-1 text-right whitespace-nowrap">
-                {(s.status === "pending" || s.status === "rejected") && (
-                  <Button size="sm" disabled={busy} onClick={() => void decide(s.id, "approved")}>
-                    Approve
-                  </Button>
-                )}
-                {(s.status === "pending" || s.status === "approved") && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() => void decide(s.id, "rejected")}
-                  >
-                    Reject
-                  </Button>
-                )}
-                {s.status === "approved" && (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={busy}
-                    onClick={() => void decide(s.id, "pending")}
-                  >
-                    Back to pending
-                  </Button>
-                )}
+              <TableCell>
+                <div className="flex flex-col items-end gap-1 sm:flex-row sm:justify-end">
+                  {(s.status === "pending" || s.status === "rejected") && (
+                    <Button size="sm" disabled={busy} onClick={() => void decide(s.id, "approved")}>
+                      Approve
+                    </Button>
+                  )}
+                  {(s.status === "pending" || s.status === "approved") && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => void decide(s.id, "rejected")}
+                    >
+                      Reject
+                    </Button>
+                  )}
+                  {s.status === "approved" && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => void decide(s.id, "pending")}
+                    >
+                      Back to pending
+                    </Button>
+                  )}
+                </div>
               </TableCell>
             </TableRow>
           ))}

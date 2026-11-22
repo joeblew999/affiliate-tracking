@@ -146,3 +146,22 @@ async function top(
     .limit(10);
   return rows.map((row) => ({ value: row.value ?? "", clicks: row.clicks }));
 }
+
+/**
+ * A partner's money over all time, in each currency, by where it is: on hold (pending: waiting out
+ * the hold period or an admin), ready to pay (approved, less clawbacks: the next payout), and paid
+ * (sent, or being sent). Rejected and fully refunded sales earn nothing and aren't counted.
+ */
+export async function earnings(partnerId: string) {
+  return db
+    .select({
+      currency: sales.currency,
+      onHoldCents: sql<number>`SUM(CASE WHEN ${sales.status} = 'pending' THEN ${sales.commissionCents} ELSE 0 END)`,
+      readyCents: sql<number>`SUM(CASE WHEN ${sales.status} = 'approved' THEN ${sales.commissionCents} ELSE 0 END)`,
+      paidCents: sql<number>`SUM(CASE WHEN ${sales.status} IN ('paying', 'paid') THEN ${sales.commissionCents} ELSE 0 END)`,
+    })
+    .from(sales)
+    .where(eq(sales.partnerId, partnerId))
+    .groupBy(sales.currency)
+    .orderBy(sales.currency);
+}

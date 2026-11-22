@@ -1,4 +1,4 @@
-import { defineEnv, string } from "void/env";
+import { defineEnv, string, url } from "void/env";
 
 export default defineEnv({
   // Sent with every call to the affiliate service (its middleware/01.host-api.ts checks it). The
@@ -17,4 +17,6 @@ export default defineEnv({
   // cookie too: e.g. shop.example.com, with the service at affiliates.shop.example.com. Unset (local
   // dev, where both are on localhost): the cookie is the shop's own.
   AUTH_COOKIE_DOMAIN: string().optional(),
+  // Where the affiliate service's pages are, for the shop's "Partner program" link.
+  AFFILIATES_SITE_URL: url().default("http://localhost:5174"),
 });

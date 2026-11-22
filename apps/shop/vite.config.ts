@@ -1,6 +1,8 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite-plus";
 import { voidPlugin } from "void";
 import { voidReact } from "@void/react/plugin";
+import tailwindcss from "@tailwindcss/vite";
 
 // Its own debugger port. `vp run dev` starts both apps at once; both asked for 9229, and now and then
 // one crashed (EADDRINUSE) instead of moving to another port. Void reads VOID_INSPECTOR_PORT
@@ -8,7 +10,9 @@ import { voidReact } from "@void/react/plugin";
 process.env.VOID_INSPECTOR_PORT ??= "9230";
 
 export default defineConfig({
-  plugins: [voidPlugin(), voidReact()],
+  plugins: [voidPlugin(), voidReact(), tailwindcss()],
+  // shadcn's "@/" import alias (tsconfig.json "paths" says the same for TypeScript).
+  resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   server: {
     // Always 5173 (the affiliate service is 5174; the tests expect both).
     port: 5173,
