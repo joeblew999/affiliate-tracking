@@ -97,16 +97,15 @@ export interface SaleItem {
   quantity: number;
 }
 
-/** The sales of one partner, or all (GET /api/sales). */
-export const saleQuery = createSelectSchema(sales).pick({ partnerId: true }).partial();
-
-/** A bonus an admin gives a partner (POST /api/sales): a sale of kind "bonus". */
+/** A bonus an admin gives a partner (the admin page's bonus): a sale of kind "bonus". */
 export const bonus = createInsertSchema(sales, {
   commissionCents: (s) => s.positive(),
   bonusNote: () => z.string().trim().min(1).max(200),
 }).pick({ partnerId: true, commissionCents: true, bonusNote: true });
 
-/** An admin's decision on a sale (PATCH /api/sales/[id]): approve, reject, or back to pending. */
-export const saleChange = z.object({
-  status: createSelectSchema(sales).shape.status.extract(["approved", "rejected", "pending"]),
-});
+/** An admin's decision on a sale (the admin page's changeSale): approve, reject, or pending. */
+export const saleChange = createSelectSchema(sales)
+  .pick({ id: true })
+  .extend({
+    status: createSelectSchema(sales).shape.status.extract(["approved", "rejected", "pending"]),
+  });

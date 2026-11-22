@@ -1,8 +1,8 @@
 // The admin page: partners (approve, suspend, settings, links), sales (approve, reject), payouts
 // (run them), commission rules and bonuses, and performance.
-import { useRouter } from "@void/react";
+import { action, useRouter } from "@void/react";
+import type { Href } from "void/routes";
 import { useState, type FormEvent, type ReactNode } from "react";
-import { fetch } from "void/client";
 import { MoreHorizontal } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { viewAs } from "@/components/view-as";
@@ -31,17 +31,23 @@ import type { Props } from "./index.server";
 
 type Allowed = Extract<Props, { allowed: true }>;
 
+/** An action's answer: { ok: false, error } when it was refused (Void's action()). */
+function failure(result: unknown): string | null {
+  if (typeof result !== "object" || result === null || !("ok" in result) || result.ok) return null;
+  return "error" in result ? messageOf(result.error) : "That didn't work.";
+}
+
 function useAction() {
-  const router = useRouter();
   const [message, setMessage] = useState<{ text: string; error: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
-  async function run(action: () => Promise<unknown>, done?: string) {
+  // The page's data comes back by itself: Void re-runs the loader after an action.
+  async function run(call: () => Promise<unknown>, done?: string) {
     setBusy(true);
     setMessage(null);
     try {
-      await action();
-      if (done) setMessage({ text: done, error: false });
-      await router.refresh();
+      const refused = failure(await call());
+      if (refused) setMessage({ text: refused, error: true });
+      else if (done) setMessage({ text: done, error: false });
     } catch (err) {
       setMessage({ text: messageOf(err), error: true });
     } finally {
@@ -160,26 +166,19 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{status}</Badge>;
 }
 
-function Partners({ partners }: Allowed) {
+function Partners({ partners, links }: Allowed) {
   const { run, busy, feedback } = useAction();
-  const [linksFor, setLinksFor] = useState<{
-    name: string;
-    links: {
-      id: string;
-      url: string;
-      destination: string;
-      campaign: string | null;
-      clicks: number;
-      sales: number;
-      status: string;
-    }[];
-  } | null>(null);
-  const status = (id: string, value: "active" | "suspended") =>
-    run(() =>
-      fetch("/api/partners/[id]", { method: "PATCH", params: { id }, body: { status: value } }),
-    );
-  const update = (id: string, body: { commissionPct?: number; reviewRequired?: boolean }) =>
-    run(() => fetch("/api/partners/[id]", { method: "PATCH", params: { id }, body }));
+  const router = useRouter();
+  const linksFor = links && {
+    name: partners.find((p) => p.id === links.partnerId)?.name ?? "",
+    links: links.links,
+  };
+  const change = (
+    id: string,
+    body: { status?: "active" | "suspended"; reviewRequired?: boolean; commissionPct?: number },
+  ) => run(() => action("/admin?changePartner", { data: { id, ...body } }));
+  const status = (id: string, value: "active" | "suspended") => change(id, { status: value });
+  const update = change;
   return (
     <Section
       title="Partners"
@@ -269,12 +268,7 @@ function Partners({ partners }: Allowed) {
                     <DropdownMenuItem
                       disabled={busy}
                       onClick={() =>
-                        void run(async () => {
-                          const { links } = await fetch("/api/partners/[id]/links", {
-                            params: { id: p.id },
-                          });
-                          setLinksFor({ name: p.name ?? p.email, links });
-                        })
+                        void router.visit(`/admin?links=${p.id}` as Href, { preserveScroll: true })
                       }
                     >
                       Show links
@@ -291,7 +285,11 @@ function Partners({ partners }: Allowed) {
         <div className="rounded-lg border p-4">
           <div className="mb-2 flex items-center justify-between">
             <h3 className="font-medium">Links of {linksFor.name}</h3>
-            <Button size="sm" variant="ghost" onClick={() => setLinksFor(null)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => void router.visit("/admin", { preserveScroll: true })}
+            >
               Close
             </Button>
           </div>
@@ -316,7 +314,7 @@ function Partners({ partners }: Allowed) {
 function Sales({ sales }: Allowed) {
   const { run, busy, feedback } = useAction();
   const decide = (id: string, status: "approved" | "rejected" | "pending") =>
-    run(() => fetch("/api/sales/[id]", { method: "PATCH", params: { id }, body: { status } }));
+    run(() => action("/admin?changeSale", { data: { id, status } }));
   return (
     <Section
       title="Sales"
@@ -425,10 +423,10 @@ function Payouts({ payouts }: Allowed) {
       <Button
         disabled={busy}
         onClick={() =>
-          void run(async () => {
-            const { queued } = await fetch("/api/payouts", { method: "POST", body: {} });
-            return queued;
-          }, "Payouts queued. They appear here as each finishes.")
+          void run(
+            () => action("/admin?runPayouts", { data: {} }),
+            "Payouts queued. They appear here as each finishes.",
+          )
         }
       >
         Run payouts
@@ -502,8 +500,9 @@ function Rules({ rules, partners, payoutCurrency }: Allowed) {
             ...common,
           };
     void run(async () => {
-      await fetch("/api/commission_rules", { method: "POST", body });
-      formEl.reset();
+      const result = await action("/admin?addRule", { data: body });
+      if (result.ok) formEl.reset();
+      return result;
     }, "Rule added.");
   }
   function addBonus(event: FormEvent<HTMLFormElement>) {
@@ -511,15 +510,15 @@ function Rules({ rules, partners, payoutCurrency }: Allowed) {
     const form = new FormData(event.currentTarget);
     const formEl = event.currentTarget;
     void run(async () => {
-      await fetch("/api/sales", {
-        method: "POST",
-        body: {
+      const result = await action("/admin?bonus", {
+        data: {
           partnerId: field(form, "partnerId"),
           commissionCents: minorUnits(field(form, "amount"), payoutCurrency),
           bonusNote: field(form, "note"),
         },
       });
-      formEl.reset();
+      if (result.ok) formEl.reset();
+      return result;
     }, "Bonus added: approved, paid with the next payout.");
   }
   return (
@@ -608,12 +607,7 @@ function Rules({ rules, partners, payoutCurrency }: Allowed) {
                       disabled={busy}
                       onClick={() =>
                         void run(
-                          () =>
-                            fetch("/api/commission_rules/[id]", {
-                              method: "PATCH",
-                              params: { id: r.id },
-                              body: { active: false },
-                            }),
+                          () => action("/admin?retireRule", { data: { id: r.id } }),
                           "Rule archived.",
                         )
                       }

@@ -4,6 +4,8 @@
   "type": "module",
   "devDependencies": {
     "@types/node": "26.6.6",
+    "@void/edge": "catalog:",
+    "devalue": "catalog:",
     "playwright": "1.65.0",
     "stripe": "catalog:",
     "vite": "catalog:",

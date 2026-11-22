@@ -1,6 +1,5 @@
 import { createInsertSchema, createSelectSchema } from "void/drizzle-zod";
 import { index, sqliteTable, text, uniqueIndex } from "void/schema-d1";
-import { z } from "zod";
 import { id, now } from "./columns";
 import { partners } from "./partners";
 
@@ -27,7 +26,7 @@ export const links = sqliteTable(
   ],
 );
 
-/** A partner's new short link (POST /api/links). The slug is made from their code when not given. */
+/** A partner's new short link (the partner page's createLink). The slug is made from their code when not given. */
 export const newLink = createInsertSchema(links, {
   destination: (s) => s.max(512).regex(/^\/(?!\/)[^\s\\]*$/, "a path on the site, like /pricing"),
   campaign: (s) => s.trim().max(100),
@@ -36,7 +35,5 @@ export const newLink = createInsertSchema(links, {
   .pick({ destination: true, campaign: true, slug: true })
   .partial();
 
-/** Archiving a link (PATCH /api/links/[id]): it stops redirecting. */
-export const linkChange = z.object({
-  status: createSelectSchema(links).shape.status.extract(["archived"]),
-});
+/** Archiving one of a partner's links (the partner page's archiveLink): it stops redirecting. */
+export const linkToArchive = createSelectSchema(links).pick({ id: true });

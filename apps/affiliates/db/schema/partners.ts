@@ -37,7 +37,7 @@ export const partners = sqliteTable(
   (t) => [uniqueIndex("partners_promo_code").on(t.promoCode)],
 );
 
-/** A shop user applying to be a partner (POST /api/partners). */
+/** A shop user applying to be a partner (the partner page's apply). */
 export const partnerApplication = createInsertSchema(partners, {
   application: (s) => s.trim().max(2000),
 })
@@ -47,12 +47,15 @@ export const partnerApplication = createInsertSchema(partners, {
   .extend({ name: z.string().trim().min(1).max(100), acceptTerms: z.literal(true) });
 
 /**
- * An admin's change to a partner (PATCH /api/partners/[id]): approve or suspend (pending is only for
- * new applicants), and their terms.
+ * An admin's change to a partner (the admin page's changePartner): approve or suspend (pending is
+ * only for new applicants), and their terms.
  */
 export const partnerChange = createUpdateSchema(partners, {
   commissionPct: (s) => s.min(0).max(100),
   recurringMonths: (s) => s.min(0).max(1200),
 })
   .pick({ commissionPct: true, recurringMonths: true, reviewRequired: true })
-  .extend({ status: createSelectSchema(partners).shape.status.exclude(["pending"]).optional() });
+  .extend({
+    id: createSelectSchema(partners).shape.id,
+    status: createSelectSchema(partners).shape.status.exclude(["pending"]).optional(),
+  });

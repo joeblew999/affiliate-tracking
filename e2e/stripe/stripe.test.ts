@@ -10,7 +10,8 @@ import {
   asShop,
   partnerMe,
   salesOf,
-  asUser,
+  act,
+  payoutsOf,
   signInAdmin,
   stripeEvent,
 } from "../dev/helpers";
@@ -88,20 +89,12 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
 
     await sell(nick.partnerId, intent);
     const [sale] = await salesOf(nick.partnerId);
-    await asUser(admin.cookie)("/api/sales/[id]", {
-      method: "PATCH",
-      params: { id: sale?.id ?? "" },
-      body: { status: "approved" },
-    });
-    await asUser(admin.cookie)("/api/payouts", {
-      method: "POST",
-      body: { partnerId: nick.partnerId },
-    });
+    await act(admin.cookie, "/admin?changeSale", { id: sale?.id ?? "", status: "approved" });
+    await act(admin.cookie, "/admin?runPayouts", { partnerId: nick.partnerId });
 
     const expected = Math.round((1000 * txn.amount) / charge.amount); // 20% of 5000, converted
     await eventually(async () => {
-      const { payouts } = await asUser(admin.cookie)("/api/payouts");
-      expect(payouts.filter((p) => p.partnerId === nick.partnerId)).toEqual([
+      expect(await payoutsOf(nick.partnerId)).toEqual([
         expect.objectContaining({
           status: "manual",
           amountCents: expected,

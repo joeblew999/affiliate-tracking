@@ -1,8 +1,7 @@
 // The partner's page (signed out: the shop's sign-in first, middleware/01.user.ts). Signed in: apply; then wait for approval;
 // then the dashboard: their link and buyer code, totals, short links, and the last 30 days.
-import { useRouter } from "@void/react";
+import { action } from "@void/react";
 import { useState, type FormEvent, type ReactNode } from "react";
-import { fetch } from "void/client";
 import { AppHeader } from "@/components/app-header";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
 import { CopyButton } from "@/components/copy-button";
@@ -23,16 +22,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { messageOf, money } from "@/format";
 import type { Props } from "./index.server";
 
+/** An action's answer: { ok: false, error } when it was refused (Void's action()). */
+function failure(result: unknown): string | null {
+  if (typeof result !== "object" || result === null || !("ok" in result) || result.ok) return null;
+  return "error" in result ? messageOf(result.error) : "That didn't work.";
+}
+
 function useAction() {
-  const router = useRouter();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  async function run(action: () => Promise<unknown>) {
+  // The page's data comes back by itself: Void re-runs the loader after an action.
+  async function run(call: () => Promise<unknown>) {
     setBusy(true);
     setError("");
     try {
-      await action();
-      await router.refresh();
+      const refused = failure(await call());
+      if (refused) setError(refused);
     } catch (err) {
       setError(messageOf(err));
     } finally {
@@ -95,9 +100,8 @@ function Apply() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     void run(() =>
-      fetch("/api/partners", {
-        method: "POST",
-        body: {
+      action("/?apply", {
+        data: {
           name: field(form, "name"),
           application: field(form, "application") || null,
           acceptTerms: true,
@@ -151,15 +155,15 @@ function Dashboard({ partner, links, stats, earnings, program }: Props) {
     const form = new FormData(event.currentTarget);
     const formEl = event.currentTarget;
     void run(async () => {
-      await fetch("/api/links", {
-        method: "POST",
-        body: {
+      const result = await action("/?createLink", {
+        data: {
           destination: field(form, "destination") || "/",
           campaign: field(form, "campaign") || null,
           slug: field(form, "slug").toLowerCase() || undefined,
         },
       });
-      formEl.reset();
+      if (result.ok) formEl.reset();
+      return result;
     });
   }
   const activeLinks = links.filter((link) => link.status === "active");
@@ -199,8 +203,8 @@ function Dashboard({ partner, links, stats, earnings, program }: Props) {
               disabled={busy}
               onClick={() =>
                 void run(async () => {
-                  const { url } = await fetch("/api/partners/connect", { method: "POST" });
-                  window.location.href = url;
+                  // Its answer is a redirect to Stripe's onboarding.
+                  return action("/?connect");
                 })
               }
             >
@@ -278,13 +282,7 @@ function Dashboard({ partner, links, stats, earnings, program }: Props) {
                         size="sm"
                         disabled={busy}
                         onClick={() =>
-                          void run(() =>
-                            fetch("/api/links/[id]", {
-                              method: "PATCH",
-                              params: { id: link.id },
-                              body: { status: "archived" },
-                            }),
-                          )
+                          void run(() => action("/?archiveLink", { data: { id: link.id } }))
                         }
                       >
                         Archive

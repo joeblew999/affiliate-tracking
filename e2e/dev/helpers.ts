@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
-import { FetchError, fetch as voidFetch } from "void/client";
+import { PAGES_PROTOCOL_VERSION } from "@void/edge";
+import { unflatten } from "devalue";
+import { fetch as voidFetch } from "void/client";
+import type { ActionUrl, ResolveActionBody } from "void/routes";
 import { HOST_TOKEN_HEADER } from "../../apps/affiliates/client";
+import type { Props as AdminPage } from "../../apps/affiliates/pages/admin/index.server";
+import type { Props as PartnerPage } from "../../apps/affiliates/pages/index.server";
 import Stripe from "stripe";
 import { inject } from "vite-plus/test";
 import { AFFILIATES, SHOP } from "./setup";
@@ -51,41 +56,81 @@ export async function signInAdmin(): Promise<Account> {
   return account(await auth("sign-up", { email, password, name: "Admin" }));
 }
 
-/**
- * Void's typed fetch (void/client) to the affiliate service, as the user this cookie signs in: the
- * path, params, body and answer are the service's own routes' types (e2e/tsconfig.json).
- */
-export function asUser(cookie: string): typeof voidFetch {
-  return withHeaders({ cookie });
-}
-
-/** The shop's own calls to the service (/api/host/*), with its token. */
+/** The shop's own calls to the service (/api/host/*): Void's typed fetch, with the shop's token. */
 export function asShop(): typeof voidFetch {
-  return withHeaders({ [HOST_TOKEN_HEADER]: inject("hostToken") });
-}
-
-function withHeaders(headers: Record<string, string>): typeof voidFetch {
   const call = (path: string, options: { headers?: Record<string, string> } = {}) =>
     voidFetch(
       path as never,
       {
         ...options,
         baseURL: AFFILIATES,
-        headers: { ...headers, ...options.headers },
+        headers: { [HOST_TOKEN_HEADER]: inject("hostToken"), ...options.headers },
       } as never,
     );
   return call as typeof voidFetch;
 }
 
-/** A call's HTTP status: 200 when it answered, else the status it failed with. */
-export async function statusOf(call: Promise<unknown>): Promise<number> {
-  try {
-    await call;
-    return 200;
-  } catch (err) {
-    if (err instanceof FetchError && err.status) return err.status;
-    throw err;
-  }
+/** The service's pages, each with its loader's props type. */
+interface Pages {
+  "/": PartnerPage;
+  "/admin": AdminPage;
+}
+
+/**
+ * A request to one of the service's pages as Void's own client makes it: the X-VoidPages headers, at
+ * the protocol version Void exports (@void/edge), so the answer is the page's data (devalue, as
+ * Void sends it) rather than HTML. Void documents no other way to read a page's data or call its
+ * actions from outside a browser.
+ */
+async function pageRequest(cookie: string, url: string, body?: unknown) {
+  const res = await fetch(new URL(url, AFFILIATES), {
+    method: body === undefined ? "GET" : "POST",
+    // Signed out, a page sends you to the shop's sign-in: that redirect is the answer.
+    redirect: "manual",
+    headers: {
+      cookie,
+      "x-voidpages": "true",
+      "X-VoidPages-Version": PAGES_PROTOCOL_VERSION,
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  const text = await res.text();
+  const json = res.headers.get("content-type")?.includes("json") ? JSON.parse(text) : null;
+  const page = json?.__void === "devalue" ? unflatten(json.data) : json;
+  return { status: res.status, props: page?.props as unknown, text };
+}
+
+/** A page's data, as the user with this cookie sees it: its loader's props. */
+export async function load<P extends keyof Pages>(
+  cookie: string,
+  path: P,
+  query: Record<string, string> = {},
+): Promise<Pages[P]> {
+  const url = new URL(path, AFFILIATES);
+  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
+  const res = await pageRequest(cookie, url.pathname + url.search);
+  if (res.status !== 200) throw new Error(`${path}: ${res.status} ${res.text.slice(0, 200)}`);
+  return res.props as Pages[P];
+}
+
+/** One of a page's actions, as the user with this cookie: its HTTP status (200 when done). */
+export async function actStatus<U extends ActionUrl>(
+  cookie: string,
+  url: U,
+  data: ResolveActionBody<U>,
+): Promise<number> {
+  return (await pageRequest(cookie, url, data)).status;
+}
+
+/** One of a page's actions, which must succeed. */
+export async function act<U extends ActionUrl>(
+  cookie: string,
+  url: U,
+  data: ResolveActionBody<U>,
+): Promise<void> {
+  const res = await pageRequest(cookie, url, data);
+  if (res.status !== 200) throw new Error(`${url}: ${res.status} ${res.text.slice(0, 200)}`);
 }
 
 /** A shop user who applied and an admin approved: an active partner. */
@@ -93,24 +138,30 @@ export async function activePartner(
   name = "Nick",
 ): Promise<Account & { partnerId: string; code: string }> {
   const user = await signUp(name);
-  const applied = await asUser(user.cookie)("/api/partners", {
-    method: "POST",
-    body: { name, acceptTerms: true },
-  });
+  await act(user.cookie, "/?apply", { name, acceptTerms: true });
   const admin = await signInAdmin();
-  await asUser(admin.cookie)("/api/partners/[id]", {
-    method: "PATCH",
-    params: { id: applied.id },
-    body: { status: "active" },
-  });
-  return { ...user, partnerId: applied.id, code: applied.code };
+  const partner = (await load(admin.cookie, "/admin")).partners?.find((p) => p.userId === user.id);
+  if (!partner) throw new Error("applied, but not on the admin page");
+  await act(admin.cookie, "/admin?changePartner", { id: partner.id, status: "active" });
+  return { ...user, partnerId: partner.id, code: partner.code };
 }
 
-/** The signed-in user's partner record (GET /api/partners/me). */
+/** The signed-in partner's own page: their record, and their last 30 days' numbers. */
 export async function partnerMe(cookie: string) {
-  const { partner } = await asUser(cookie)("/api/partners/me");
-  if (!partner) throw new Error("not a partner");
-  return partner;
+  const page = await load(cookie, "/");
+  if (!page.partner) throw new Error("not a partner");
+  const funnel = page.stats?.funnel[0];
+  // Their commission: on hold, ready to pay and paid, in every currency (the page's earnings).
+  const commissionCents = page.earnings.reduce(
+    (sum, e) => sum + e.onHoldCents + e.readyCents + e.paidCents,
+    0,
+  );
+  return {
+    ...page.partner,
+    clicks: funnel?.clicks ?? 0,
+    sales: funnel?.sales ?? 0,
+    commissionCents,
+  };
 }
 
 /**
@@ -197,6 +248,11 @@ export async function runCron(cron: string): Promise<void> {
 /** The partner's sales, as an admin sees them, newest first. */
 export async function salesOf(partnerId: string) {
   const admin = await signInAdmin();
-  const { sales } = await asUser(admin.cookie)("/api/sales", { query: { partnerId } });
-  return sales;
+  return (await load(admin.cookie, "/admin", { partner: partnerId })).sales ?? [];
+}
+
+/** The partner's payouts, as an admin sees them, newest first. */
+export async function payoutsOf(partnerId: string) {
+  const admin = await signInAdmin();
+  return (await load(admin.cookie, "/admin", { partner: partnerId })).payouts ?? [];
 }

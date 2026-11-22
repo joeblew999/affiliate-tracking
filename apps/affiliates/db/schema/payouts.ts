@@ -36,5 +36,5 @@ export const payouts = sqliteTable(
   ],
 );
 
-/** Run payouts (POST /api/payouts): for everyone owed, or one partner. */
+/** Run payouts (the admin page's runPayouts): for everyone owed, or one partner. */
 export const payoutRun = createInsertSchema(payouts).pick({ partnerId: true }).partial();
