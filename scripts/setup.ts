@@ -1,28 +1,50 @@
-// `vp run setup`: each app's local .env, once per clone. Both apps get the same random
-// AFFILIATES_HOST_TOKEN (the secret the shop's calls to the affiliate service carry). An app whose
-// .env already has one keeps it; if only one app has it, the other gets the same value.
+// `vp run setup`: each app's local .env, once per clone and safe to rerun. Values already there are
+// kept; missing ones are added. The shared AFFILIATES_HOST_TOKEN is the same in both apps.
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
-const apps = ["apps/affiliates", "apps/shop"];
-const KEY = "AFFILIATES_HOST_TOKEN";
+const random = () => randomBytes(32).toString("hex");
 
 function read(app: string): string {
   return existsSync(`${app}/.env`) ? readFileSync(`${app}/.env`, "utf8") : "";
 }
-function tokenIn(text: string): string | undefined {
-  return text.match(new RegExp(`^${KEY}=(.+)$`, "m"))?.[1];
+function valueIn(text: string, key: string): string | undefined {
+  return text.match(new RegExp(`^${key}=(.*)$`, "m"))?.[1];
 }
 
-const token =
-  apps.map((app) => tokenIn(read(app))).find(Boolean) ?? randomBytes(32).toString("hex");
-for (const app of apps) {
-  const text = read(app);
-  const current = tokenIn(text);
-  if (current === token) continue;
-  const next = current
-    ? text.replace(new RegExp(`^${KEY}=.*$`, "m"), `${KEY}=${token}`)
-    : `${text}${text && !text.endsWith("\n") ? "\n" : ""}${KEY}=${token}\n`;
-  writeFileSync(`${app}/.env`, next);
-  console.log(`${app}/.env: ${KEY} ${current ? "updated" : "added"}`);
+const shared =
+  valueIn(read("apps/affiliates"), "AFFILIATES_HOST_TOKEN") ??
+  valueIn(read("apps/shop"), "AFFILIATES_HOST_TOKEN") ??
+  random();
+
+const wanted: Record<string, Record<string, string>> = {
+  "apps/affiliates": {
+    AFFILIATES_HOST_TOKEN: shared,
+    HOST_SITE_URL: "http://localhost:5173",
+    AFFILIATES_IP_SALT: random(),
+    // A local signing secret: the dev-server tests sign their webhook events with it.
+    STRIPE_WEBHOOK_SECRET: `whsec_${random()}`,
+  },
+  "apps/shop": {
+    AFFILIATES_HOST_TOKEN: shared,
+    ADMIN_EMAILS: "admin@example.test",
+  },
+};
+
+for (const [app, values] of Object.entries(wanted)) {
+  let text = read(app);
+  const added: string[] = [];
+  for (const [key, value] of Object.entries(values)) {
+    const current = valueIn(text, key);
+    if (current !== undefined && !(key === "AFFILIATES_HOST_TOKEN" && current !== shared)) continue;
+    text =
+      current !== undefined
+        ? text.replace(new RegExp(`^${key}=.*$`, "m"), `${key}=${value}`)
+        : `${text}${text && !text.endsWith("\n") ? "\n" : ""}${key}=${value}\n`;
+    added.push(key);
+  }
+  if (added.length) {
+    writeFileSync(`${app}/.env`, text);
+    console.log(`${app}/.env: ${added.join(", ")}`);
+  }
 }

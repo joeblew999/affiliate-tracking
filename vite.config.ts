@@ -11,8 +11,9 @@ export default defineConfig({
   lint: { ignorePatterns: notChecked, options: { typeAware: true, typeCheck: true } },
   run: {
     tasks: {
-      // Each app's local .env (the shared AFFILIATES_HOST_TOKEN). Once per clone; safe to rerun.
-      setup: { command: "vpx scripts/setup.ts", cache: false },
+      // Each app's local .env, then the affiliate service's migrations on its local database. Once
+      // per clone, and after pulling a new migration; safe to rerun.
+      setup: { command: ["vpx scripts/setup.ts", "vp run affiliates#db:migrate"], cache: false },
       // Both apps: the shop on http://localhost:5173, the affiliate service on http://localhost:5174.
       dev: { command: "vp run -r --parallel dev", cache: false },
       // Chromium for the browser tests (once per machine).

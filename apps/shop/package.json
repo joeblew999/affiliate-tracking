@@ -8,9 +8,12 @@
     "postinstall": "void prepare && void init --tsconfig"
   },
   "dependencies": {
+    "@better-auth/stripe": "1.7.27",
     "affiliates": "workspace:*",
+    "better-auth": "1.7.27",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "stripe": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

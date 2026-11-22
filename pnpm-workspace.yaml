@@ -31,6 +31,10 @@ catalog:
   "@types/react": 19.3.0
   "@types/react-dom": 19.3.0
   zod: 4.6.7
+  # Stripe's typed SDK; 23.2.0 published 2026-11-19, accepted by @better-auth/stripe 1.7.27.
+  stripe: 23.2.0
+  # The version Void 1.11.0 runs on; apps import its HTTPException.
+  hono: 4.13.19
 
 peerDependencyRules:
   allowAny:

@@ -5,6 +5,7 @@
   "devDependencies": {
     "@types/node": "26.6.6",
     "playwright": "1.65.0",
+    "stripe": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",
     "vitest": "catalog:"

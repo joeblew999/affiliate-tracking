@@ -12,6 +12,7 @@ export const AFFILIATES = "http://localhost:5174";
 declare module "vite-plus/test" {
   interface ProvidedContext {
     hostToken: string;
+    webhookSecret: string;
   }
 }
 
@@ -73,10 +74,13 @@ export default async function setup(project: TestProject) {
   const ours = running ? undefined : await startDev();
   await untilReady();
   const env = readFileSync("apps/affiliates/.env", "utf8");
-  const token = env.match(/^AFFILIATES_HOST_TOKEN=(.+)$/m)?.[1];
-  if (!token)
-    throw new Error("apps/affiliates/.env has no AFFILIATES_HOST_TOKEN: run `vp run setup`");
-  project.provide("hostToken", token);
+  const value = (key: string) => {
+    const found = env.match(new RegExp(`^${key}=(.+)$`, "m"))?.[1];
+    if (!found) throw new Error(`apps/affiliates/.env has no ${key}: run \`vp run setup\``);
+    return found;
+  };
+  project.provide("hostToken", value("AFFILIATES_HOST_TOKEN"));
+  project.provide("webhookSecret", value("STRIPE_WEBHOOK_SECRET"));
   return () => {
     if (ours?.pid) process.kill(-ours.pid, "SIGTERM");
   };

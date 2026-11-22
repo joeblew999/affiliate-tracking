@@ -2,7 +2,7 @@
 // has a public address, so those calls carry the shared AFFILIATES_HOST_TOKEN; anything else gets 401.
 import { defineMiddleware } from "void";
 import { env } from "void/env";
-import { HOST_TOKEN_HEADER } from "@/host-token";
+import { HOST_TOKEN_HEADER } from "@/host-contract";
 
 const encoder = new TextEncoder();
 

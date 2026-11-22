@@ -1,8 +1,16 @@
-// The affiliate service's client for its host app. Calls go through a Cloudflare service binding
-// and carry AFFILIATES_HOST_TOKEN; every input and output type comes from the route's own handler
-// (the __validators and __output each defineHandler carries), so nothing is written twice.
-import type { POST as Signup } from "./routes/api/host/signup";
-import { HOST_TOKEN_HEADER, REF_COOKIE } from "./src/host-token";
+// The affiliate service's client for its host app. Calls go through a Cloudflare service binding and
+// carry AFFILIATES_HOST_TOKEN. Their input and output types come from src/host-contract.ts, which the
+// service's routes also validate against, so nothing is written twice and the host's type check never
+// pulls in the service's code.
+import type { z } from "zod";
+import {
+  CheckoutInput,
+  CheckoutOutput,
+  HOST_TOKEN_HEADER,
+  REF_COOKIE,
+  SignupInput,
+  SignupOutput,
+} from "./src/host-contract";
 
 export { REF_COOKIE };
 
@@ -20,25 +28,27 @@ export function referralFrom(cookieHeader: string | null | undefined): string | 
   return null;
 }
 
-type BodyOf<H> = H extends {
-  __validators: { body: { "~standard": { types?: { input: infer I } } } };
-}
-  ? I
-  : never;
-type OutputOf<H> = H extends { __output: infer O } ? Awaited<O> : never;
-
 export function affiliates(binding: Fetcher, token: string) {
-  async function call<H>(path: string, body: BodyOf<H>): Promise<OutputOf<H>> {
+  async function call<I extends z.ZodType, O extends z.ZodType>(
+    path: string,
+    input: I,
+    output: O,
+    body: z.input<I>,
+  ): Promise<z.output<O>> {
     const res = await binding.fetch(new URL(path, "https://affiliates.internal"), {
       method: "POST",
       headers: { "content-type": "application/json", [HOST_TOKEN_HEADER]: token },
-      body: JSON.stringify(body),
+      body: JSON.stringify(input.parse(body)),
     });
     if (!res.ok) throw new Error(`affiliates ${path}: ${res.status} ${await res.text()}`);
-    return res.json() as Promise<OutputOf<H>>;
+    return output.parse(await res.json());
   }
   return {
     /** A user signed up on the host, with the referral cookie's value (referralFrom) or null. */
-    signup: (body: BodyOf<typeof Signup>) => call<typeof Signup>("/api/host/signup", body),
+    signup: (body: z.input<typeof SignupInput>) =>
+      call("/api/host/signup", SignupInput, SignupOutput, body),
+    /** Before creating a Stripe Checkout Session: the metadata to add, and the partner's buyer discount. */
+    checkout: (body: z.input<typeof CheckoutInput>) =>
+      call("/api/host/checkout", CheckoutInput, CheckoutOutput, body),
   };
 }

@@ -1,0 +1,218 @@
+// Step 2 of plans/2026-11-22-01-void-service.md: partners, referral links, signup referrals, checkout
+// attribution, and sales and refunds from Stripe's webhook, through the real apps and database.
+import { expect, test } from "vite-plus/test";
+import {
+  activePartner,
+  eventually,
+  host,
+  paidSession,
+  partnerMe,
+  service,
+  signInAdmin,
+  signUp,
+  stripeEvent,
+} from "./helpers";
+import { AFFILIATES } from "./setup";
+
+interface Checkout {
+  metadata: Record<string, string>;
+  promotionCode: string | null;
+}
+
+/** Follow a referral link as a browser would: the redirect and the referral cookie it sets. */
+async function follow(path: string, userAgent = "Mozilla/5.0 (Macintosh) Safari/605.1.15") {
+  const res = await fetch(`${AFFILIATES}${path}`, {
+    redirect: "manual",
+    headers: { "user-agent": userAgent },
+  });
+  const cookie =
+    res.headers
+      .getSetCookie()
+      .find((c) => c.startsWith("affiliate_ref="))
+      ?.split(";")[0] ?? null;
+  return { status: res.status, location: res.headers.get("location"), cookie };
+}
+
+test("applying makes a pending partner; only an admin can approve", async () => {
+  const user = await signUp("Pat");
+  const applied = await service<{ id: string; status: string }>("/api/partner/apply", user.cookie, {
+    name: "Pat",
+    acceptTerms: true,
+  });
+  expect(applied.body.status).toBe("pending");
+  expect(
+    (await service("/api/partner/apply", user.cookie, { name: "Pat", acceptTerms: true })).status,
+  ).toBe(409);
+  expect(
+    (
+      await service("/api/admin/partners/status", user.cookie, {
+        id: applied.body.id,
+        status: "active",
+      })
+    ).status,
+  ).toBe(403);
+  expect((await service("/api/admin/partners", "")).status).toBe(401);
+  const admin = await signInAdmin();
+  expect(
+    (
+      await service("/api/admin/partners/status", admin.cookie, {
+        id: applied.body.id,
+        status: "active",
+      })
+    ).status,
+  ).toBe(200);
+  expect((await partnerMe(user.cookie)).status).toBe("active");
+});
+
+test("a referral link sends the visitor to the shop, sets the cookie and counts one click", async () => {
+  const nick = await activePartner();
+  const first = await follow(`/r/${nick.code}?utm_source=youtube`);
+  expect(first.status).toBe(302);
+  expect(first.location).toBe("http://localhost:5173/?utm_source=youtube");
+  expect(first.cookie).toBe(`affiliate_ref=${nick.partnerId}`);
+  await follow(`/r/${nick.code}`); // same visitor again: still one click
+  await eventually(async () => expect((await partnerMe(nick.cookie)).clicks).toBe(1));
+});
+
+test("link previews and unknown links set nothing", async () => {
+  const nick = await activePartner();
+  const preview = await follow(`/r/${nick.code}`, "WhatsApp/2.23 A");
+  expect(preview.status).toBe(302);
+  expect(preview.cookie).toBeNull();
+  const unknown = await follow("/r/no-such-partner");
+  expect(unknown.location).toBe("http://localhost:5173/");
+  expect(unknown.cookie).toBeNull();
+  expect((await partnerMe(nick.cookie)).clicks).toBe(0);
+});
+
+test("a user who signs up with the referral cookie stays the partner's at checkout, without the cookie", async () => {
+  const nick = await activePartner();
+  const { cookie } = await follow(`/r/${nick.code}`);
+  const buyer = await signUp("Buyer", cookie ?? "");
+  // The shop tells the service through a queue (apps/shop/queues/affiliate-signups.ts).
+  await eventually(async () => {
+    const checkout = await host<Checkout>("/api/host/checkout", {
+      userId: buyer.id,
+      ref: null,
+      promoCode: null,
+      ip: null,
+    });
+    expect(checkout.metadata).toMatchObject({
+      affiliate_partner_id: nick.partnerId,
+      affiliate_source: "referral",
+      affiliate_user_id: buyer.id,
+    });
+  });
+});
+
+test("checkout without a referral uses the cookie, and nothing without either", async () => {
+  const nick = await activePartner();
+  const viaCookie = await host<Checkout>("/api/host/checkout", {
+    userId: null,
+    ref: nick.partnerId,
+    promoCode: null,
+    ip: "203.0.113.9",
+  });
+  expect(viaCookie.metadata).toMatchObject({
+    affiliate_partner_id: nick.partnerId,
+    affiliate_source: "cookie",
+  });
+  expect(viaCookie.metadata.affiliate_buyer_ip_hash).toMatch(/^[0-9a-f]{64}$/);
+  const nothing = await host<Checkout>("/api/host/checkout", {
+    userId: null,
+    ref: "made-up",
+    promoCode: null,
+    ip: null,
+  });
+  expect(nothing).toEqual({ metadata: {}, promotionCode: null });
+});
+
+test("a paid checkout becomes a sale once; unsigned events are refused", async () => {
+  const nick = await activePartner();
+  const session = paidSession({ affiliate_partner_id: nick.partnerId, affiliate_source: "cookie" });
+  const first = await stripeEvent("checkout.session.completed", session);
+  expect(await first.json()).toMatchObject({ sale: { recorded: true } });
+  const again = await stripeEvent("checkout.session.completed", session);
+  expect(await again.json()).toMatchObject({
+    sale: { recorded: false, reason: "already recorded" },
+  });
+  const me = await partnerMe(nick.cookie);
+  expect({ sales: me.sales, commissionCents: me.commissionCents }).toEqual({
+    sales: 1,
+    commissionCents: 1000,
+  });
+
+  const unsigned = await fetch(`${AFFILIATES}/api/stripe/webhook`, {
+    method: "POST",
+    body: JSON.stringify({ type: "checkout.session.completed" }),
+  });
+  expect(unsigned.status).toBe(400);
+});
+
+test("a refund marks the sale refunded, even when it arrives first", async () => {
+  const nick = await activePartner();
+  const admin = await signInAdmin();
+  const sale = paidSession({ affiliate_partner_id: nick.partnerId });
+  await stripeEvent("checkout.session.completed", sale);
+  await stripeEvent("charge.refunded", {
+    id: "ch_1",
+    object: "charge",
+    payment_intent: sale.payment_intent,
+  });
+
+  const early = paidSession({ affiliate_partner_id: nick.partnerId });
+  await stripeEvent("charge.dispute.created", {
+    id: "dp_1",
+    object: "dispute",
+    charge: "ch_2",
+    payment_intent: early.payment_intent,
+  });
+  await stripeEvent("checkout.session.completed", early);
+
+  const all = await service<{ sales: { stripeSessionId: string; status: string }[] }>(
+    "/api/admin/sales",
+    admin.cookie,
+  );
+  const status = (id: unknown) => all.body.sales.find((s) => s.stripeSessionId === id)?.status;
+  expect([status(sale.id), status(early.id)]).toEqual(["refunded", "refunded"]);
+  expect((await partnerMe(nick.cookie)).sales).toBe(0);
+});
+
+test("a partner buying for themselves is flagged", async () => {
+  const nick = await activePartner();
+  const admin = await signInAdmin();
+  const session = paidSession(
+    { affiliate_partner_id: nick.partnerId },
+    { customer_details: { email: nick.email.toUpperCase(), address: null } },
+  );
+  await stripeEvent("checkout.session.completed", session);
+  const all = await service<{ sales: { stripeSessionId: string; fraudReason: string | null }[] }>(
+    "/api/admin/sales",
+    admin.cookie,
+  );
+  expect(all.body.sales.find((s) => s.stripeSessionId === session.id)?.fraudReason).toBe(
+    "self_email",
+  );
+});
+
+test("a suspended partner's referrals and links stop counting", async () => {
+  const nick = await activePartner();
+  const admin = await signInAdmin();
+  await service("/api/admin/partners/status", admin.cookie, {
+    id: nick.partnerId,
+    status: "suspended",
+  });
+  expect((await follow(`/r/${nick.code}`)).cookie).toBeNull();
+  const checkout = await host<Checkout>("/api/host/checkout", {
+    userId: null,
+    ref: nick.partnerId,
+    promoCode: null,
+    ip: null,
+  });
+  expect(checkout.metadata).toEqual({});
+  const result = await stripeEvent(
+    "checkout.session.completed",
+    paidSession({ affiliate_partner_id: nick.partnerId }),
+  );
+  expect(await result.json()).toMatchObject({ sale: { recorded: false, reason: "no partner" } });
+});
