@@ -145,6 +145,8 @@ export const payouts = sqliteTable(
     /** The Connect account at the time, in case the partner's changes later. */
     stripeAccountId: text(),
     transferStartedAt: integer(),
+    /** Why the last attempt didn't finish; cleared when it does. */
+    lastError: text(),
     createdAt: now(),
     paidAt: integer(),
   },
@@ -164,7 +166,8 @@ export const sales = sqliteTable(
       .notNull()
       .references(() => partners.id),
     kind: text({ enum: ["checkout", "renewal", "bonus"] }).notNull(),
-    status: text({ enum: ["pending", "approved", "paying", "paid", "refunded"] })
+    /** rejected: an admin said no; never approved automatically. */
+    status: text({ enum: ["pending", "approved", "rejected", "paying", "paid", "refunded"] })
       .notNull()
       .default("pending"),
     stripeSessionId: text().unique(),

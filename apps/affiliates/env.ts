@@ -1,4 +1,4 @@
-import { defineEnv, string, url } from "void/env";
+import { defineEnv, number, string, url } from "void/env";
 
 export default defineEnv({
   // The secret the host app sends with every call to /api/host/* (src/host-api.ts). The same value
@@ -16,4 +16,18 @@ export default defineEnv({
   // of this app's own webhook endpoint (/api/stripe/webhook).
   STRIPE_SECRET_KEY: string().optional(),
   STRIPE_WEBHOOK_SECRET: string(),
+  // Months after a subscription's first sale that its renewals earn commission, unless a partner
+  // has their own (src/renewals.ts). Default 12; 0: the first payment only.
+  AFFILIATES_RECURRING_MONTHS: number().optional(),
+  // Days a sale waits before it's approved automatically (crons/daily.ts). Unset: an admin approves
+  // every sale.
+  AFFILIATES_HOLD_DAYS: number().optional(),
+  // The currency payouts are sent in: the platform's Stripe settlement currency. Default usd.
+  AFFILIATES_PAYOUT_CURRENCY: string().default("usd"),
+  // The least a partner is paid out (in the payout currency's minor units); less waits for a later
+  // run. Default 0: everything owed.
+  AFFILIATES_MIN_PAYOUT_CENTS: number().default(0),
+  // A Stripe coupon (the buyer discount). With it, each partner gets a promotion code for it when
+  // approved; checkouts through them get the discount.
+  AFFILIATES_COUPON_ID: string().optional(),
 });

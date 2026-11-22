@@ -1,0 +1,1 @@
+ALTER TABLE `payouts` ADD `last_error` text;

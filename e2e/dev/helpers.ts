@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import Stripe from "stripe";
 import { expect, inject } from "vite-plus/test";
 import { AFFILIATES, SHOP } from "./setup";
@@ -114,12 +115,13 @@ export async function partnerMe(cookie: string): Promise<NonNullable<PartnerMe["
 export async function stripeEvent(
   type: string,
   object: Record<string, unknown>,
+  { daysAgo = 0 } = {},
 ): Promise<Response> {
   const payload = JSON.stringify({
     id: `evt_${crypto.randomUUID().replaceAll("-", "")}`,
     object: "event",
     type,
-    created: Math.floor(Date.now() / 1000),
+    created: Math.floor((Date.now() - daysAgo * 24 * 60 * 60 * 1000) / 1000),
     data: { object },
     livemode: false,
     api_version: "2026-10-28",
@@ -174,4 +176,34 @@ export async function eventually(check: () => Promise<void>, ms = 20_000): Promi
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }
+}
+
+/** Run one of the service's crons now, through Void's dev endpoint (guide/jobs.md). */
+export async function runCron(cron: string): Promise<void> {
+  const token = readFileSync("apps/affiliates/.void/dev-trigger-token", "utf8").trim();
+  const res = await fetch(`${AFFILIATES}/__void/scheduled`, {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-void-dev-trigger": token },
+    body: JSON.stringify({ cron, scheduledTime: Date.now() }),
+  });
+  if (!res.ok) throw new Error(`cron ${cron}: ${res.status} ${await res.text()}`);
+}
+
+export interface Sale {
+  id: string;
+  stripeSessionId: string | null;
+  stripeInvoiceId: string | null;
+  partnerId: string;
+  kind: string;
+  status: string;
+  commissionCents: number;
+  fraudReason: string | null;
+  payoutId: string | null;
+}
+
+/** The partner's sales, as an admin sees them, newest first. */
+export async function salesOf(partnerId: string): Promise<Sale[]> {
+  const admin = await signInAdmin();
+  const all = await service<{ sales: Sale[] }>("/api/admin/sales", admin.cookie);
+  return all.body.sales.filter((sale) => sale.partnerId === partnerId);
 }

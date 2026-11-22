@@ -4,9 +4,10 @@ import { defineHandler } from "void";
 import { db, eq } from "void/db";
 import { z } from "zod";
 import { requireAdmin } from "@/access";
+import { ensurePromotionCode } from "@/approval";
 
-// Approve (active), suspend or reactivate a partner. Promotion codes and Connect accounts at
-// approval come in step 3 of plans/2026-11-22-01-void-service.md.
+// Approve (active), suspend or reactivate a partner. Approving also makes their buyer-discount
+// promotion code, when the service has a Stripe key and a coupon (src/approval.ts).
 export const POST = defineHandler.withValidator({
   body: z.object({ id: z.uuid(), status: z.enum(["active", "suspended"]) }),
 })(async (c, { body }) => {
@@ -15,7 +16,8 @@ export const POST = defineHandler.withValidator({
     .update(partners)
     .set({ status: body.status })
     .where(eq(partners.id, body.id))
-    .returning({ id: partners.id, status: partners.status });
+    .returning();
   if (!row) throw new HTTPException(404, { message: "No such partner" });
-  return row;
+  if (row.status === "active") await ensurePromotionCode(row);
+  return { id: row.id, status: row.status };
 });

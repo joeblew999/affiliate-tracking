@@ -22,6 +22,8 @@ const wanted: Record<string, Record<string, string>> = {
     AFFILIATES_HOST_TOKEN: shared,
     HOST_SITE_URL: "http://localhost:5173",
     AFFILIATES_IP_SALT: random(),
+    // Sales wait 30 days before they're approved (the tests date events back to check it).
+    AFFILIATES_HOLD_DAYS: "30",
     // A local signing secret: the dev-server tests sign their webhook events with it.
     STRIPE_WEBHOOK_SECRET: `whsec_${random()}`,
   },

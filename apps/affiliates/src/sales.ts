@@ -8,7 +8,7 @@
 import { refundedPayments, sales, type SaleItem } from "@schema";
 import type Stripe from "stripe";
 import { and, db, eq, inArray, sql } from "void/db";
-import { computeCommission } from "./commission";
+import { computeCommission, type CommissionItem } from "./commission";
 import { selfReferralReason } from "./fraud";
 import { activePartner, partnerForPromotion } from "./partners";
 import { settleReferral } from "./referrals";
@@ -83,11 +83,23 @@ export async function recordCheckoutSale(
 
   const amountCents = session.amount_total ?? 0;
   const currency = (session.currency ?? "usd").toLowerCase();
-  const items = (await lineItems(session)).map(itemOf);
-  const commission = computeCommission(partner, amountCents);
+  const lines = await lineItems(session);
+  const items = lines.map(itemOf);
   const paymentIntent = idOf(session.payment_intent);
   const at = event.created * 1000;
   const customerEmail = session.customer_details?.email ?? null;
+  const commission = await computeCommission(partner, {
+    amountCents,
+    currency,
+    customerEmail,
+    at,
+    items: lines.map((line, i): CommissionItem => ({
+      productId: items[i]?.productId ?? null,
+      priceId: line.price?.id ?? null,
+      quantity: line.quantity ?? 1,
+      amountCents: line.amount_total,
+    })),
+  });
   const fraudReason = await selfReferralReason(partner, {
     email: customerEmail,
     ipHash: metadata[META.buyerIpHash] ?? null,
