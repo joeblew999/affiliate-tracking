@@ -1,13 +1,13 @@
 import { clicks, sales } from "@schema";
 import { defineHandler } from "void";
 import { and, count, db, eq, ne, sql, sum } from "void/db";
-import { requireAuth } from "void/auth";
+import { requireUser } from "@/access";
 import { partnerForUser } from "@/partners";
 
 // The signed-in user's partner record (any status), with their clicks and sales; null if they
 // haven't applied.
 export const GET = defineHandler(async (c) => {
-  const user = requireAuth(c);
+  const user = requireUser(c);
   const partner = await partnerForUser(user.id);
   if (!partner) return { partner: null };
   const [clickCount] = await db

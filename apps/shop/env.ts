@@ -13,6 +13,10 @@ export default defineEnv({
   STRIPE_WEBHOOK_SECRET: string().optional(),
   // The price of the shop's one plan, "pro".
   STRIPE_PRO_PRICE_ID: string().optional(),
-  // Where the affiliate service's pages are, for the shop's "Partner program" link.
+  // The parent domain the sign-in cookie is set for, so the affiliate service on a subdomain
+  // receives it, e.g. "shop.example.com". Unset locally: localhost shares cookies across ports.
+  AUTH_COOKIE_DOMAIN: string().optional(),
+  // Where the affiliate service's pages are: the shop's "Partner program" link, and the origin its
+  // pages call this Better Auth from (auth.ts).
   AFFILIATES_SITE_URL: url().default("http://localhost:5174"),
 });

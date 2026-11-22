@@ -6,26 +6,16 @@ export default defineConfig({
   lint: { options: { typeAware: true, typeCheck: true } },
   run: {
     tasks: {
-      // Each app's local .env, both apps' migrations on their local databases, and the service
-      // registered with the shop's sign-in (scripts/oauth-client.ts). Once per clone, and after
-      // pulling a new migration; safe to rerun.
+      // Each app's local .env, and both apps' migrations on their local databases. Once per clone,
+      // and after pulling a new migration; safe to rerun.
       setup: {
-        command: [
-          "vpx scripts/setup.ts",
-          "vp run affiliates#db:migrate",
-          "vp run shop#db:migrate",
-          "vpx scripts/oauth-client.ts",
-        ],
+        command: ["vpx scripts/setup.ts", "vp run affiliates#db:migrate", "vp run shop#db:migrate"],
         cache: false,
       },
       // Demo data in both apps' local databases (it resets them): the people in
       // apps/affiliates/demo.ts as shop accounts, and 90 days of the program (README, "Demo data").
       demo: {
-        command: [
-          "vp run shop#db:seed",
-          "vp run affiliates#db:seed",
-          "vpx scripts/oauth-client.ts",
-        ],
+        command: ["vp run shop#db:seed", "vp run affiliates#db:seed"],
         cache: false,
       },
       // The same demo data in both deployed apps, replacing everything in their databases
@@ -36,8 +26,18 @@ export default defineConfig({
       // Chromium for the browser tests (once per machine).
       "install:browser": { command: "playwright install --with-deps chromium", cache: false },
       // The tests against the running apps (e2e/dev/): your `vp run dev` if it's up, else they
-      // start one and stop it after.
-      "test:dev": { command: "vp test run --project dev", cache: false },
+      // start one and stop it after. Cached as Void's own repo caches its tests: the files the run
+      // reads are its inputs, so with none of them changed `vp run test:dev` replays the last
+      // result at once. Left out: what the dev servers rewrite every run (the local databases in
+      // .wrangler, Void's generated .void, Node's compile cache). `vp test run --project dev`
+      // runs them regardless; add a file to run just that one while working on it.
+      "test:dev": {
+        command: "vp test run --project dev",
+        cache: {
+          input: [{ auto: true }, "!**/.wrangler/**", "!**/.void/**", "!**/node_modules/.cache/**"],
+          output: [],
+        },
+      },
       // Real Stripe test mode (e2e/stripe/): needs STRIPE_TEST_SECRET_KEY in the shell, and
       // `vp run dev` stopped (it starts the apps itself, with the key). Run it on demand.
       "test:stripe": { command: "vp test run --project stripe", cache: false },

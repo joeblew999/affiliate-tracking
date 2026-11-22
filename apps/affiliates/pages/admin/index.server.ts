@@ -3,19 +3,14 @@ import { defineHandler, defineHead, type InferProps } from "void";
 import { db, desc, eq } from "void/db";
 import { env } from "void/env";
 import { stats } from "@/stats";
-import { getSession } from "void/auth";
 
 // The admin page: everything, for the host's admins only.
-export const loader = defineHandler(async () => {
-  const session = getSession();
-  const user = session
-    ? { ...session.user, impersonatedBy: session.session.impersonatedBy ?? null }
-    : null;
+export const loader = defineHandler(async (c) => {
+  const user = c.get("shopUser");
   const shopUrl = env.HOST_SITE_URL;
   if (user?.role !== "admin")
     return {
       allowed: false as const,
-      signedIn: Boolean(user),
       shopUrl,
       // An admin viewing as someone: the way back is in the bar.
       viewingAs: user?.impersonatedBy ? user.name : null,

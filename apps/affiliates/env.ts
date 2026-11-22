@@ -5,11 +5,8 @@ export default defineEnv({
   // is in the host's own env.
   AFFILIATES_HOST_TOKEN: string(),
   // The host's site: where referral links send visitors (routes/r/[slug].ts), and where people sign
-  // in (its Better Auth OAuth provider: auth.ts).
+  // in (src/user.ts).
   HOST_SITE_URL: url(),
-  // This service's client secret with the host's OAuth provider. The host keeps its hash
-  // (scripts/oauth-client.ts registers it).
-  AFFILIATES_OAUTH_SECRET: string(),
   // The parent domain the referral cookie is set for, so the host's site receives it, e.g.
   // ".example.com". Unset locally: localhost shares cookies across ports.
   AFFILIATES_COOKIE_DOMAIN: string().optional(),

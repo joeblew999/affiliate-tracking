@@ -8,7 +8,6 @@ import {
   CheckoutInput,
   CheckoutOutput,
   HOST_TOKEN_HEADER,
-  OAUTH_CLIENT_ID,
   REF_COOKIE,
   SignupInput,
   SignupOutput,
@@ -16,7 +15,7 @@ import {
   StripeEventOutput,
 } from "./src/host-contract";
 
-export { HOST_TOKEN_HEADER, OAUTH_CLIENT_ID, REF_COOKIE };
+export { HOST_TOKEN_HEADER, REF_COOKIE };
 
 /** The referral cookie's value from a Cookie header, or null. Pass only this, never the whole header. */
 export function referralFrom(cookieHeader: string | null | undefined): string | null {

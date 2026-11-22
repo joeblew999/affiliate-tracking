@@ -11,20 +11,18 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 /**
  * Each app's tables. `load`: replaced by the demo's rows. `clear`: emptied, nothing loaded (who's
- * signed in, and the shop's tokens for the service). `keep`: left as they are, the demo's rows not
- * loaded (the shop's signing keys, and the service registered as its OAuth client by
- * `scripts/oauth-client.ts`). Deleted in the order listed, `clear` then `load`, children before
+ * signed in). `keep`: left as they are, the demo's rows not loaded. Deleted in the order listed, `clear` then `load`, children before
  * parents; rows inserted in the reverse, so every foreign key points at a row that's there. (A D1
  * import checks them statement by statement, and the export lists tables alphabetically.)
  */
 const APPS = {
   shop: {
-    clear: ["oauthAccessToken", "oauthRefreshToken", "oauthConsent", "session", "verification"],
+    clear: ["session", "verification"],
     load: ["account", "subscription", "user"],
-    keep: ["jwks", "oauthClientAssertion", "oauthClientResource", "oauthResource", "oauthClient"],
+    keep: [],
   },
   affiliates: {
-    clear: ["session", "verification"],
+    clear: [],
     load: [
       "clicks",
       "sales",
@@ -35,8 +33,6 @@ const APPS = {
       "refunded_payments",
       "partner_ip_hashes",
       "partners",
-      "account",
-      "user",
     ],
     keep: [],
   },

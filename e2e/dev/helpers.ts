@@ -23,37 +23,12 @@ async function auth(
 
 const cookiesOf = (res: Response) => res.headers.getSetCookie().map((c) => c.split(";")[0] ?? "");
 
-/**
- * Signed in on the service too, the way a browser is: its sign-in sends the user to the shop's
- * OAuth provider, which (already signed in there, and the service trusted) sends them straight back
- * with a code, and the service's callback starts its session.
- */
-async function serviceSession(shopCookie: string): Promise<string> {
-  const start = await fetch(`${AFFILIATES}/api/auth/sign-in/social`, {
-    method: "POST",
-    headers: { "content-type": "application/json", origin: AFFILIATES },
-    body: JSON.stringify({ provider: "host", callbackURL: "/" }),
-  });
-  const { url } = (await start.json()) as { url: string };
-  const authorize = await fetch(url, { redirect: "manual", headers: { cookie: shopCookie } });
-  // A browser gets a redirect; a plain request gets where to go next as { redirect, url }.
-  const callback =
-    authorize.headers.get("location") ?? ((await authorize.json()) as { url?: string }).url;
-  if (!callback?.startsWith(AFFILIATES)) throw new Error(`shop authorize: went to ${callback}`);
-  const state = cookiesOf(start);
-  const done = await fetch(callback, { redirect: "manual", headers: { cookie: state.join("; ") } });
-  const session = cookiesOf(done).filter((c) => c.startsWith("affiliates.session"));
-  if (!session.length) throw new Error(`service sign-in: ${done.headers.get("location")}`);
-  return session.join("; ");
-}
-
-/** Signed in on the shop and the service (on localhost a browser sends both apps both cookies). */
+/** Signed in on the shop: the service asks the shop about this cookie (localhost shares it). */
 async function account(res: Response): Promise<Account> {
   if (!res.ok) throw new Error(`shop auth: ${res.status} ${await res.text()}`);
   const body = (await res.json()) as { user: { id: string; email: string } };
-  const shop = cookiesOf(res).join("; ");
   return {
-    cookie: `${shop}; ${await serviceSession(shop)}`,
+    cookie: cookiesOf(res).join("; "),
     email: body.user.email,
     id: body.user.id,
   };

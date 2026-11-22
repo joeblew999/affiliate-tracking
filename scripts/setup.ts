@@ -24,8 +24,6 @@ const wanted: Record<string, Record<string, string>> = {
     AFFILIATES_IP_SALT: random(),
     // Sales wait 30 days before they're approved (the tests date events back to check it).
     AFFILIATES_HOLD_DAYS: "30",
-    // Its secret with the shop's OAuth provider (scripts/oauth-client.ts registers it there).
-    AFFILIATES_OAUTH_SECRET: random(),
   },
   "apps/shop": {
     AFFILIATES_HOST_TOKEN: shared,

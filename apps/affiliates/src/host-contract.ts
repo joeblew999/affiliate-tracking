@@ -4,12 +4,6 @@
 import type Stripe from "stripe";
 import { z } from "zod";
 
-/**
- * This service's client id with the host's OAuth provider: people sign in to the service with the
- * host (Better Auth's OAuth provider there, generic OAuth here).
- */
-export const OAUTH_CLIENT_ID = "affiliates";
-
 /** The header the host's calls carry AFFILIATES_HOST_TOKEN in. */
 export const HOST_TOKEN_HEADER = "x-affiliates-host-token";
 

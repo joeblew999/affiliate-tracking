@@ -22,7 +22,7 @@ function text(form: FormData, name: string): string {
   return typeof value === "string" ? value : "";
 }
 
-export default function Shop({ user, affiliatesUrl }: Props) {
+export default function Shop({ user, affiliatesUrl, back }: Props) {
   return (
     <main className="flex min-h-svh items-start justify-center bg-muted/40 px-4 py-10 sm:items-center">
       <div className="w-full max-w-sm space-y-4">
@@ -31,8 +31,8 @@ export default function Shop({ user, affiliatesUrl }: Props) {
           <Account user={user} affiliatesUrl={affiliatesUrl} />
         ) : (
           <>
-            <Demo affiliatesUrl={affiliatesUrl} />
-            <SignIn />
+            <Demo affiliatesUrl={affiliatesUrl} back={back} />
+            <SignIn back={back} />
           </>
         )}
       </div>
@@ -92,7 +92,7 @@ const demoAccounts = [
   { label: "Sign in as Maya, a partner", email: "maya@demo.test", path: "/" },
 ];
 
-function Demo({ affiliatesUrl }: { affiliatesUrl: string }) {
+function Demo({ affiliatesUrl, back }: { affiliatesUrl: string; back: string | null }) {
   const [busy, setBusy] = useState(false);
   async function signInAs(email: string, path: string) {
     setBusy(true);
@@ -101,9 +101,7 @@ function Demo({ affiliatesUrl }: { affiliatesUrl: string }) {
       setBusy(false);
       return;
     }
-    // Signing in for the partner program: Better Auth's client follows the answer back there itself.
-    if (!Reflect.get(result.data ?? {}, "redirect"))
-      window.location.href = new URL(path, affiliatesUrl).toString();
+    window.location.href = back ?? new URL(path, affiliatesUrl).toString();
   }
   return (
     <Card>
@@ -132,7 +130,7 @@ function Demo({ affiliatesUrl }: { affiliatesUrl: string }) {
   );
 }
 
-function SignIn() {
+function SignIn({ back }: { back: string | null }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -152,8 +150,9 @@ function SignIn() {
       setError(result.error.message ?? "That didn't work. Try again.");
       return;
     }
-    // Signing in for the partner program: Better Auth's client follows the answer back there itself.
-    if (!Reflect.get(result.data ?? {}, "redirect")) window.location.reload();
+    // Sent here by the partner program: back there; else this page, signed in.
+    if (back) window.location.href = back;
+    else window.location.reload();
   }
 
   return (

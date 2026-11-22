@@ -25,6 +25,6 @@
     "./.void/env.d.ts",
     "./.void/db.d.ts",
     "./.void/queues.d.ts",
-    "./.void/auth.d.ts"
+    "./.void/bindings.d.ts"
   ]
 }

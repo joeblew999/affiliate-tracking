@@ -1,7 +1,7 @@
 // The shop's sign-in: Void's Better Auth, with
 // - the admin plugin: emails in ADMIN_EMAILS are admins, who run the affiliate program;
-// - the OAuth provider (with the JWT plugin it signs with): the affiliate service signs people in
-//   with the shop, as a trusted client that skips the consent screen, and gets their role;
+// - its session cookie for the parent domain (AUTH_COOKIE_DOMAIN), so the affiliate service on a
+//   subdomain receives it and asks this Better Auth who's signed in, through its binding;
 // - the Stripe plugin: the "pro" subscription, its checkout carrying the affiliate service's
 //   attribution, and every Stripe event passed on to the service (onEvent);
 // - a new-user hook telling the affiliate service, through a queue (queues/affiliate-signups.ts).
@@ -10,12 +10,11 @@
 // plugins don't depend on the env (the Stripe plugin adds tables, and the schema must be the same
 // with or without a key), and values are read from the config's `env` or inside the hooks.
 import { stripe } from "@better-auth/stripe";
-import { oauthProvider } from "@better-auth/oauth-provider";
-import { admin, jwt } from "better-auth/plugins";
+import { admin } from "better-auth/plugins";
 import Stripe from "stripe";
 import { defineAuth } from "void/auth";
 import { queues } from "void/queues";
-import { OAUTH_CLIENT_ID, referralFrom } from "affiliates/client";
+import { referralFrom } from "affiliates/client";
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 
@@ -38,24 +37,25 @@ export default defineAuth(({ defaults, env }) => {
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean),
   );
+  const cookieDomain = text(env.AUTH_COOKIE_DOMAIN);
   return {
     ...defaults,
-    // The OAuth provider issues its own tokens at /oauth2/token (Better Auth's setup).
-    disabledPaths: ["/token"],
+    // The affiliate service's pages call this Better Auth on their own origin (its /api/auth).
+    trustedOrigins: [
+      ...(Array.isArray(defaults.trustedOrigins) ? defaults.trustedOrigins : []),
+      text(env.AFFILIATES_SITE_URL) || "http://localhost:5174",
+    ],
+    // Unset locally: localhost shares cookies across ports.
+    ...(cookieDomain
+      ? {
+          advanced: {
+            ...defaults.advanced,
+            crossSubDomainCookies: { enabled: true, domain: cookieDomain },
+          },
+        }
+      : {}),
     plugins: [
       admin(),
-      jwt({ disableSettingJwtHeader: true }),
-      oauthProvider({
-        // Sign-in happens on the shop's own page; trusted clients never see a consent page.
-        loginPage: "/",
-        consentPage: "/",
-        // The affiliate service: registered once per database (scripts/setup.ts locally,
-        // README "Deploy" in production), trusted, skipping consent.
-        cachedTrustedClients: new Set([OAUTH_CLIENT_ID]),
-        // Admins here are admins of the affiliate program too.
-        customIdTokenClaims: ({ user }) => ({ role: text(user.role) || "user" }),
-        customUserInfoClaims: ({ user }) => ({ role: text(user.role) || "user" }),
-      }),
       stripe({
         stripeClient: stripeClient(text(env.STRIPE_SECRET_KEY)),
         stripeWebhookSecret: text(env.STRIPE_WEBHOOK_SECRET),

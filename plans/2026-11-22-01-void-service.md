@@ -51,16 +51,17 @@ Found on the way (Void 1.8.0, read in `node_modules/void/dist`):
   - `apps/service`: the affiliate service.
   - `apps/host`: an example host, the service's docs and proving ground. A tiny shop: Void's
     Better Auth, the Better Auth Stripe plugin, a checkout, wired to the service.
-- **Sign-in (changed 2026-11-22, replacing the `get-session` calls of spike step 3):** each app
-  runs its own Better Auth. The host is an OAuth provider (`@better-auth/oauth-provider`) with the
-  service as its one trusted client; the service signs people in with it (`genericOAuth`), so
-  `requireAuth`, roles and "View as" are all Better Auth's own, with no calls to the host per
-  request. The service's users are the host's (the same ids), made at their first sign-in.
+- **Sign-in:** the host's alone, as Void's own dashboard asks its API (Void repo,
+  `platform/packages/dashboard/middleware/01.auth.ts`). A middleware asks the host's Better Auth
+  who the session cookie belongs to, through the `HOST` binding; the service's `/api/auth` is the
+  host's Better Auth through the same binding. (2026-11-22: an OAuth-provider design with a second
+  Better Auth in the service was tried and removed: it copied users and roles into the service
+  and needed client registration and a secret.)
 - **Partners and admins:** a partner is a host user the service has approved. An admin is a role
-  in the host's Better Auth (its `admin()` plugin), carried to the service in the ID token's `role`
-  claim and copied onto the service's user at every sign-in.
-- **The service's address:** its own subdomain, e.g. `affiliates.example.com`. The referral
-  cookie is set for the parent domain so the host receives it; no session cookie is shared.
+  in the host's Better Auth (its `admin()` plugin).
+- **The service's address:** its own subdomain of the host's, e.g. `affiliates.shop.example.com`.
+  The host's session cookie is set for the parent domain (`advanced.crossSubDomainCookies`), so
+  the service receives it; the referral cookie likewise reaches the host.
 - **Host → service:** the service binding and `client.ts`, for: a user signed up (with the
   referral cookie), add attribution to a checkout, and whatever else a host needs.
 - **Stripe:**

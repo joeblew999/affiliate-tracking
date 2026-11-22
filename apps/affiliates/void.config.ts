@@ -16,6 +16,8 @@ export default defineConfig({
   database: { casing: "snake_case" },
   cloudflare: {
     name: "affiliates",
+    // The shop: who is signed in, and its Better Auth at /api/auth (src/user.ts).
+    services: [{ binding: "HOST", service: "shop" }],
     // Deployed at: a subdomain of the shop's, so the referral cookie reaches the shop (README, "Two addresses").
     routes: [{ pattern: "affiliates.shop.ubuntusoftware.net", custom_domain: true }],
     // Only there: no workers.dev address and no preview URLs (as set in Cloudflare).

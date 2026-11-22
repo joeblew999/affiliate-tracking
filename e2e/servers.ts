@@ -46,21 +46,17 @@ export function startDev(env: Record<string, string> = {}): Promise<ChildProcess
 }
 
 /**
- * Ready means a sign-in through both apps can start, not just two printed addresses: on its first
- * requests Vite pre-bundles dependencies and reloads, which drops calls in flight (seen
- * 2026-11-22), and the service reads the shop's OAuth metadata before it can send anyone there. The
- * test runner's hook timeout ends the wait.
+ * Ready means the service can ask the shop who's signed in (its /api/auth, through the binding),
+ * not just two printed addresses: on its first requests Vite pre-bundles dependencies and reloads,
+ * which drops calls in flight (seen 2026-11-22). The test runner's hook timeout ends the wait.
  */
 export async function untilReady(): Promise<void> {
   for (;;) {
     try {
-      const res = await fetch(`${AFFILIATES}/api/auth/sign-in/social`, {
-        method: "POST",
-        headers: { "content-type": "application/json", origin: AFFILIATES },
-        body: JSON.stringify({ provider: "host", callbackURL: "/" }),
+      const res = await fetch(`${AFFILIATES}/api/auth/get-session`, {
         signal: AbortSignal.timeout(30_000),
       });
-      if (res.ok && ((await res.json()) as { url?: string }).url?.startsWith(SHOP)) return;
+      if (res.ok) return;
     } catch {
       // not up yet
     }

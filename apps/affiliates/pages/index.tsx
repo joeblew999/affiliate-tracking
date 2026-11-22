@@ -1,9 +1,8 @@
-// The partner's page. Signed out: signed in with the shop straight away. Signed in: apply; then wait for approval;
+// The partner's page (signed out: the shop's sign-in first, middleware/01.user.ts). Signed in: apply; then wait for approval;
 // then the dashboard: their link and buyer code, totals, short links, and the last 30 days.
 import { useRouter } from "@void/react";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { fetch } from "void/client";
-import { SignInWithHost } from "@/auth-client";
 import { AppHeader } from "@/components/app-header";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
 import { CopyButton } from "@/components/copy-button";
@@ -64,7 +63,6 @@ export default function PartnerPage(props: Props) {
         )}
       </AppHeader>
       <main className="mx-auto max-w-5xl space-y-6 px-4 py-6 sm:px-6">
-        {!user && <SignInWithHost />}
         {user && !partner && <Apply />}
         {partner?.status === "pending" && (
           <Notice title="Application received" text="An admin will review it soon." />
