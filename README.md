@@ -52,6 +52,7 @@ pnpm wrangler d1 migrations apply DB --remote
 # pnpm wrangler d1 execute DB --file=migrations/0010_renewals.sql --remote
 # pnpm wrangler d1 execute DB --file=migrations/0011_payout_currency.sql --remote
 # pnpm wrangler d1 execute DB --file=migrations/0012_commission_rules.sql --remote
+# pnpm wrangler d1 execute DB --file=migrations/0013_affiliate_user.sql --remote
 
 # 3. Set secrets
 pnpm wrangler secret put AFFILIATE_SESSION_SECRET
@@ -509,6 +510,34 @@ them, and adds bonuses; bonus lines show in Conversions with their note.
 
 Set `AFFILIATE_MIN_PAYOUT_CENTS` (e.g. `"5000"`) to hold back affiliates who are
 owed less; their commissions roll over to a later run.
+### Using your own sign-in (Better Auth and others)
+
+If your site already signs people in, pass that to `handleAffiliateApi`
+instead of making partners use magic links and admins share `ADMIN_TOKEN`:
+
+```js
+const session = request => auth.api.getSession({ headers: request.headers }); // Better Auth
+
+const affRes = await handleAffiliateApi(request, env, ctx, { auth: {
+    // Who is signed in. Return the email only once it is verified.
+    affiliate: async request => {
+        const s = await session(request);
+        return s ? { userId: s.user.id, email: s.user.emailVerified ? s.user.email : null } : null;
+    },
+    // Who may use the admin API and dashboard.
+    admin: async request => (await session(request))?.user.role === "admin",
+} });
+```
+
+- A partner is matched by user id; on their first sign-in, by email
+  (case-insensitive), which then stores the user id on the affiliate
+  (`affiliates.user_id`). After that a changed email doesn't matter.
+- Admin requests other than GET must come from your own origin, as with the
+  built-in admin session.
+- The built-in methods keep working alongside: magic-link sessions for
+  partners, and the `x-admin-token` header for scripts. Without `auth`
+  nothing changes.
+- If a hook throws, the request gets 503 and the error is only logged.
 
 ### Partner access and onboarding
 
@@ -543,6 +572,7 @@ context to the helpers directly.
 |---|---|
 | `src/index.js` | Public API — the four exports |
 | `src/route.js` | Route table + `handleAffiliateApi` |
+| `src/auth.js` | Pluggable sign-in for partners and admins |
 | `src/ref.js` | Ref middleware (`applyAffiliateRef`) + cookie parsing |
 | `src/checkout.js` | Checkout attribution (`attachAffiliateAttribution`) |
 | `src/links.js` | Short links (`handleAffiliateLink`) |
