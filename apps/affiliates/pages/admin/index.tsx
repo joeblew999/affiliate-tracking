@@ -1,8 +1,8 @@
 // The admin page: partners (approve, suspend, settings, links), sales (approve, reject), payouts
 // (run them), commission rules and bonuses, and performance.
-import { action, useRouter } from "@void/react";
+import { action, Form, useForm, useRouter } from "@void/react";
 import type { Href } from "void/routes";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type ComponentProps, type ReactNode } from "react";
 import { MoreHorizontal } from "lucide-react";
 import { viewAs } from "@/components/view-as";
 import { ClicksChart, TopList } from "@/components/clicks-chart";
@@ -29,9 +29,47 @@ import { date, minorUnits, money } from "@/format";
 import { useAction } from "@/components/use-action";
 import type { Props } from "./index.server";
 
-function field(form: FormData, name: string): string {
-  const value = form.get(name);
-  return typeof value === "string" ? value.trim() : "";
+/** A new rule: a percent of the sale, for every partner and product, until changed. */
+const NO_RULE = {
+  kind: "percent" as "percent" | "fixed",
+  percent: null as number | null,
+  fixedCents: null as number | null,
+  currency: null as string | null,
+  partnerId: null as string | null,
+  productId: null as string | null,
+  minMonthlySales: 0,
+  capPerCustomerCents: null as number | null,
+};
+
+/**
+ * An amount typed as the admin writes it ("12.50"), kept in the form in minor units (1250). Its
+ * text is its own, so "12." stays while typing; it clears when the form does.
+ */
+function MoneyInput({
+  cents,
+  currency,
+  onCents,
+  ...props
+}: Omit<ComponentProps<typeof Input>, "value" | "onChange"> & {
+  cents: number | null;
+  currency: string;
+  onCents: (cents: number | null) => void;
+}) {
+  const [text, setText] = useState("");
+  const shown = cents === null ? "" : text;
+  return (
+    <Input
+      type="number"
+      min={0}
+      step={0.01}
+      {...props}
+      value={shown}
+      onChange={(e) => {
+        setText(e.target.value);
+        onCents(e.target.value ? minorUnits(e.target.value, currency) : null);
+      }}
+    />
+  );
 }
 
 const selectClass = "h-9 rounded-md border bg-transparent px-2 text-sm";
@@ -409,93 +447,74 @@ function Payouts({ payouts }: Props) {
 
 function Rules({ rules, partners, payoutCurrency }: Props) {
   const { run, busy, feedback } = useAction();
-  const [kind, setKind] = useState<"percent" | "fixed">("percent");
+  const rule = useForm("/admin?addRule", NO_RULE, { throwOnError: false, resetOnSuccess: true });
+  const bonus = useForm(
+    "/admin?bonus",
+    { partnerId: "", commissionCents: 0, bonusNote: "" },
+    { throwOnError: false, resetOnSuccess: true },
+  );
+  const kind = rule.data.kind;
+  // What the rule's amounts are in: a fixed rule's own currency, else the payout currency.
+  const ruleCurrency = rule.data.currency || payoutCurrency;
   const active = partners.filter((p) => p.status === "active");
   const nameOf = (id: string | null) =>
     id === null ? "Every partner" : (partners.find((p) => p.id === id)?.name ?? id);
-  function addRule(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const formEl = event.currentTarget;
-    const common = {
-      partnerId: field(form, "partnerId") || null,
-      productId: field(form, "productId") || null,
-      minMonthlySales: Number(field(form, "minMonthlySales") || 0),
-      capPerCustomerCents: field(form, "cap")
-        ? minorUnits(field(form, "cap"), field(form, "currency") || payoutCurrency)
-        : null,
-    };
-    const body =
-      kind === "percent"
-        ? {
-            kind,
-            percent: Number(field(form, "percent")),
-            fixedCents: null,
-            currency: null,
-            ...common,
-          }
-        : {
-            kind,
-            percent: null,
-            fixedCents: minorUnits(field(form, "fixed"), field(form, "currency")),
-            currency: field(form, "currency").toLowerCase(),
-            ...common,
-          };
-    void run(async () => {
-      const result = await action("/admin?addRule", { data: body });
-      if (result.ok) formEl.reset();
-      return result;
-    }, "Rule added.");
-  }
-  function addBonus(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const formEl = event.currentTarget;
-    void run(async () => {
-      const result = await action("/admin?bonus", {
-        data: {
-          partnerId: field(form, "partnerId"),
-          commissionCents: minorUnits(field(form, "amount"), payoutCurrency),
-          bonusNote: field(form, "note"),
-        },
-      });
-      if (result.ok) formEl.reset();
-      return result;
-    }, "Bonus added: approved, paid with the next payout.");
-  }
   return (
     <div className="space-y-6">
       <Section
         title="Commission rules"
         description="Without rules each partner earns their own %. For each item the most specific rule wins: partner and product, then product, then partner, then everyone."
       >
-        <form onSubmit={addRule} className="grid gap-2 sm:grid-cols-4">
+        <Form form={rule} className="grid gap-2 sm:grid-cols-4">
           <select
             className={selectClass}
             aria-label="Pays"
             value={kind}
-            onChange={(e) => setKind(e.currentTarget.value === "fixed" ? "fixed" : "percent")}
+            onChange={(e) => {
+              rule.setData("kind", e.currentTarget.value === "fixed" ? "fixed" : "percent");
+              rule.setData("percent", null);
+              rule.setData("fixedCents", null);
+              rule.setData("currency", null);
+            }}
           >
             <option value="percent">A percent of the sale</option>
             <option value="fixed">A fixed amount per unit</option>
           </select>
           {kind === "percent" ? (
             <Input
-              name="percent"
               type="number"
               min={0}
               max={100}
               step={0.1}
               placeholder="Percent"
               required
+              value={rule.data.percent ?? ""}
+              onChange={(e) => rule.setData("percent", Number(e.target.value))}
             />
           ) : (
             <>
-              <Input name="fixed" type="number" min={0} step={0.01} placeholder="Amount" required />
-              <Input name="currency" placeholder="usd" maxLength={3} required />
+              <MoneyInput
+                placeholder="Amount"
+                required
+                currency={ruleCurrency}
+                cents={rule.data.fixedCents}
+                onCents={(cents) => rule.setData("fixedCents", cents)}
+              />
+              <Input
+                placeholder="usd"
+                maxLength={3}
+                required
+                value={rule.data.currency ?? ""}
+                onChange={(e) => rule.setData("currency", e.target.value.toLowerCase() || null)}
+              />
             </>
           )}
-          <select className={selectClass} name="partnerId" aria-label="Partner">
+          <select
+            className={selectClass}
+            aria-label="Partner"
+            value={rule.data.partnerId ?? ""}
+            onChange={(e) => rule.setData("partnerId", e.currentTarget.value || null)}
+          >
             <option value="">Every partner</option>
             {active.map((p) => (
               <option key={p.id} value={p.id}>
@@ -503,13 +522,29 @@ function Rules({ rules, partners, payoutCurrency }: Props) {
               </option>
             ))}
           </select>
-          <Input name="productId" placeholder="prod_… or price_… (empty: everything)" />
-          <Input name="minMonthlySales" type="number" min={0} placeholder="From sales this month" />
-          <Input name="cap" type="number" min={0} step={0.01} placeholder="Most per customer" />
-          <Button type="submit" disabled={busy}>
+          <Input
+            placeholder="prod_… or price_… (empty: everything)"
+            value={rule.data.productId ?? ""}
+            onChange={(e) => rule.setData("productId", e.target.value.trim() || null)}
+          />
+          <Input
+            type="number"
+            min={0}
+            placeholder="From sales this month"
+            value={rule.data.minMonthlySales || ""}
+            onChange={(e) => rule.setData("minMonthlySales", Number(e.target.value))}
+          />
+          <MoneyInput
+            placeholder="Most per customer"
+            currency={ruleCurrency}
+            cents={rule.data.capPerCustomerCents}
+            onCents={(cents) => rule.setData("capPerCustomerCents", cents)}
+          />
+          <Button type="submit" disabled={rule.pending}>
             Add rule
           </Button>
-        </form>
+        </Form>
+        {rule.recentlySuccessful && <p className="text-sm text-muted-foreground">Rule added.</p>}
         <Table>
           <TableHeader>
             <TableRow>
@@ -567,20 +602,44 @@ function Rules({ rules, partners, payoutCurrency }: Props) {
         title="One-off bonus"
         description={`Approved straight away and paid with the partner's next payout, in ${payoutCurrency.toUpperCase()}.`}
       >
-        <form onSubmit={addBonus} className="grid gap-2 sm:grid-cols-4">
-          <select className={selectClass} name="partnerId" aria-label="Partner" required>
+        <Form form={bonus} className="grid gap-2 sm:grid-cols-4">
+          <select
+            className={selectClass}
+            aria-label="Partner"
+            required
+            value={bonus.data.partnerId}
+            onChange={(e) => bonus.setData("partnerId", e.currentTarget.value)}
+          >
+            <option value="">Partner</option>
             {active.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name ?? p.email}
               </option>
             ))}
           </select>
-          <Input name="amount" type="number" min={0.01} step={0.01} placeholder="Amount" required />
-          <Input name="note" maxLength={200} placeholder="Launch week" required />
-          <Button type="submit" disabled={busy || active.length === 0}>
+          <MoneyInput
+            placeholder="Amount"
+            required
+            currency={payoutCurrency}
+            cents={bonus.data.commissionCents || null}
+            onCents={(cents) => bonus.setData("commissionCents", cents ?? 0)}
+          />
+          <Input
+            maxLength={200}
+            placeholder="Launch week"
+            required
+            value={bonus.data.bonusNote ?? ""}
+            onChange={(e) => bonus.setData("bonusNote", e.target.value)}
+          />
+          <Button type="submit" disabled={bonus.pending || active.length === 0}>
             Add bonus
           </Button>
-        </form>
+        </Form>
+        {bonus.recentlySuccessful && (
+          <p className="text-sm text-muted-foreground">
+            Bonus added: approved, paid with the next payout.
+          </p>
+        )}
       </Section>
       {feedback}
     </div>

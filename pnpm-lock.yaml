@@ -184,6 +184,9 @@ importers:
       cn:
         specifier: 0.5.2
         version: 0.5.2
+      hono:
+        specifier: 'catalog:'
+        version: 4.13.19
       react:
         specifier: 'catalog:'
         version: 19.3.1

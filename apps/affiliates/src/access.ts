@@ -13,12 +13,6 @@ export function requireUser(c: CloudContext): User {
   return user;
 }
 
-export function requireAdmin(c: CloudContext): User {
-  const user = requireUser(c);
-  if (user.role !== "admin") throw new HTTPException(403, { message: "Admins only" });
-  return user;
-}
-
 /** The signed-in user's partner record, active; its IP is remembered for the self-referral check. */
 export async function requirePartner(c: CloudContext): Promise<{ user: User; partner: Partner }> {
   const user = requireUser(c);

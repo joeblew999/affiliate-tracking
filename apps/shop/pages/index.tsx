@@ -1,8 +1,7 @@
 // The example shop: sign up, sign in and out with the shop's own Better Auth (void/client). The
 // affiliate program is its own app on its own address; it sees this sign-in.
-import { useState, type FormEvent } from "react";
-import { DEMO_PASSWORD } from "affiliates/demo";
-import { auth } from "@/auth-client";
+import { action, Form, useForm } from "@void/react";
+import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -15,12 +14,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { demoAccounts } from "@/demo-accounts";
 import type { Props } from "./index.server";
-
-function text(form: FormData, name: string): string {
-  const value = form.get(name);
-  return typeof value === "string" ? value : "";
-}
 
 export default function Shop({ user, affiliatesUrl, back }: Props) {
   return (
@@ -31,7 +26,7 @@ export default function Shop({ user, affiliatesUrl, back }: Props) {
           <Account user={user} affiliatesUrl={affiliatesUrl} />
         ) : (
           <>
-            <Demo affiliatesUrl={affiliatesUrl} back={back} />
+            <Demo back={back} />
             <SignIn back={back} />
           </>
         )}
@@ -77,7 +72,7 @@ function Account({
         <Button
           variant="outline"
           className="w-full sm:w-auto"
-          onClick={() => void auth.signOut().then(() => window.location.reload())}
+          onClick={() => void action("/?signOut")}
         >
           Sign out
         </Button>
@@ -86,23 +81,8 @@ function Account({
   );
 }
 
-/** The demo accounts (affiliates/demo, loaded by `vp run demo`), one tap each. */
-const demoAccounts = [
-  { label: "Sign in as the admin", email: "admin@demo.test", path: "/admin" },
-  { label: "Sign in as Maya, a partner", email: "maya@demo.test", path: "/" },
-];
-
-function Demo({ affiliatesUrl, back }: { affiliatesUrl: string; back: string | null }) {
+function Demo({ back }: { back: string | null }) {
   const [busy, setBusy] = useState(false);
-  async function signInAs(email: string, path: string) {
-    setBusy(true);
-    const result = await auth.signIn.email({ email, password: DEMO_PASSWORD });
-    if (result.error) {
-      setBusy(false);
-      return;
-    }
-    window.location.href = back ?? new URL(path, affiliatesUrl).toString();
-  }
   return (
     <Card>
       <CardHeader>
@@ -120,7 +100,12 @@ function Demo({ affiliatesUrl, back }: { affiliatesUrl: string; back: string | n
             className="w-full"
             variant="outline"
             disabled={busy}
-            onClick={() => void signInAs(a.email, a.path)}
+            onClick={() => {
+              setBusy(true);
+              void action("/?demo", { data: { email: a.email, back } }).finally(() =>
+                setBusy(false),
+              );
+            }}
           >
             {a.label}
           </Button>
@@ -131,30 +116,12 @@ function Demo({ affiliatesUrl, back }: { affiliatesUrl: string; back: string | n
 }
 
 function SignIn({ back }: { back: string | null }) {
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function submit(event: FormEvent<HTMLFormElement>, mode: "up" | "in") {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const email = text(form, "email");
-    const password = text(form, "password");
-    setBusy(true);
-    setError("");
-    const result =
-      mode === "up"
-        ? await auth.signUp.email({ email, password, name: text(form, "name") || email })
-        : await auth.signIn.email({ email, password });
-    setBusy(false);
-    if (result.error) {
-      setError(result.error.message ?? "That didn't work. Try again.");
-      return;
-    }
-    // Sent here by the partner program: back there; else this page, signed in.
-    if (back) window.location.href = back;
-    else window.location.reload();
-  }
-
+  const signIn = useForm("/?signIn", { email: "", password: "", back }, { throwOnError: false });
+  const signUp = useForm(
+    "/?signUp",
+    { name: "", email: "", password: "", back },
+    { throwOnError: false },
+  );
   return (
     <Card>
       <CardContent>
@@ -164,59 +131,79 @@ function SignIn({ back }: { back: string | null }) {
             <TabsTrigger value="up">Create account</TabsTrigger>
           </TabsList>
           <TabsContent value="in">
-            <form method="post" onSubmit={(e) => void submit(e, "in")} className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="in-email">Email</Label>
-                <Input id="in-email" name="email" type="email" autoComplete="email" required />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="in-password">Password</Label>
+            <Form form={signIn} className="grid gap-4">
+              <Field label="Email" id="in-email">
+                <Input
+                  id="in-email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={signIn.data.email}
+                  onChange={(e) => signIn.setData("email", e.target.value)}
+                />
+              </Field>
+              <Field label="Password" id="in-password">
                 <Input
                   id="in-password"
-                  name="password"
                   type="password"
                   autoComplete="current-password"
                   required
+                  value={signIn.data.password}
+                  onChange={(e) => signIn.setData("password", e.target.value)}
                 />
-              </div>
-              <Button type="submit" disabled={busy}>
+              </Field>
+              <Button type="submit" disabled={signIn.pending}>
                 Sign in
               </Button>
-            </form>
+            </Form>
           </TabsContent>
           <TabsContent value="up">
-            <form method="post" onSubmit={(e) => void submit(e, "up")} className="grid gap-4">
-              <div className="grid gap-2">
-                <Label htmlFor="up-name">Name</Label>
-                <Input id="up-name" name="name" autoComplete="name" />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="up-email">Email</Label>
-                <Input id="up-email" name="email" type="email" autoComplete="email" required />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="up-password">Password</Label>
+            <Form form={signUp} className="grid gap-4">
+              <Field label="Name" id="up-name">
+                <Input
+                  id="up-name"
+                  autoComplete="name"
+                  value={signUp.data.name}
+                  onChange={(e) => signUp.setData("name", e.target.value)}
+                />
+              </Field>
+              <Field label="Email" id="up-email">
+                <Input
+                  id="up-email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={signUp.data.email}
+                  onChange={(e) => signUp.setData("email", e.target.value)}
+                />
+              </Field>
+              <Field label="Password" id="up-password">
                 <Input
                   id="up-password"
-                  name="password"
                   type="password"
                   autoComplete="new-password"
                   minLength={8}
                   required
+                  value={signUp.data.password}
+                  onChange={(e) => signUp.setData("password", e.target.value)}
                 />
-              </div>
-              <Button type="submit" disabled={busy}>
+              </Field>
+              <Button type="submit" disabled={signUp.pending}>
                 Create account
               </Button>
-            </form>
+            </Form>
           </TabsContent>
         </Tabs>
-        {error && (
-          <p role="alert" className="mt-4 text-sm text-destructive">
-            {error}
-          </p>
-        )}
       </CardContent>
     </Card>
+  );
+}
+
+function Field({ label, id, children }: { label: string; id: string; children: ReactNode }) {
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      {children}
+    </div>
   );
 }

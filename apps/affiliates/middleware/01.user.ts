@@ -1,7 +1,9 @@
 // Who is signed in, once per request (src/user.ts), for routes and pages: c.get("shopUser"), and for
 // the layout's header (Void's shared data: useShared() in pages/layout.tsx). The pages need someone:
-// signed out, they go to the shop's sign-in and come back. As Void's own dashboard does (its
-// middleware/01.auth.ts).
+// signed out, they go to the shop's sign-in and come back. /admin (its loader and every action) is
+// for the shop's admins only: anyone else gets 403, shown by pages/_error.tsx. As Void's own
+// dashboard does (its middleware/01.auth.ts).
+import { HTTPException } from "hono/http-exception";
 import { defineMiddleware } from "void";
 import { env } from "void/env";
 import { currentUser, signInUrl, type User } from "@/user";
@@ -38,5 +40,8 @@ export default defineMiddleware(async (c, next) => {
     },
   });
   if (!user && PAGES.has(path)) return Response.redirect(signInUrl(c.req.url), 302);
+  // An admin viewing as someone is that someone here; their way back is the layout's bar.
+  if (path === "/admin" && user?.role !== "admin")
+    throw new HTTPException(403, { message: "Admins only" });
   return next();
 });

@@ -15,7 +15,6 @@ import { defineHandler, defineHead, type InferProps } from "void";
 import { and, db, desc, eq, inArray, ne } from "void/db";
 import { env } from "void/env";
 import { queues } from "void/queues";
-import { requireAdmin } from "@/access";
 import { ensurePromotionCode } from "@/approval";
 import { linksOf } from "@/links";
 import { activePartner, partnerById } from "@/partners";
@@ -25,9 +24,6 @@ import { stats } from "@/stats";
 // The admin page: everything, for the host's admins only. ?partner=<id>: only that partner's sales
 // and payouts. ?links=<partner id>: that partner's short links too, for the dialog that shows them.
 export const loader = defineHandler(async (c) => {
-  // Not an admin (or an admin viewing as someone, whose way back is in the layout's bar): 403,
-  // shown by pages/_error.tsx.
-  requireAdmin(c);
   const linksFor = c.req.query("links") ?? null;
   const partnerId = c.req.query("partner");
   const origin = new URL(c.req.url).origin;
@@ -67,12 +63,12 @@ export type Props = InferProps<typeof loader>;
 
 export const head = defineHead(() => ({ title: "Admin" }));
 
-// What the admin page does (Void's page actions: each re-runs the loader after).
+// What the admin page does (Void's page actions: each re-runs the loader after). Admins only, as
+// the whole page is (middleware/01.user.ts).
 export const actions = {
   // Approve (active), suspend or reactivate a partner, and their terms. Approving also makes their
   // buyer-discount promotion code, when the service has a Stripe key and a coupon.
   changePartner: defineHandler.withValidator({ body: partnerChange })(async (c, { body }) => {
-    requireAdmin(c);
     const { id, ...change } = body;
     const [row] = await db.update(partners).set(change).where(eq(partners.id, id)).returning();
     if (!row) throw new HTTPException(404, { message: "No such partner" });
@@ -82,7 +78,6 @@ export const actions = {
   // A decision on a sale not yet paid: approve it, reject it (never approved automatically), or put
   // it back to pending. Not a clawback: what a refund takes back isn't up to a decision.
   changeSale: defineHandler.withValidator({ body: saleChange })(async (c, { body }) => {
-    requireAdmin(c);
     const [row] = await db
       .update(sales)
       .set({ status: body.status, approvedAt: body.status === "approved" ? Date.now() : null })
@@ -103,7 +98,6 @@ export const actions = {
   // A one-off bonus: a sale of kind "bonus", approved straight away and paid with the partner's next
   // payout. In the payout currency: a bonus has no Stripe payment to convert from.
   bonus: defineHandler.withValidator({ body: bonus })(async (c, { body }) => {
-    requireAdmin(c);
     if (!(await activePartner(body.partnerId)))
       throw new HTTPException(404, { message: "No such active partner" });
     const currency = env.AFFILIATES_PAYOUT_CURRENCY.toLowerCase();
@@ -126,7 +120,6 @@ export const actions = {
 
   // A commission rule (src/commission.ts).
   addRule: defineHandler.withValidator({ body: newCommissionRule })(async (c, { body }) => {
-    requireAdmin(c);
     if (body.partnerId && !(await partnerById(body.partnerId)))
       throw new HTTPException(404, { message: "No such partner" });
     await db.insert(commissionRules).values(body);
@@ -134,14 +127,12 @@ export const actions = {
 
   // A rule retired. Commission already earned under it stays as it is.
   retireRule: defineHandler.withValidator({ body: ruleToRetire })(async (c, { body }) => {
-    requireAdmin(c);
     await db.update(commissionRules).set({ active: false }).where(eq(commissionRules.id, body.id));
   }),
 
   // Payouts: one queue message per partner owed something (or one partner), paid by
   // queues/payouts.ts. Returns at once; the payouts list shows how each went.
   runPayouts: defineHandler.withValidator({ body: payoutRun })(async (c, { body }) => {
-    requireAdmin(c);
     const partnerIds = body.partnerId ? [body.partnerId] : await partnersToPay();
     for (const partnerId of partnerIds) await queues.payouts.send({ partnerId });
   }),
