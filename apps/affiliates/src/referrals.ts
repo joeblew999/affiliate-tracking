@@ -24,7 +24,13 @@ export async function referringPartner(userId: string): Promise<Partner | null> 
     .select({ partner: partners })
     .from(referrals)
     .innerJoin(partners, eq(partners.id, referrals.partnerId))
-    .where(and(eq(referrals.userId, userId), eq(partners.status, "active")))
+    .where(
+      and(
+        eq(referrals.userId, userId),
+        eq(partners.status, "active"),
+        eq(partners.role, "affiliate"),
+      ),
+    )
     .limit(1);
   return row?.partner ?? null;
 }

@@ -10,7 +10,7 @@ import type { Href } from "void/routes";
 import { z } from "zod";
 import { DEMO_PASSWORD } from "affiliates/demo";
 import { demoAccounts } from "../src/demo-accounts.ts";
-import { events, price, when } from "../src/events.ts";
+import { eventsOnSale, price, when } from "../src/events.ts";
 
 /** The affiliate service's page at this path or URL; null if it would be anywhere else. */
 function service(path: string | null | undefined): Href | null {
@@ -19,7 +19,7 @@ function service(path: string | null | undefined): Href | null {
   return url.origin === new URL(env.AFFILIATES_SITE_URL).origin ? (url.toString() as Href) : null;
 }
 
-export const loader = defineHandler((c) => {
+export const loader = defineHandler(async (c) => {
   const user = getUser();
   // Sent here to sign in by the affiliate service (its middleware/01.user.ts): back there after.
   const back = service(c.req.query("redirect"));
@@ -28,12 +28,13 @@ export const loader = defineHandler((c) => {
     back,
     user: user ? { email: user.email, name: user.name, isAdmin: user.role === "admin" } : null,
     affiliatesUrl: env.AFFILIATES_SITE_URL,
-    events: events().map(({ id, name, startsAt, endsAt, location, cents }) => ({
-      id,
-      name,
-      when: when({ startsAt, endsAt }),
-      location,
-      price: price(cents),
+    events: (await eventsOnSale()).map((e) => ({
+      id: e.id,
+      name: e.name,
+      when: when(e),
+      location: e.location,
+      price: price(e.priceCents, e.currency),
+      soldOut: e.placesLeft === 0,
     })),
   };
 });

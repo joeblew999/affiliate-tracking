@@ -6,7 +6,7 @@ import { HTTPException } from "hono/http-exception";
 import Stripe from "stripe";
 import { defineHandler } from "void";
 import { env } from "void/env";
-import { queues } from "void/queues";
+import { queuePayouts } from "../../../src/payouts.ts";
 
 export const POST = defineHandler(async (c) => {
   const secret = env.STRIPE_PAYOUTS_WEBHOOK_SECRET;
@@ -26,7 +26,7 @@ export const POST = defineHandler(async (c) => {
   }
   if (event.type === "topup.succeeded") {
     const partnerId = event.data.object.metadata?.partner_id;
-    if (partnerId) await queues.payouts.send({ partnerId });
+    if (partnerId) await queuePayouts([partnerId]);
   }
   return c.json({ received: true });
 });

@@ -21,6 +21,8 @@ interface DemoPerson {
   email: string;
   role: "admin" | "user";
   partner?: {
+    /** Default affiliate. An organiser runs events; a venue's contact is paid for its venue. */
+    role?: "organiser" | "venue";
     status: "active" | "pending" | "suspended";
     code: string;
     commissionPct: number;
@@ -32,6 +34,31 @@ interface DemoPerson {
     promoCode?: string;
     application: string;
     joinedDaysAgo: number;
+  };
+}
+
+/** An organiser or a venue's contact: active, with no traffic or links of their own. */
+function payee(
+  userId: string,
+  name: string,
+  code: string,
+  role: "organiser" | "venue",
+): DemoPerson {
+  return {
+    userId,
+    name,
+    email: `${code}@demo.test`,
+    role: "user",
+    partner: {
+      role,
+      status: "active",
+      code,
+      commissionPct: 0,
+      reach: 0,
+      sites: [],
+      application: "",
+      joinedDaysAgo: 150,
+    },
   };
 }
 
@@ -159,6 +186,13 @@ export const demoPeople: DemoPerson[] = [
       joinedDaysAgo: 1,
     },
   },
+  // Organisers: they run the events, and are paid a share of every ticket.
+  payee("demo-olivia", "Olivia Grant", "olivia", "organiser"),
+  payee("demo-raj", "Raj Patel", "raj", "organiser"),
+  // The venues' contacts: each is paid for their venue, and sets up its payouts.
+  payee("demo-nina", "Nina Okoro", "nina", "venue"),
+  payee("demo-hugo", "Hugo Lind", "hugo", "venue"),
+  payee("demo-mei", "Mei Tanaka", "mei", "venue"),
   // A shop customer who isn't a partner, to show the partner page's "apply" form.
   { userId: "demo-chris", name: "Chris Park", email: "chris@demo.test", role: "user" },
 ];
@@ -170,44 +204,89 @@ export const DEMO_NOW = "2026-11-15T12:00:00.000Z";
 export const HOLD_DAYS = 30;
 
 /**
- * The shop's events: online, each with its ticket price. A ticket is a one-off Stripe payment for
- * the event's Stripe product, whose id is made once from the event's label, so a commission rule
- * can name it. When: in `startsInDays` days from the day they're shown (the demo stays upcoming),
- * at `startsAt` UTC, for `hours` (eventTimes).
+ * Where the online events are hosted: each with what it costs to book for an event (paid when the
+ * event is booked) and the attendees it takes to fill it. Each is paid through its contact.
+ */
+export const demoVenues = {
+  zoomRoom: {
+    name: "The Zoom room",
+    location: "Online, on Zoom. The link comes with your ticket.",
+    capacity: 200,
+    priceCents: 150000,
+    contact: "nina",
+  },
+  liveStage: {
+    name: "The live stage",
+    location: "Online, on YouTube Live. The link comes with your ticket.",
+    capacity: 100,
+    priceCents: 600000,
+    contact: "hugo",
+  },
+  meetRoom: {
+    name: "The meeting room",
+    location: "Online, on Google Meet. The link comes with your ticket.",
+    capacity: 40,
+    priceCents: 80000,
+    contact: "mei",
+  },
+} as const;
+
+/**
+ * The events: each at a venue, run by an organiser who's paid organiserPct of every ticket. A
+ * ticket is a one-off Stripe payment for the event's Stripe product, whose id is made once from the
+ * event's label, so a commission rule can name it. Booked `bookedDaysAgo` days ago, when its venue
+ * was paid and it went on sale. When: in `startsInDays` days from the day it's shown (the demo stays
+ * upcoming), at `startsAt` UTC, for `hours` (eventTimes). Besides the tickets affiliates brought
+ * (demoSales), `directTickets` were bought by people no affiliate brought.
  */
 export const demoEvents = {
   workshop: {
     productId: `prod_${fixtureId("event:workshop").replaceAll("-", "")}`,
     name: "Getting started workshop",
     description: "Two hours, hands on: set up your first project with the team, and ask anything.",
+    venue: "zoomRoom",
+    organiser: "olivia",
+    organiserPct: 15,
+    bookedDaysAgo: 120,
     startsInDays: 10,
     startsAt: "14:00",
     hours: 2,
-    location: "Online, on Zoom. The link comes with your ticket.",
     cents: 2900,
+    directTickets: 60,
   },
   masterclass: {
     productId: `prod_${fixtureId("event:masterclass").replaceAll("-", "")}`,
     name: "Masterclass: the whole day",
     description:
       "A full day of talks and live building, start to finish, with the recordings after.",
+    venue: "liveStage",
+    organiser: "raj",
+    organiserPct: 20,
+    bookedDaysAgo: 115,
     startsInDays: 24,
     startsAt: "09:00",
     hours: 8,
-    location: "Online, on YouTube Live. The link comes with your ticket.",
     cents: 29000,
+    directTickets: 14,
   },
   teamSession: {
     productId: `prod_${fixtureId("event:team-session").replaceAll("-", "")}`,
     name: "Team session",
     description: "An hour for your whole team: how to work together on one project.",
+    venue: "meetRoom",
+    organiser: "olivia",
+    organiserPct: 10,
+    bookedDaysAgo: 100,
     startsInDays: 38,
     startsAt: "16:00",
     hours: 1,
-    location: "Online, on Google Meet. The link comes with your ticket.",
     cents: 9900,
+    directTickets: 6,
   },
-} as const;
+} as const satisfies Record<
+  string,
+  { venue: keyof typeof demoVenues; organiser: string; [key: string]: unknown }
+>;
 
 /** When an event starts and ends, for its days ahead of `now`. */
 export function eventTimes(
@@ -236,13 +315,20 @@ export const demoPayouts: DemoPayout[] = [
   { label: "priya_p42", partner: "priya", daysAgo: 42, amountCents: 2500 },
   { label: "priya_p12", partner: "priya", daysAgo: 12, amountCents: 580 },
   { label: "ken_p12", partner: "ken", daysAgo: 12, amountCents: 580 },
+  // Each event's venue, paid when the event was booked (demoVenueSales).
+  ...Object.entries(demoEvents).map(([key, event]) => ({
+    label: `venue_${key}`,
+    partner: demoVenues[event.venue].contact,
+    daysAgo: event.bookedDaysAgo,
+    amountCents: demoVenues[event.venue].priceCents,
+  })),
 ];
 
 interface DemoSale {
   label: string;
   partner: string;
-  kind: "checkout" | "bonus" | "clawback";
-  /** For a ticket: the event it's for. */
+  kind: "checkout" | "organiser" | "venue" | "bonus" | "clawback";
+  /** For a ticket, an organiser's share of one, or a venue's payment: the event it's for. */
   event?: keyof typeof demoEvents;
   daysAgo: number;
   /** What it earns now: after any refund taken off it before it was paid. */
@@ -574,6 +660,63 @@ export const demoSales: DemoSale[] = [
   },
 ];
 
+/** Each event's venue payment, made and paid when the event was booked. */
+export const demoVenueSales: DemoSale[] = Object.entries(demoEvents).map(([key, event]) => ({
+  label: `venue_${key}`,
+  partner: demoVenues[event.venue].contact,
+  kind: "venue",
+  event: key as keyof typeof demoEvents,
+  daysAgo: event.bookedDaysAgo,
+  commissionCents: demoVenues[event.venue].priceCents,
+  status: "paid",
+  payout: `venue_${key}`,
+}));
+
+/**
+ * Every ticket sold, each with its organiser's share: the tickets affiliates brought (demoSales,
+ * refunds and all), and the event's direct tickets, bought every few days since it went on sale.
+ * The share is organiserPct of the price; a refund takes its part, and a refund in full all of it.
+ * Shares wait the hold period, then are approved.
+ */
+export const demoOrganiserShares: DemoSale[] = Object.entries(demoEvents).flatMap(
+  ([key, event]) => {
+    const eventKey = key as keyof typeof demoEvents;
+    const share = (refundedCents = 0) =>
+      Math.round((event.cents * event.organiserPct * (1 - refundedCents / event.cents)) / 100);
+    const status = (daysAgo: number, refundedCents = 0): DemoSale["status"] =>
+      refundedCents >= event.cents ? "refunded" : daysAgo > HOLD_DAYS ? "approved" : "pending";
+    const viaAffiliates = demoSales
+      .filter((sale) => sale.kind === "checkout" && sale.event === eventKey)
+      .map((sale): DemoSale => ({
+        label: `share_${sale.label}`,
+        partner: event.organiser,
+        kind: "organiser",
+        event: eventKey,
+        of: sale.label,
+        daysAgo: sale.daysAgo,
+        commissionCents: share(sale.refundedCents),
+        grossCommissionCents: share(),
+        status: status(sale.daysAgo, sale.refundedCents),
+        refundedCents: sale.refundedCents,
+        customerEmail: customerOf(sale) ?? undefined,
+      }));
+    const direct = Array.from({ length: event.directTickets }, (_, n): DemoSale => {
+      const daysAgo = event.bookedDaysAgo - 1 - ((n * 7) % (event.bookedDaysAgo - 1));
+      return {
+        label: `direct_${key}_${n + 1}`,
+        partner: event.organiser,
+        kind: "organiser",
+        event: eventKey,
+        daysAgo,
+        commissionCents: share(),
+        status: status(daysAgo),
+        customerEmail: `direct-${key}-${n + 1}@customer.demo.test`,
+      };
+    });
+    return [...viaAffiliates, ...direct];
+  },
+);
+
 /** Commission rules: Maya earns 30% in a month she makes 15 sales; the team session pays $25. */
 export const demoRules = [
   {
@@ -593,9 +736,9 @@ export const demoRules = [
   },
 ];
 
-/** A seeded sale's customer: a clawback's is its refunded sale's; a bonus has none. */
+/** A seeded sale's customer: a clawback's is its refunded sale's; a bonus or venue payment has none. */
 export function customerOf(sale: Pick<DemoSale, "label" | "kind" | "of" | "customerEmail">) {
-  if (sale.kind === "bonus") return null;
+  if (sale.kind === "bonus" || sale.kind === "venue") return null;
   return sale.customerEmail ?? `${sale.of ?? sale.label}@customer.demo.test`;
 }
 

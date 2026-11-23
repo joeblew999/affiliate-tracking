@@ -38,6 +38,8 @@ export default function Event({ event, signedIn, payments, hasTicket }: Props) {
           <CardFooter className="flex flex-col items-stretch gap-2">
             {hasTicket ? (
               <p className="text-sm font-medium">You have a ticket.</p>
+            ) : event.soldOut ? (
+              <p className="text-sm font-medium">Sold out.</p>
             ) : !payments ? (
               <p className="text-sm text-muted-foreground">
                 This shop isn't taking payments: it has no Stripe key.

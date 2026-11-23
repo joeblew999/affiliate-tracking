@@ -3,7 +3,6 @@
 import { expect, test } from "vite-plus/test";
 import {
   demoPartner,
-  eventually,
   payoutsOf,
   runPayouts,
   saleOf,
@@ -51,11 +50,9 @@ test("a refund before payment comes off the sale; after payment it's clawed back
 
   // The next payout: Leo's ready less his refund; Maya owes more than she's due, so nothing.
   await runPayouts();
-  await eventually(async () => {
-    const leo = await payoutsOf(demoPartner("leo").name);
-    expect(leo).toHaveLength(seededPayoutCount("leo") + 1);
-    expect(leo[0]?.amountCents).toBe(seededReadyCents("leo") - 1740);
-  });
+  const leo = await payoutsOf(demoPartner("leo").name);
+  expect(leo).toHaveLength(seededPayoutCount("leo") + 1);
+  expect(leo[0]?.amountCents).toBe(seededReadyCents("leo") - 1740);
   expect(seededReadyCents("maya") - 1450).toBeLessThan(0);
   expect(await payoutsOf(demoPartner("maya").name)).toHaveLength(seededPayoutCount("maya"));
 });

@@ -1,14 +1,14 @@
-import { linkToArchive, newLink, partnerApplication, partners } from "@schema";
+import { events, linkToArchive, newLink, partnerApplication, partners, sales } from "@schema";
 import { HTTPException } from "hono/http-exception";
 import { defineHandler, defineHead, type InferProps } from "void";
 import type { Href } from "void/routes";
-import { db, eq } from "void/db";
+import { asc, db, eq, sql } from "void/db";
 import { env } from "void/env";
 import { z } from "zod";
 import { requirePartner, requireUser } from "../src/access.ts";
 import { notePartnerIp } from "../src/fraud.ts";
 import { archiveLink, createLink, linksOf } from "../src/links.ts";
-import { partnerForUser } from "../src/partners.ts";
+import { codeFor, partnerForUser } from "../src/partners.ts";
 import { payoutCountries } from "../src/payout-countries.ts";
 import { hasPayoutsStripe, payoutsStripe } from "../src/stripe.ts";
 import { earnings, stats } from "../src/stats.ts";
@@ -32,6 +32,7 @@ export const loader = defineHandler(async (c) => {
     partner: record
       ? {
           name: record.name,
+          role: record.role,
           code: record.code,
           status: record.status,
           commissionPct: record.commissionPct,
@@ -40,7 +41,25 @@ export const loader = defineHandler(async (c) => {
           link: new URL(`/r/${record.code}`, origin).toString(),
         }
       : null,
-    links: record && active ? await linksOf(record.id, origin) : [],
+    links: record && active && record.role === "affiliate" ? await linksOf(record.id, origin) : [],
+    // An organiser's or a venue contact's events: what each has paid them.
+    payeeEvents:
+      record && active && record.role !== "affiliate"
+        ? await db
+            .select({
+              id: events.id,
+              name: events.name,
+              startsAt: events.startsAt,
+              currency: events.currency,
+              tickets: sql<number>`sum(case when ${sales.kind} = 'organiser' and ${sales.status} != 'refunded' then 1 else 0 end)`,
+              earnedCents: sql<number>`sum(${sales.commissionCents})`,
+            })
+            .from(sales)
+            .innerJoin(events, eq(events.id, sales.eventId))
+            .where(eq(sales.partnerId, record.id))
+            .groupBy(events.id)
+            .orderBy(asc(events.startsAt))
+        : [],
     stats: record && active ? await stats(record.id, 30) : null,
     earnings: record && active ? await earnings(record.id) : [],
     // Setting up payouts: the countries their Stripe account can be in, theirs (by where they are
@@ -59,24 +78,19 @@ export const head = defineHead(() => ({ title: "Dashboard" }));
 /** The terms a partner accepts when applying; bump when they change. */
 export const TERMS_VERSION = "2026-11-22";
 
-/** Their default link's code, /r/<code>: from their name, made unique. */
-function codeFor(name: string): string {
-  const base =
-    name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")
-      .slice(0, 20) || "partner";
-  // 8 hex characters: about 4 billion codes per name, so two partners with one name never clash.
-  return `${base}-${crypto.randomUUID().slice(0, 8)}`;
-}
-
 // What the partner page does (Void's page actions: each re-runs the loader after).
 export const actions = {
   // A signed-in shop user applies to be a partner. Pending until an admin approves.
   apply: defineHandler.withValidator({ body: partnerApplication })(async (c, { body }) => {
     const user = requireUser(c);
-    if (await partnerForUser(user.id)) throw new HTTPException(409, { message: "Already applied" });
+    const existing = await partnerForUser(user.id);
+    if (existing)
+      throw new HTTPException(409, {
+        message:
+          existing.role === "affiliate"
+            ? "Already applied"
+            : "An organiser or a venue's contact can't also be an affiliate",
+      });
     await db.insert(partners).values({
       userId: user.id,
       email: user.email,

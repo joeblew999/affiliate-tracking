@@ -1,5 +1,6 @@
 packages:
   - apps/*
+  - packages/*
 
 allowBuilds:
   # The Stripe CLI's binary comes in its per-platform package; its install script only downloads

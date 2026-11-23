@@ -1,0 +1,28 @@
+{
+  "name": "activity",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/model.ts",
+    "./server": "./src/server.ts",
+    "./pane": "./src/pane.tsx",
+    "./trace": "./src/trace.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@void/react": "catalog:",
+    "void": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@types/node": "26.6.6",
+    "@types/react": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "*"
+  }
+}

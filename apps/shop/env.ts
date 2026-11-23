@@ -12,6 +12,9 @@ export default defineEnv({
   // affiliate program still work.
   STRIPE_SECRET_KEY: string().optional(),
   STRIPE_WEBHOOK_SECRET: string().optional(),
+  // Signs the unsubscribe link in each event email (src/email-links.ts). Any long random value;
+  // changing it makes the links already sent stop working.
+  EMAIL_LINK_SECRET: string(),
   // The parent domain the sign-in cookie is set for, so the affiliate service on a subdomain
   // receives it, e.g. "shop.example.com". Unset locally: localhost shares cookies across ports.
   AUTH_COOKIE_DOMAIN: string().optional(),

@@ -3,12 +3,23 @@ import { integer, real, sqliteTable, text, uniqueIndex } from "void/schema-d1";
 import { z } from "zod";
 import { id, now } from "./columns.ts";
 
-/** A host user who promotes the product, once approved. */
+/**
+ * Someone the service pays, through Stripe Connect or by hand:
+ * - an affiliate: a host user who promotes the events, once approved, paid a percentage of each
+ *   ticket bought by a buyer they brought;
+ * - an organiser: a host user who runs events, paid a percentage of every ticket for them
+ *   (events.organiserPct). One person is one or the other, never both (userId is unique);
+ * - a venue: a business that hosts events, paid its price when an event is booked, through its
+ *   contact (a host user), who sets up its payouts as an organiser does.
+ */
 export const partners = sqliteTable(
   "partners",
   {
     id: id(),
-    /** The host app's user id. */
+    role: text({ enum: ["affiliate", "organiser", "venue"] })
+      .notNull()
+      .default("affiliate"),
+    /** The host app's user id: for a venue, its contact, who sets up its payouts. */
     userId: text().notNull().unique(),
     email: text().notNull(),
     name: text(),
@@ -59,3 +70,6 @@ export const partnerChange = createUpdateSchema(partners, {
     id: createSelectSchema(partners).shape.id,
     status: createSelectSchema(partners).shape.status.exclude(["pending"]).optional(),
   });
+
+/** An admin making a shop user an organiser (the admin page's addOrganiser), by their email. */
+export const newOrganiser = z.object({ email: z.email() });

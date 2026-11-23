@@ -14,8 +14,12 @@ import {
   demoPayouts,
   demoPeople,
   demoEvents,
+  demoOrganiserShares,
+  demoVenues,
+  demoVenueSales,
   demoRules,
   demoSales,
+  eventTimes,
   fixtureId,
   HOLD_DAYS,
   paymentIntentOf,
@@ -53,11 +57,12 @@ export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) =
     for (let i = 0; i < rows.length; i += size) await put(rows.slice(i, i + size));
   }
 
-  const partners = demoPeople.flatMap((person) =>
+  const partners: (typeof schema.partners.$inferInsert)[] = demoPeople.flatMap((person) =>
     person.partner
       ? [
           {
             id: partnerOf(person.partner.code),
+            role: person.partner.role ?? "affiliate",
             userId: person.userId,
             email: person.email,
             name: person.name,
@@ -75,11 +80,45 @@ export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) =
       : [],
   );
 
+  const eventOf = (key: string) => fixtureId(`event:${key}`);
+  const venueOf = (key: string) => fixtureId(`venue:${key}`);
+  const venues = Object.entries(demoVenues).map(([key, venue]) => ({
+    id: venueOf(key),
+    name: venue.name,
+    location: venue.location,
+    capacity: venue.capacity,
+    priceCents: venue.priceCents,
+    payeeId: partnerOf(venue.contact),
+    createdAt: ago(150),
+  }));
+  const events = Object.entries(demoEvents).map(([key, event]) => {
+    const { startsAt, endsAt } = eventTimes(event, now);
+    return {
+      id: eventOf(key),
+      productId: event.productId,
+      name: event.name,
+      description: event.description,
+      venueId: venueOf(event.venue),
+      organiserId: partnerOf(event.organiser),
+      organiserPct: event.organiserPct,
+      priceCents: event.cents,
+      startsAt: startsAt.getTime(),
+      endsAt: endsAt.getTime(),
+      bookedAt: ago(event.bookedDaysAgo),
+      onSaleAt: ago(event.bookedDaysAgo),
+    };
+  });
+
+  // Each affiliate's two links: to the workshop's page, and to the shop.
   const links = demoPeople.flatMap((person) => {
     const p = person.partner;
-    if (!p || p.status === "pending") return [];
+    if (!p || p.status === "pending" || p.role) return [];
     return [
-      { slug: `${p.code}-review`, destination: "/pricing", campaign: "Review" },
+      {
+        slug: `${p.code}-workshop`,
+        destination: `/events/${eventOf("workshop")}`,
+        campaign: "Workshop",
+      },
       { slug: `${p.code}-launch`, destination: "/", campaign: "Launch week" },
     ].map((link) => ({
       id: fixtureId(`link:${link.slug}`),
@@ -101,18 +140,25 @@ export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) =
   }));
 
   const people = new Map(demoPeople.map((person) => [person.partner?.code, person]));
-  const sales = demoSales.map((s) => {
+  const sales = [...demoSales, ...demoVenueSales, ...demoOrganiserShares].map((s) => {
     const event = s.event ? demoEvents[s.event] : null;
-    const pct = people.get(s.partner)?.partner?.commissionPct ?? null;
+    const venue = s.kind === "venue" && event ? demoVenues[event.venue] : null;
+    const pct =
+      s.kind === "organiser"
+        ? (event?.organiserPct ?? null)
+        : (people.get(s.partner)?.partner?.commissionPct ?? null);
+    // An organiser's share of a ticket an affiliate brought is of that same payment.
+    const payment = s.kind === "organiser" && s.of ? s.of : s.label;
     const createdAt = ago(s.daysAgo);
     const payout = s.payout ? demoPayouts.find((p) => p.label === s.payout) : undefined;
     const approvedAt =
       s.status === "approved" || s.status === "paid"
-        ? s.kind === "bonus" || s.kind === "clawback"
+        ? s.kind === "bonus" || s.kind === "clawback" || s.kind === "venue"
           ? createdAt
           : createdAt + HOLD_DAYS * DAY
         : null;
-    const items: SaleItem[] = event
+    const ticket = event && !venue;
+    const items: SaleItem[] = ticket
       ? [{ productId: event.productId, name: event.name, variant: null, quantity: 1 }]
       : [];
     return {
@@ -121,15 +167,17 @@ export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) =
       kind: s.kind,
       status: s.status,
       stripeSessionId: s.kind === "checkout" ? `cs_demo_${s.label}` : null,
-      paymentIntent: event ? paymentIntentOf(s.label) : null,
-      stripeCustomerId: event ? `cus_demo_${s.label}` : null,
+      paymentIntent: ticket ? paymentIntentOf(payment) : null,
+      stripeCustomerId: ticket ? `cus_demo_${payment}` : null,
       customerEmail: customerOf(s),
-      customerCountry: event ? "US" : null,
-      amountCents: event?.cents ?? 0,
+      customerCountry: ticket ? "US" : null,
+      amountCents: venue?.priceCents ?? event?.cents ?? 0,
+      netCents: venue?.priceCents ?? event?.cents ?? null,
+      eventId: s.event ? eventOf(s.event) : null,
       currency: "usd",
       commissionCents: s.commissionCents,
       grossCommissionCents: s.grossCommissionCents ?? s.commissionCents,
-      commissionPct: event ? pct : null,
+      commissionPct: ticket ? pct : null,
       refundedCents: s.refundedCents ?? 0,
       refundVersion: s.refundedCents ? 1 : 0,
       refundOf: s.kind === "clawback" && s.of ? fixtureId(`sale:${s.of}`) : null,
@@ -161,7 +209,7 @@ export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) =
   let n = 0;
   for (const person of demoPeople) {
     const p = person.partner;
-    if (!p || p.status === "pending") continue;
+    if (!p || p.status === "pending" || p.role) continue;
     const own = links.filter((link) => link.partnerId === partnerOf(p.code));
     const lastDay = p.status === "suspended" ? 20 : 0; // Ken: no traffic since he was suspended
     const days = Math.min(90, p.joinedDaysAgo);
@@ -195,6 +243,8 @@ export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) =
   }
 
   await insert((rows) => db.insert(schema.partners).values(rows), partners);
+  await insert((rows) => db.insert(schema.venues).values(rows), venues);
+  await insert((rows) => db.insert(schema.events).values(rows), events);
   await insert((rows) => db.insert(schema.links).values(rows), links);
   await insert((rows) => db.insert(schema.clicks).values(rows), clicks);
   await insert((rows) => db.insert(schema.referrals).values(rows), signups);
@@ -211,6 +261,6 @@ export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) =
     })),
   );
   console.log(
-    `demo: ${partners.length} partners, ${sales.length} sales, ${payouts.length} payouts, ${clicks.length} clicks, ${signups.length} signups`,
+    `demo: ${partners.length} payees, ${venues.length} venues, ${events.length} events, ${sales.length} sales, ${payouts.length} payouts, ${clicks.length} clicks, ${signups.length} signups`,
   );
 });

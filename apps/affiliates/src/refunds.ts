@@ -73,7 +73,10 @@ export async function applyRefunds(paymentIntent: string): Promise<number> {
       .select()
       .from(sales)
       .where(
-        and(eq(sales.paymentIntent, paymentIntent), inArray(sales.kind, ["checkout", "renewal"])),
+        and(
+          eq(sales.paymentIntent, paymentIntent),
+          inArray(sales.kind, ["checkout", "renewal", "organiser"]),
+        ),
       );
     let retry = false;
     for (const sale of rows) {

@@ -15,6 +15,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -60,10 +61,43 @@ export interface Apps {
   webhookSecret: string;
   /** Void's token for running the service's crons in development (guide/jobs.md). */
   cronToken: string;
+  /** Void's token for the shop's dev inbox, where its emails are caught (guide/email/sending.md). */
+  inboxToken: string;
   /** Now, by the service's clock. */
   now: () => number;
+  /**
+   * Call `listener` with the error as soon as either app reports work that failed: a queue job or a
+   * scheduled job (Void logs "[void] … failed" and the error), so a test stops then, not at a timeout.
+   */
+  onFailure: (listener: (error: string) => void) => void;
+  /** What each app has printed lately: shown with a failed test, so it says what went wrong. */
+  output: () => string;
   stop: () => Promise<void>;
 }
+
+/** Every app started, to stop when the run ends, however it ends. */
+const running = new Set<ChildProcess>();
+const stopAll = () => {
+  for (const child of running) if (child.pid) killGroup(child.pid);
+};
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
+  process.once(signal, () => {
+    stopAll();
+    process.exit(130);
+  });
+process.once("exit", stopAll);
+
+/** An app's process and everything it started (it's the leader of its own process group). */
+function killGroup(pid: number) {
+  try {
+    process.kill(-pid, "SIGTERM");
+  } catch {
+    // already gone
+  }
+}
+
+/** What an app reports when its own work fails (Void's dev runtime, for queues and crons). */
+const FAILED = /\[void\] (Queue handler|Scheduled job) .* failed/;
 
 /** A free port now (another process could still take it; the app then fails to start, and says so). */
 async function freePort(): Promise<number> {
@@ -74,24 +108,43 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-/** A copy of apps/<app> in dir, its packages linked, its workers renamed with this copy's id. */
-function copyApp(app: (typeof APPS)[number], dir: string, id: string): string {
-  const source = join(ROOT, "apps", app);
-  const root = join(dir, app);
+/**
+ * A copy of a folder of the repo in dir, its node_modules linked: an installed package to where
+ * it's installed, and one of the repo's own (an app, or one in packages/) to its copy in dir, which
+ * is made too. So nothing a run uses is a file of the repo itself, and nothing edited during a
+ * run reaches it.
+ */
+function copyTree(source: string, root: string, dir: string): void {
   cpSync(source, root, {
     recursive: true,
     filter: (path) => !GENERATED.has(relative(source, path).split("/")[0] ?? ""),
   });
   mkdirSync(join(root, "node_modules"));
+  const link = (from: string, to: string) => {
+    const real = realpathSync(from);
+    const own = relative(ROOT, real);
+    if (own.startsWith("..") || own.split("/").includes("node_modules"))
+      return symlinkSync(real, to);
+    // The repo's own: apps/<name> or packages/<name>, copied once per run's dir.
+    const copy = join(dir, own.replace(/^apps\//, ""));
+    if (!existsSync(copy)) copyTree(real, copy, dir);
+    symlinkSync(copy, to);
+  };
   for (const entry of readdirSync(join(source, "node_modules"))) {
     if (entry.startsWith(".") && entry !== ".bin") continue;
     const from = join(source, "node_modules", entry);
     if (entry.startsWith("@")) {
       mkdirSync(join(root, "node_modules", entry));
       for (const name of readdirSync(from))
-        symlinkSync(realpathSync(join(from, name)), join(root, "node_modules", entry, name));
-    } else symlinkSync(realpathSync(from), join(root, "node_modules", entry));
+        link(join(from, name), join(root, "node_modules", entry, name));
+    } else link(from, join(root, "node_modules", entry));
   }
+}
+
+/** A copy of apps/<app> in dir (copyTree), its workers renamed with this copy's id. */
+function copyApp(app: (typeof APPS)[number], dir: string, id: string): string {
+  const root = join(dir, app);
+  if (!existsSync(root)) copyTree(join(ROOT, "apps", app), root, dir);
   const config = join(root, "void.config.ts");
   writeFileSync(
     config,
@@ -118,8 +171,17 @@ function run(cwd: string, args: string[], env: Record<string, string> = {}): Pro
   });
 }
 
-/** `vp dev` in an app's copy on this port; resolves once it says it's listening there. */
-function serve(cwd: string, port: number, env: Record<string, string>): Promise<ChildProcess> {
+/**
+ * `vp dev` in an app's copy on this port; resolves once it says it's listening there. After that,
+ * `failed` hears of each failure the app reports, with what it logged.
+ */
+function serve(
+  cwd: string,
+  port: number,
+  env: Record<string, string>,
+  failed: (error: string) => void,
+  printed: string[],
+): Promise<ChildProcess> {
   const child = spawn(
     "vp",
     ["dev", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
@@ -130,15 +192,36 @@ function serve(cwd: string, port: number, env: Record<string, string>): Promise<
       env: { ...process.env, VOID_INSPECTOR_PORT: "false", ...env },
     },
   );
+  running.add(child);
+  child.once("exit", () => running.delete(child));
   let log = "";
+  let ready = false;
   return new Promise((resolve, reject) => {
     const onData = (chunk: Buffer) => {
-      log += stripVTControlCharacters(chunk.toString());
-      if (log.includes(`http://127.0.0.1:${port}/`)) resolve(child);
+      const text = stripVTControlCharacters(chunk.toString());
+      log += text;
+      printed.push(`[${basename(cwd)}] ${text}`);
+      if (printed.length > 400) printed.splice(0, printed.length - 400);
+      if (!ready && log.includes(`http://127.0.0.1:${port}/`)) {
+        ready = true;
+        log = "";
+        resolve(child);
+      }
+      if (!ready) return;
+      // The failure's line and its error (logged with it, in one write).
+      const at = log.search(FAILED);
+      if (at !== -1) {
+        failed(`${basename(cwd)}: ${log.slice(at, at + 4000)}`);
+        log = "";
+      }
+      log = log.slice(-2000);
     };
     child.stdout?.on("data", onData);
     child.stderr?.on("data", onData);
-    child.on("exit", (code) => reject(new Error(`${basename(cwd)} stopped (${code}):\n${log}`)));
+    child.on("exit", (code) => {
+      if (ready) failed(`${basename(cwd)} stopped (${code}):\n${log}`);
+      else reject(new Error(`${basename(cwd)} stopped (${code}):\n${log}`));
+    });
   });
 }
 
@@ -239,11 +322,18 @@ export async function startApps(
       AFFILIATES_HOST_TOKEN: template.hostToken,
       AFFILIATES_SITE_URL: affiliates,
       STRIPE_WEBHOOK_SECRET: template.webhookSecret,
+      EMAIL_LINK_SECRET: template.ipSalt, // any long random value for the run
     }),
   );
+  const listeners: ((error: string) => void)[] = [];
+  let stopping = false;
+  const failed = (error: string) => {
+    if (!stopping) for (const listener of listeners) listener(error);
+  };
+  const printed: string[] = [];
   const servers = await Promise.all([
-    serve(roots.affiliates, affiliatesPort, env),
-    serve(roots.shop, shopPort, env),
+    serve(roots.affiliates, affiliatesPort, env, failed, printed),
+    serve(roots.shop, shopPort, env, failed, printed),
   ]);
   await untilReady(affiliates);
   return {
@@ -252,10 +342,23 @@ export async function startApps(
     hostToken: template.hostToken,
     webhookSecret: template.webhookSecret,
     cronToken: readFileSync(join(roots.affiliates, ".void", "dev-trigger-token"), "utf8").trim(),
+    inboxToken: readFileSync(join(roots.shop, ".void", "dev-trigger-token"), "utf8").trim(),
     now: () => Date.parse(DEMO_NOW) + (Date.now() - template.clockFrom),
+    onFailure: (listener) => void listeners.push(listener),
+    output: () => printed.join("").slice(-20_000),
     async stop() {
-      for (const server of servers) if (server.pid) process.kill(-server.pid, "SIGTERM");
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      stopping = true;
+      // Each app stopped (its process group), then its copy removed.
+      await Promise.all(
+        servers.map(
+          (server) =>
+            new Promise<void>((resolve) => {
+              if (server.exitCode !== null || !server.pid) return resolve();
+              server.once("exit", () => resolve());
+              killGroup(server.pid);
+            }),
+        ),
+      );
       rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
     },
   };

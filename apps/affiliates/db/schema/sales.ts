@@ -20,7 +20,13 @@ export const sales = sqliteTable(
     partnerId: text()
       .notNull()
       .references(() => partners.id),
-    kind: text({ enum: ["checkout", "renewal", "bonus", "clawback"] }).notNull(),
+    /**
+     * checkout, renewal: an affiliate's commission on a sale. organiser: an organiser's share of a
+     * ticket for their event. venue: a venue's price, for booking an event there. bonus, clawback.
+     */
+    kind: text({
+      enum: ["checkout", "renewal", "organiser", "venue", "bonus", "clawback"],
+    }).notNull(),
     /** rejected: an admin said no; never approved automatically. refunded: refunded in full. */
     status: text({ enum: ["pending", "approved", "rejected", "paying", "paid", "refunded"] })
       .notNull()
@@ -38,6 +44,10 @@ export const sales = sqliteTable(
     customerCountry: text(),
     /** What the customer paid, after discounts, in the sale's currency. */
     amountCents: integer().notNull(),
+    /** Of that, the price: what was paid less the tax Stripe collected. Null for a bonus. */
+    netCents: integer(),
+    /** The event the ticket (or venue payment) is for. */
+    eventId: text(),
     currency: text().notNull(),
     /** What the sale earns now: before any refund, less what refunds took while it wasn't paid. */
     commissionCents: integer().notNull(),
@@ -77,6 +87,7 @@ export const sales = sqliteTable(
     index("sales_subscription").on(t.stripeSubscriptionId, t.createdAt),
     index("sales_link").on(t.linkId),
     index("sales_user").on(t.userId),
+    index("sales_event").on(t.eventId, t.kind),
     uniqueIndex("sales_one_clawback_per_refund")
       .on(t.refundOf, t.refundVersion)
       .where(isNotNull(t.refundOf)),

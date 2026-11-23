@@ -51,3 +51,22 @@ export function signInUrl(returnTo: string): string {
   url.searchParams.set("redirect", returnTo);
   return url.toString();
 }
+
+/**
+ * A shop user by email, asked of the shop's Better Auth with the signed-in admin's own session (the
+ * admin plugin's listUsers): only an admin can look anyone up.
+ */
+export async function shopUserByEmail(
+  c: CloudContext,
+  email: string,
+): Promise<Pick<UserWithRole, "id" | "email" | "name"> | null> {
+  const url = new URL("/api/auth/admin/list-users", c.req.url);
+  url.searchParams.set("searchField", "email");
+  url.searchParams.set("searchOperator", "contains");
+  url.searchParams.set("searchValue", email);
+  url.searchParams.set("limit", "10");
+  const res = await toShop(c, new Request(url, { headers: c.req.raw.headers }));
+  if (!res.ok) throw new Error(`the shop's users: ${res.status} ${await res.text()}`);
+  const { users } = (await res.json()) as { users: UserWithRole[] };
+  return users.find((u) => u.email.toLowerCase() === email.toLowerCase()) ?? null;
+}

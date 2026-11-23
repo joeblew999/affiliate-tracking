@@ -13,7 +13,6 @@
 import { stripe } from "@better-auth/stripe";
 import { admin } from "better-auth/plugins";
 import { defineAuth } from "void/auth";
-import { queues } from "void/queues";
 import { referralFrom } from "affiliates/client";
 import { stripeClient } from "./src/stripe.ts";
 
@@ -49,10 +48,12 @@ export default defineAuth(({ defaults, env }) => {
         stripeClient: stripeClient(text(env.STRIPE_SECRET_KEY)),
         stripeWebhookSecret: text(env.STRIPE_WEBHOOK_SECRET),
         createCustomerOnSignUp: Boolean(text(env.STRIPE_SECRET_KEY)),
-        // Sales, renewals, refunds and disputes are the affiliate service's to count.
+        // Sales, renewals, refunds and disputes are the affiliate service's to count: each event
+        // is queued for it (queues/stripe-events.ts), so Stripe has its answer at once.
+        // (Worker code, imported when it runs: Void's prepare reads this file outside the Worker.)
         onEvent: async (event) => {
-          const { affiliatesService } = await import("./src/affiliates.ts");
-          await affiliatesService().stripeEvent(event);
+          const { queues } = await import("./src/activity.ts");
+          await queues["stripe-events"].send(event);
         },
       }),
     ],
@@ -65,6 +66,7 @@ export default defineAuth(({ defaults, env }) => {
           // Tell the affiliate service, through a queue: a sign-up never waits on it or fails
           // because of it, and a failed call is retried.
           after: async (user, ctx) => {
+            const { queues } = await import("./src/activity.ts");
             await queues["affiliate-signups"].send({
               userId: user.id,
               ref: referralFrom(ctx?.headers?.get("cookie")),

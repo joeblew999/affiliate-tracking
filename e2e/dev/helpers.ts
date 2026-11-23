@@ -12,6 +12,7 @@ import {
   DEMO_PASSWORD,
   demoPayouts,
   demoPeople,
+  demoEvents,
   demoSales,
   fixtureId,
   paymentIntentOf,
@@ -35,26 +36,75 @@ let launched: Promise<Browser> | undefined;
 // tabs crash on long runs.
 const browser = () => (launched ??= chromium.launch({ args: ["--disable-dev-shm-usage"] }));
 
-/** A browser of their own, collecting the errors its pages show in the console. */
+// The first failure either app reports in this test, and the pages to end when it comes: their
+// waiting stops at once, with the failure as the reason, instead of at a timeout.
+let failure: string | null = null;
+const pages = new Set<Page>();
+
+const failureListeners = new Set<(error: string) => void>();
+
+/** End the test now: what failed, through every open page and everything waiting on an event. */
+export function fail(error: string): void {
+  if (failure) return;
+  failure = error;
+  for (const page of pages) void page.close({ reason: error });
+  for (const listener of failureListeners) listener(error);
+}
+
+/** A new test starts with nothing failed. (each-file.ts, before each test.) */
+export function startTest(): void {
+  failure = null;
+}
+
+globalThis.apps?.onFailure(fail);
+
+/** The message an app's error page carries (Void puts it in the page's data), or the page's start. */
+async function errorOf(response: Response | import("playwright").Response): Promise<string> {
+  const body = await response.text().catch(() => "");
+  const message = /"message":\d+\},\d+,"((?:[^"\\]|\\.)*)"/.exec(body)?.[1];
+  return (
+    message ??
+    body
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .slice(0, 1000)
+  );
+}
+
+/**
+ * A browser of their own, collecting the errors its pages show in the console. A server error on
+ * any page (one opened, or a form's action) fails the test there and then.
+ */
 export async function newBrowser(options: Parameters<Browser["newContext"]>[0] = {}) {
   const context = await (
     await browser()
   ).newContext({ userAgent: USER_AGENT, locale: "en-US", ...options });
   const page = await context.newPage();
+  pages.add(page);
+  page.on("close", () => pages.delete(page));
   const errors: string[] = [];
   page.on("pageerror", (err) => errors.push(err.message));
   page.on("console", (msg) => {
     if (msg.type() === "error") errors.push(msg.text());
+  });
+  page.on("response", async (response) => {
+    if (response.status() < 500) return;
+    const url = response.url();
+    if (!url.startsWith(SHOP) && !url.startsWith(AFFILIATES)) return;
+    fail(`${response.status()} from ${url}: ${await errorOf(response)}`);
   });
   return { context, page, errors };
 }
 
 /**
  * Open a page and wait until React has taken it over: a click before that does nothing. Void marks
- * it (#app data-hydrated), and its own tests wait for that mark too.
+ * it (#app data-hydrated), and its own tests wait for that mark too. A page whose server failed
+ * says so here. (A 4xx is the page saying no on purpose, as "Admins only" does: that one shows.)
  */
 export async function open(page: Page, url: string): Promise<void> {
-  await page.goto(url);
+  const response = await page.goto(url);
+  if (response && response.status() >= 500)
+    throw new Error(`${response.status()} from ${url}: ${await errorOf(response)}`);
   await page.locator('#app[data-hydrated="true"]').waitFor();
 }
 
@@ -73,8 +123,7 @@ async function createAccount(page: Page, name: string, email: string): Promise<v
   await page.locator("#up-name").fill(name);
   await page.locator("#up-email").fill(email);
   await page.locator("#up-password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Create account" }).click();
-  await page.getByText(email).waitFor();
+  await press(page, page.getByRole("button", { name: "Create account" }));
 }
 
 /** A fresh shop account, signed in, in a browser of its own. `via`: a referral link they followed first. */
@@ -82,7 +131,14 @@ export async function signUp(name = "Test User", { via }: { via?: string } = {})
   const { context, page, errors } = await newBrowser();
   if (via) await open(page, `${AFFILIATES}${via}`);
   const email = `${crypto.randomUUID()}@example.test`;
+  // The shop passes each new user to the service through its queue: done once the sign-up's
+  // action is, as the admin's control plane shows it.
+  const watcher = await admin();
+  await open(watcher.page, `${AFFILIATES}/admin`);
+  const pane = await activity(watcher.page);
+  const before = await pane.seen();
   await createAccount(page, name, email);
+  await pane.finished("Sign up", { after: before });
   return { name, email, context, page, errors };
 }
 
@@ -134,15 +190,16 @@ export async function signInOnForm(email: string): Promise<Person> {
   await open(page, SHOP);
   await page.locator("#in-email").fill(email);
   await page.locator("#in-password").fill(DEMO_PASSWORD);
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await page.getByText(email).waitFor();
+  await press(page, page.getByRole("button", { name: "Sign in", exact: true }));
   return { name: person.name, email, context, page, errors };
 }
 
 let theAdmin: Promise<Person> | undefined;
 /** The demo's admin, signed in: one browser for the whole test file. */
-export function admin(): Promise<Person> {
+export async function admin(): Promise<Person> {
   const email = demoPeople.find((p) => p.role === "admin")?.email ?? "";
+  // A new browser if an earlier test's failure closed it.
+  if (theAdmin && (await theAdmin).page.isClosed()) theAdmin = undefined;
   return (theAdmin ??= signInAs(email));
 }
 
@@ -151,8 +208,7 @@ export async function apply(person: Person): Promise<void> {
   await open(person.page, `${AFFILIATES}/`);
   await person.page.getByLabel("Name").fill(person.name);
   await person.page.getByRole("checkbox").click();
-  await person.page.getByRole("button", { name: "Apply" }).click();
-  await person.page.getByText("Application received").waitFor();
+  await press(person.page, person.page.getByRole("button", { name: "Apply" }));
 }
 
 /** The admin page's row for this partner, on its Partners tab. */
@@ -163,27 +219,30 @@ async function partnerRow(name: string) {
 }
 
 /**
- * Press a button on the page, done once it's gone (the action ran, and Void's re-run of the loader
- * redrew the page), with Playwright's own waiting. If the action is refused, the page says why
- * (a red line), and that's the error.
+ * Do something on a page that sends a form (a page action, or a sign-in), and wait for the app's
+ * answer: the request's own response. Refused (a 4xx), it's the error, with the app's reason; a
+ * server error has already failed the test (newBrowser).
  */
-async function pressUntilGone(page: Page, button: Locator): Promise<void> {
-  await button.click();
-  const refused = page.locator("p.text-destructive").first();
-  const outcome = await Promise.race([
-    button.waitFor({ state: "detached" }).then(() => null),
-    refused.waitFor().then(() => refused.innerText()),
+export async function act(page: Page, send: () => Promise<void>): Promise<void> {
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      (r) =>
+        r.request().method() === "POST" &&
+        (r.url().startsWith(SHOP) || r.url().startsWith(AFFILIATES)) &&
+        !new URL(r.url()).pathname.startsWith("/live"),
+    ),
+    send(),
   ]);
-  if (outcome !== null) throw new Error(`refused: ${outcome}`);
+  if (!response.ok()) throw new Error(`refused (${response.status()}): ${await errorOf(response)}`);
 }
+
+/** Press a button that sends a form, and wait for the app's answer (act). */
+export const press = (page: Page, button: Locator) => act(page, () => button.click());
 
 /** Press one of the admin's buttons on a partner's row (Approve, Suspend, Reactivate). */
 export async function partnerButton(name: string, button: string): Promise<void> {
   const row = await partnerRow(name);
-  await pressUntilGone(
-    (await admin()).page,
-    row.getByRole("button", { name: button, exact: true }),
-  );
+  await press((await admin()).page, row.getByRole("button", { name: button, exact: true }));
 }
 
 /** Set a partner's renewals months, as an admin; done once the saved value comes back. */
@@ -192,9 +251,7 @@ export async function setRenewalMonths(name: string, months: number): Promise<vo
   const { page } = await admin();
   const input = (await partnerRow(name)).getByLabel(label);
   await input.fill(String(months));
-  await input.blur();
-  // The action, then the loader Void re-runs after it: then the page, opened again, has it.
-  await page.waitForLoadState("networkidle");
+  await act(page, () => input.blur());
   expect(await (await partnerRow(name)).getByLabel(label).inputValue()).toBe(String(months));
 }
 
@@ -301,7 +358,7 @@ export async function linksOf(person: Person) {
 }
 
 /** Open a tab of the admin page. */
-async function adminTab(tab: RegExp) {
+export async function adminTab(tab: RegExp) {
   const { page } = await admin();
   await open(page, `${AFFILIATES}/admin`);
   await page.getByRole("tab", { name: tab }).click();
@@ -343,10 +400,7 @@ export async function saleOf(name: string, sale: string | Record<string, unknown
 export async function decideSale(customer: string, decision: string): Promise<void> {
   const panel = await adminTab(/^Sales/);
   const row = panel.getByRole("row").filter({ hasText: customer });
-  await pressUntilGone(
-    (await admin()).page,
-    row.getByRole("button", { name: decision, exact: true }),
-  );
+  await press((await admin()).page, row.getByRole("button", { name: decision, exact: true }));
 }
 
 /** A partner's payouts, as the admin's Payouts tab shows them. */
@@ -361,13 +415,15 @@ export async function payoutsOf(name: string) {
   return out;
 }
 
-/** Press Run payouts, as an admin. */
+/** Press Run payouts, as an admin, and see it through: done once every payout has run. */
 export async function runPayouts(): Promise<void> {
+  const { page } = await admin();
   const panel = await adminTab(/^Payouts/);
-  await panel.getByRole("button", { name: "Run payouts" }).click();
-  await panel.getByText("Payouts queued").waitFor();
+  const pane = await activity(page);
+  const before = await pane.seen();
+  await press(page, panel.getByRole("button", { name: "Run payouts" }));
+  await pane.finished("Run payouts", { after: before });
 }
-
 /** A commission rule for one partner, added on the admin's Rules tab. */
 export async function addRule(
   name: string,
@@ -381,8 +437,7 @@ export async function addRule(
     await form.getByPlaceholder("From sales this month").fill(String(rule.fromSales));
   if (rule.capPerCustomer)
     await form.getByPlaceholder("Most per customer").fill(rule.capPerCustomer);
-  await form.getByRole("button", { name: "Add rule" }).click();
-  await panel.getByText("Rule added.").waitFor();
+  await press((await admin()).page, form.getByRole("button", { name: "Add rule" }));
 }
 
 /** A one-off bonus, added on the admin's Rules tab. */
@@ -392,8 +447,7 @@ export async function addBonus(name: string, amount: string, note: string): Prom
   await form.getByLabel("Partner").selectOption({ label: name });
   await form.getByPlaceholder("Amount").fill(amount);
   await form.getByPlaceholder("Launch week").fill(note);
-  await form.getByRole("button", { name: "Add bonus" }).click();
-  await panel.getByText("Bonus added").waitFor();
+  await press((await admin()).page, form.getByRole("button", { name: "Add bonus" }));
 }
 
 /** The shop's own client for the service (affiliates/client), reaching it by URL with its token. */
@@ -420,15 +474,48 @@ export async function follow(path: string, userAgent = USER_AGENT) {
   return { status: res.status, location: res.headers.get("location"), cookie };
 }
 
-/** What the shop adds to a checkout for a buyer who came through this partner's link. */
-export async function checkoutVia(partner: Partner) {
-  const { cookie } = await follow(`/r/${partner.code}`);
+/**
+ * What the shop adds to a checkout for a buyer who came through this partner's link (or none), for
+ * a ticket to this event (or none).
+ */
+export async function checkoutVia(
+  partner: Partner | null,
+  { eventId = null as string | null } = {},
+) {
+  const { cookie } = partner ? await follow(`/r/${partner.code}`) : { cookie: null };
   return shop().checkout({
     userId: null,
     ref: cookie?.split("=")[1] ?? null,
     promoCode: null,
     ip: null,
+    eventId,
   });
+}
+
+/** A seeded event's id (apps/affiliates/demo.ts), as the seed makes it. */
+export const seededEventId = (key: keyof typeof demoEvents) => fixtureId(`event:${key}`);
+
+/** The emails the shop has sent, newest first, from Void's dev inbox: who to, subject and text. */
+export async function inbox(): Promise<{ to: string; subject: string; text: string }[]> {
+  const headers = { "x-void-dev-trigger": globalThis.apps.inboxToken };
+  const list = await (await fetch(`${SHOP}/__void/inbox`, { headers })).text();
+  const ids = [...new Set([...list.matchAll(/\/__void\/inbox\/([^/?"]+)\?/g)].map((m) => m[1]))];
+  return Promise.all(
+    ids.map(async (id) => {
+      const raw = await (await fetch(`${SHOP}/__void/inbox/${id}/raw`, { headers })).text();
+      const [head = "", ...body] = raw.split(/\r?\n\r?\n/);
+      const header = (name: string) =>
+        head.match(new RegExp(`^${name}: (.*)$`, "im"))?.[1]?.trim() ?? "";
+      // Quoted-printable soft line breaks and escapes, as sendEmail writes plain text.
+      const text = body
+        .join("\n\n")
+        .replace(/=\r?\n/g, "")
+        .replace(/=([0-9A-F]{2})/g, (_, hex: string) =>
+          String.fromCharCode(Number.parseInt(hex, 16)),
+        );
+      return { to: header("To"), subject: header("Subject"), text };
+    }),
+  );
 }
 
 /**
@@ -495,18 +582,6 @@ export async function sell(partner: Partner, overrides: Record<string, unknown> 
   return (session.customer_details as { email: string }).email;
 }
 
-/** Wait until check() passes (for work done through a queue). The test's own timeout ends it. */
-export async function eventually(check: () => Promise<void>): Promise<void> {
-  for (;;) {
-    try {
-      await check();
-      return;
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 250));
-    }
-  }
-}
-
 /**
  * Run one of the service's crons, through Void's dev endpoint (guide/jobs.md): as of now, or as of
  * `daysLater` days on, so the seeded sales have aged that much for it.
@@ -528,4 +603,41 @@ export async function closeBrowsers(): Promise<void> {
   if (launched) await (await launched).close();
   launched = undefined;
   theAdmin = undefined;
+}
+
+// The control plane, as people see it: the Activity pane on every page (packages/activity).
+
+/** The page's Activity pane, opened, once it's listening (its data-live mark). */
+export async function activity(page: Page) {
+  const pane = page.locator("aside[aria-label='Activity']");
+  if ((await pane.getByRole("log").count()) === 0) await pane.getByRole("button").click();
+  await page.locator("aside[aria-label='Activity'][data-live='connected']").waitFor();
+  const actions = pane.locator("[data-action]");
+  return {
+    /** The actions the pane shows now: to tell the next ones from them. */
+    async seen(): Promise<string[]> {
+      return actions.evaluateAll((els) => els.map((el) => el.getAttribute("data-action") ?? ""));
+    },
+    /**
+     * The next action with this title (and by this person), finished: done, or failed, which
+     * fails the test there and then with the steps that failed.
+     */
+    async finished(
+      title: string,
+      { by, step, after = [] }: { by?: string; step?: string; after?: string[] } = {},
+    ) {
+      const which =
+        `[data-action][data-title="${title}"]` +
+        (by ? `[data-by="${by}"]` : "") +
+        (step ? `:has([data-step="${step}"])` : "") +
+        after.map((id) => `:not([data-action="${id}"])`).join("");
+      const settled = pane
+        .locator(`${which}:is([data-state="done"],[data-state="failed"])`)
+        .first();
+      await settled.waitFor();
+      if ((await settled.getAttribute("data-state")) === "failed")
+        throw new Error(`${title} failed: ${await settled.innerText()}`);
+      return settled;
+    },
+  };
 }

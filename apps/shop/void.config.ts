@@ -12,6 +12,9 @@ export default defineConfig({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
     ],
   },
+  // Who the shop's emails (events going on sale) are from. Deploying sets up sending from this
+  // domain on the Cloudflare account; locally it's the sender in the dev inbox.
+  email: { from: "Example shop <events@shop.ubuntusoftware.net>" },
   // AFFILIATES: the affiliate service (apps/affiliates), called through its client.
   cloudflare: {
     name: "shop",

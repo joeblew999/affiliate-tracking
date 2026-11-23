@@ -8,6 +8,11 @@ export default defineConfig({
   // The Worker's dependencies Vite otherwise finds only on the first request that uses them, then
   // reloads mid-request: bundled when the server starts instead. Only these: a package whose
   // errors the code checks (Better Auth's, Hono's) must not be bundled twice.
+  // The same in the browser: the Activity pane's (packages/activity) WebSocket client and the
+  // schema it reads messages with, which Vite would otherwise find on the first page and reload it.
+  optimizeDeps: {
+    include: ["void/ws", "zod"],
+  },
   environments: {
     void_worker: {
       optimizeDeps: {

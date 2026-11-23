@@ -15,5 +15,5 @@
     "lib": ["ES2025", "DOM", "DOM.Iterable"],
     "types": ["void/env"]
   },
-  "include": ["src", "pages", "routes", "queues", "db", "*.ts"]
+  "include": ["src", "pages", "routes", "queues", "middleware", "db", "*.ts"]
 }

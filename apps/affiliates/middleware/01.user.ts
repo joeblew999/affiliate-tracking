@@ -13,6 +13,9 @@ declare module "void" {
     shopUser: User | null;
     shared: {
       shopUrl: string;
+      /** Where the control plane is (the shop), and whose activity this page shows. */
+      controlPlane: string;
+      viewer: string | null;
       user: { email: string; isAdmin: boolean; viewingAs: string | null } | null;
     };
   }
@@ -35,6 +38,8 @@ export default defineMiddleware(async (c, next) => {
   c.set("shopUser", user);
   c.set("shared", {
     shopUrl: env.HOST_SITE_URL,
+    controlPlane: env.HOST_SITE_URL,
+    viewer: user ? (user.role === "admin" ? "admins" : user.id) : null,
     user: user && {
       email: user.email,
       isAdmin: user.role === "admin",

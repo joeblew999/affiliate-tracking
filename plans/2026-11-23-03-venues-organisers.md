@@ -8,11 +8,11 @@ with a cost and a number of places.
 
 ## Who gets paid, and how
 
-| Who                                    | What                                 | When                          |
-| -------------------------------------- | ------------------------------------ | ----------------------------- |
-| The venue                              | Its price, in full                   | When the event is booked      |
-| The organiser                          | Their percentage of each ticket      | With the payout runs, as now  |
-| The affiliate who owns the buyer       | Their percentage of each ticket      | With the payout runs, as now  |
+| Who                              | What                            | When                         |
+| -------------------------------- | ------------------------------- | ---------------------------- |
+| The venue                        | Its price, in full              | When the event is booked     |
+| The organiser                    | Their percentage of each ticket | With the payout runs, as now |
+| The affiliate who owns the buyer | Their percentage of each ticket | With the payout runs, as now |
 
 - All three are paid through Stripe Connect, from the payouts account. Each payment's money is
   added from the business's bank first (a top-up), as for affiliates now.
@@ -43,6 +43,7 @@ with a cost and a number of places.
 ## Knowing when it's in profit
 
 The admin page shows, for each event:
+
 - tickets sold, out of the venue's places;
 - money in: the tickets, not counting tax;
 - money out: the venue, the organiser's shares, the affiliates' shares;

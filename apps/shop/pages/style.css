@@ -2,6 +2,8 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+/* The Activity pane (packages/activity), outside this app's folder. */
+@source "../../../packages/activity/src";
 
 @custom-variant dark (&:is(.dark *));
 

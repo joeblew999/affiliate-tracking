@@ -1,5 +1,5 @@
-// The admin page: partners (approve, suspend, settings, links), sales (approve, reject), payouts
-// (run them), commission rules and bonuses, and performance.
+// The admin page: events (book them, their money), partners (approve, suspend, settings, links),
+// sales (approve, reject), payouts (run them), commission rules and bonuses, and performance.
 import { action, Form, useForm, useRouter } from "@void/react";
 import type { Href, ResolveActionBody } from "void/routes";
 import { useState, type ComponentProps, type ReactNode } from "react";
@@ -87,8 +87,9 @@ export default function AdminPage(props: Props) {
   return (
     <>
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
-        <Tabs defaultValue="partners">
+        <Tabs defaultValue="events">
           <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
+            <TabsTrigger value="events">Events</TabsTrigger>
             <TabsTrigger value="partners">
               Partners{applications > 0 && <Badge variant="secondary">{applications} new</Badge>}
             </TabsTrigger>
@@ -99,6 +100,9 @@ export default function AdminPage(props: Props) {
             <TabsTrigger value="rules">Rules &amp; bonuses</TabsTrigger>
             <TabsTrigger value="performance">Performance</TabsTrigger>
           </TabsList>
+          <TabsContent value="events">
+            <Events {...props} />
+          </TabsContent>
           <TabsContent value="partners">
             <Partners {...props} />
           </TabsContent>
@@ -417,6 +421,270 @@ function Sales({ sales }: Props) {
       </Table>
       {feedback}
     </Section>
+  );
+}
+
+/** The events, each one's money, and booking another; organisers and venues to book them with. */
+function Events({ events, choices, payees }: Props) {
+  const book = useForm(
+    "/admin?bookEvent",
+    {
+      name: "",
+      description: "",
+      venueId: "",
+      organiserId: "",
+      organiserPct: 15,
+      priceCents: 0,
+      startsAt: "",
+      hours: 2,
+    },
+    { throwOnError: false, resetOnSuccess: true },
+  );
+  const organiser = useForm(
+    "/admin?addOrganiser",
+    { email: "" },
+    { throwOnError: false, resetOnSuccess: true },
+  );
+  const venue = useForm(
+    "/admin?addVenue",
+    { name: "", location: "", capacity: 0, priceCents: 0, contactEmail: "" },
+    { throwOnError: false, resetOnSuccess: true },
+  );
+  return (
+    <div className="space-y-6">
+      <Section
+        title="Events"
+        description="Money in is the tickets, not counting tax. Profit is that less the venue, the organiser's shares and the affiliates'. To break even: tickets still to sell, at what each has netted so far."
+      >
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Event</TableHead>
+              <TableHead className="text-right">Sold</TableHead>
+              <TableHead className="text-right">Money in</TableHead>
+              <TableHead className="text-right">Venue</TableHead>
+              <TableHead className="text-right">Organiser</TableHead>
+              <TableHead className="text-right">Affiliates</TableHead>
+              <TableHead className="text-right">Profit</TableHead>
+              <TableHead className="text-right">To break even</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {events.map((e) => (
+              <TableRow key={e.id}>
+                <TableCell className="whitespace-normal">
+                  <div className="font-medium">{e.name}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {date(e.startsAt)}, {e.venue}, {e.organiser} ({e.organiserPct}%)
+                    {!e.onSale && ", not on sale yet: the venue's payment hasn't gone"}
+                  </div>
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {e.sold} of {e.capacity}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {money(e.revenueCents, e.currency)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {money(e.venueCents, e.currency)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {money(e.organiserCents, e.currency)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {money(e.affiliateCents, e.currency)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {money(e.profitCents, e.currency)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {e.toBreakEven > e.capacity - e.sold
+                    ? `${e.toBreakEven} (more than the places left)`
+                    : e.toBreakEven}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Section>
+
+      <Section
+        title="Book an event"
+        description="Its venue is paid at once. Once that payment has gone, the event is on sale and every shop user is emailed."
+      >
+        <Form form={book} className="grid gap-2 sm:grid-cols-2">
+          <Input placeholder="Name" required {...bind(book, "name")} />
+          <Input placeholder="Description" required {...bind(book, "description")} />
+          <select
+            className={selectClass}
+            aria-label="Venue"
+            required
+            value={book.data.venueId}
+            onChange={(e) => book.setData("venueId", e.currentTarget.value)}
+          >
+            <option value="">Venue…</option>
+            {choices.venues.map((v) => (
+              <option key={v.id} value={v.id}>
+                {v.name}: {v.capacity} places, {money(v.priceCents, v.currency)}
+              </option>
+            ))}
+          </select>
+          <select
+            className={selectClass}
+            aria-label="Organiser"
+            required
+            value={book.data.organiserId}
+            onChange={(e) => book.setData("organiserId", e.currentTarget.value)}
+          >
+            <option value="">Organiser…</option>
+            {choices.organisers.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name ?? o.email}
+              </option>
+            ))}
+          </select>
+          <Input
+            type="number"
+            min={0}
+            max={100}
+            step={0.5}
+            aria-label="Organiser's percent"
+            placeholder="Organiser's percent"
+            required
+            value={book.data.organiserPct}
+            onChange={(e) => book.setData("organiserPct", Number(e.target.value))}
+          />
+          <MoneyInput
+            aria-label="Ticket price"
+            placeholder="Ticket price"
+            required
+            currency="usd"
+            cents={book.data.priceCents || null}
+            onCents={(cents) => book.setData("priceCents", cents ?? 0)}
+          />
+          <Input
+            type="datetime-local"
+            aria-label="Starts (UTC)"
+            required
+            value={book.data.startsAt}
+            onChange={(e) => book.setData("startsAt", e.target.value)}
+          />
+          <Input
+            type="number"
+            min={0.5}
+            max={24}
+            step={0.5}
+            aria-label="Hours"
+            placeholder="Hours"
+            required
+            value={book.data.hours}
+            onChange={(e) => book.setData("hours", Number(e.target.value))}
+          />
+          <Button type="submit" disabled={book.pending}>
+            Book event
+          </Button>
+        </Form>
+        {book.recentlySuccessful && (
+          <p className="text-sm text-muted-foreground">
+            Booked. The venue is being paid; the event goes on sale once that's gone.
+          </p>
+        )}
+      </Section>
+
+      <Section
+        title="Organisers and venues"
+        description="Each is paid through a shop user, found by their email, who signs in to set up payouts."
+      >
+        {(payees.length > 0 || choices.venues.length > 0) && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Who</TableHead>
+                <TableHead>Is</TableHead>
+                <TableHead>Paid through</TableHead>
+                <TableHead>Payouts</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {payees
+                .filter((p) => p.role === "organiser")
+                .map((p) => (
+                  <TableRow key={p.id}>
+                    <TableCell>{p.name ?? p.email}</TableCell>
+                    <TableCell>Organiser</TableCell>
+                    <TableCell>{p.email}</TableCell>
+                    <TableCell>{p.payoutsSetUp ? "Stripe" : "By hand"}</TableCell>
+                  </TableRow>
+                ))}
+              {choices.venues.map((v) => (
+                <TableRow key={v.id}>
+                  <TableCell>
+                    {v.name}
+                    <div className="text-xs text-muted-foreground">
+                      {v.capacity} places, {money(v.priceCents, v.currency)}. {v.location}
+                    </div>
+                  </TableCell>
+                  <TableCell>Venue</TableCell>
+                  <TableCell>{v.contact}</TableCell>
+                  <TableCell>
+                    {payees.find((p) => p.email === v.contact)?.payoutsSetUp ? "Stripe" : "By hand"}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        <Form form={organiser} className="flex flex-wrap gap-2">
+          <Input
+            type="email"
+            placeholder="Organiser's email"
+            required
+            {...bind(organiser, "email")}
+          />
+          <Button type="submit" variant="outline" disabled={organiser.pending}>
+            Add organiser
+          </Button>
+        </Form>
+        {organiser.recentlySuccessful && (
+          <p className="text-sm text-muted-foreground">Organiser added.</p>
+        )}
+        <Form form={venue} className="grid gap-2 sm:grid-cols-3">
+          <Input placeholder="Venue name" required {...bind(venue, "name")} />
+          <Input
+            placeholder="Where (as attendees are told)"
+            required
+            {...bind(venue, "location")}
+          />
+          <Input
+            type="number"
+            min={1}
+            aria-label="Places"
+            placeholder="Places"
+            required
+            value={venue.data.capacity || ""}
+            onChange={(e) => venue.setData("capacity", Number(e.target.value))}
+          />
+          <MoneyInput
+            aria-label="Venue price"
+            placeholder="Venue price"
+            required
+            currency="usd"
+            cents={venue.data.priceCents || null}
+            onCents={(cents) => venue.setData("priceCents", cents ?? 0)}
+          />
+          <Input
+            type="email"
+            placeholder="Contact's email"
+            required
+            {...bind(venue, "contactEmail")}
+          />
+          <Button type="submit" variant="outline" disabled={venue.pending}>
+            Add venue
+          </Button>
+        </Form>
+        {venue.recentlySuccessful && <p className="text-sm text-muted-foreground">Venue added.</p>}
+      </Section>
+    </div>
   );
 }
 

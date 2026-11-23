@@ -2,7 +2,7 @@
 // events, and every page fits a phone. Any error on a page fails the test.
 import { devices } from "playwright";
 import { expect, test } from "vite-plus/test";
-import { demoEvents } from "../../apps/affiliates/demo.ts";
+import { demoEvents, demoVenues } from "../../apps/affiliates/demo.ts";
 import { admin, AFFILIATES, newBrowser, open, seededPartner, SHOP, signInAs } from "./helpers.ts";
 
 test("an admin lands on the admin page, views the program as a partner, and comes back", async () => {
@@ -31,7 +31,7 @@ test("the shop lists its events; without a Stripe key an event's page sells no t
   const workshop = demoEvents.workshop;
   await page.getByRole("link", { name: workshop.name }).click();
   await page.getByRole("heading", { name: workshop.name }).waitFor();
-  await page.getByText(workshop.location).waitFor();
+  await page.getByText(demoVenues[workshop.venue].location).waitFor();
   await page.getByText("This shop isn't taking payments: it has no Stripe key.").waitFor();
   expect(await page.getByRole("button", { name: /^Buy ticket/ }).count()).toBe(0);
   expect(errors).toEqual([]);

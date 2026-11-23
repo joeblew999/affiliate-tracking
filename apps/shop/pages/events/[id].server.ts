@@ -10,9 +10,9 @@ import { defineHandler, defineHead, type CloudContext, type InferProps } from "v
 import { getUser } from "void/auth";
 import { env } from "void/env";
 import type { Href, PageParams } from "void/routes";
-import { referralFrom } from "affiliates/client";
+import { referralFrom, type Event } from "affiliates/client";
 import { affiliatesService } from "../../src/affiliates.ts";
-import { eventOf, price, when } from "../../src/events.ts";
+import { eventOnSale, price, when } from "../../src/events.ts";
 import { stripeClient } from "../../src/stripe.ts";
 
 /** The checkout metadata key that says which event a ticket is for. */
@@ -27,10 +27,10 @@ const TAX_CODE = "txcd_10000000";
 
 const stripe = () => stripeClient(env.STRIPE_SECRET_KEY ?? "");
 
-function eventFor(c: CloudContext) {
+async function eventFor(c: CloudContext) {
   const { id } = c.req.param() as PageParams<"/events/[id]">;
-  const event = eventOf(id);
-  if (!event) throw new HTTPException(404, { message: "There's no such event" });
+  const event = await eventOnSale(id);
+  if (!event) throw new HTTPException(404, { message: "There's no such event on sale" });
   return event;
 }
 
@@ -42,7 +42,7 @@ async function hasTicket(customer: string, eventId: string): Promise<boolean> {
 }
 
 /** The event's Stripe product, made the first time a ticket is sold. */
-async function ensureProduct(event: NonNullable<ReturnType<typeof eventOf>>): Promise<void> {
+async function ensureProduct(event: Event): Promise<void> {
   try {
     await stripe().products.retrieve(event.productId);
   } catch (err) {
@@ -60,7 +60,7 @@ async function ensureProduct(event: NonNullable<ReturnType<typeof eventOf>>): Pr
 }
 
 export const loader = defineHandler(async (c) => {
-  const event = eventFor(c);
+  const event = await eventFor(c);
   const user = getUser();
   const payments = Boolean(env.STRIPE_SECRET_KEY);
   const customer = user?.stripeCustomerId ?? null;
@@ -71,7 +71,8 @@ export const loader = defineHandler(async (c) => {
       description: event.description,
       when: when(event),
       location: event.location,
-      price: price(event.cents),
+      price: price(event.priceCents, event.currency),
+      soldOut: event.placesLeft === 0,
     },
     signedIn: Boolean(user),
     payments,
@@ -89,13 +90,15 @@ export const actions = {
     if (!user) throw new HTTPException(401, { message: "Sign in to buy a ticket" });
     if (!env.STRIPE_SECRET_KEY)
       throw new HTTPException(503, { message: "This shop isn't taking payments" });
-    const event = eventFor(c);
+    const event = await eventFor(c);
+    if (event.placesLeft === 0) throw new HTTPException(409, { message: "It's sold out" });
     await ensureProduct(event);
     const attribution = await affiliatesService().checkout({
       userId: user.id,
       ref: referralFrom(c.req.header("cookie")),
       promoCode: null,
       ip: c.req.header("cf-connecting-ip") ?? null,
+      eventId: event.id,
     });
     const here = new URL(c.req.url);
     here.search = "";
@@ -108,7 +111,11 @@ export const actions = {
       line_items: [
         {
           quantity: 1,
-          price_data: { currency: "usd", unit_amount: event.cents, product: event.productId },
+          price_data: {
+            currency: event.currency,
+            unit_amount: event.priceCents,
+            product: event.productId,
+          },
         },
       ],
       metadata: { ...attribution.metadata, [EVENT_KEY]: event.id },

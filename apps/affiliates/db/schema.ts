@@ -12,3 +12,5 @@ export * from "./schema/payouts.ts";
 export * from "./schema/sales.ts";
 export * from "./schema/refunded_payments.ts";
 export * from "./schema/commission_rules.ts";
+export * from "./schema/venues.ts";
+export * from "./schema/events.ts";

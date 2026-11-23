@@ -24,7 +24,7 @@ import {
   TableRow,
 } from "../src/components/ui/table.tsx";
 import { Textarea } from "../src/components/ui/textarea.tsx";
-import { money } from "../src/format.ts";
+import { date, money } from "../src/format.ts";
 import { bind } from "../src/components/bind.ts";
 import { useAction } from "../src/components/use-action.tsx";
 import type { Props } from "./index.server.ts";
@@ -41,7 +41,8 @@ export default function PartnerPage(props: Props) {
         {partner?.status === "suspended" && (
           <Notice title="Suspended" text="Your partner account is suspended. Contact the shop." />
         )}
-        {partner?.status === "active" && <Dashboard {...props} />}
+        {partner?.status === "active" &&
+          (partner.role === "affiliate" ? <Dashboard {...props} /> : <PayeeDashboard {...props} />)}
       </main>
     </>
   );
@@ -233,6 +234,84 @@ function Dashboard({ partner, links, stats, earnings, program, payoutCountries, 
           )}
         </CardContent>
       </Card>
+    </>
+  );
+}
+
+/** An organiser's or a venue contact's page: what they've earned, by event, and getting paid. */
+function PayeeDashboard({
+  partner,
+  earnings,
+  payeeEvents,
+  program,
+  payoutCountries,
+  country,
+}: Props) {
+  const { run, busy, feedback } = useAction();
+  if (!partner) return null;
+  const totals = earnings.length
+    ? earnings
+    : [{ currency: "usd", onHoldCents: 0, readyCents: 0, paidCents: 0 }];
+  const sum = (key: "onHoldCents" | "readyCents" | "paidCents") =>
+    totals.map((m) => money(m[key], m.currency)).join(" + ");
+  const organiser = partner.role === "organiser";
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>{organiser ? "Your events" : "Your venue's events"}</CardTitle>
+          <CardDescription>
+            {organiser
+              ? "You're paid your share of every ticket sold for your events."
+              : "Your venue is paid its price when an event is booked there."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Event</TableHead>
+                {organiser && <TableHead className="text-right">Tickets</TableHead>}
+                <TableHead className="text-right">Earned</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {payeeEvents.map((e) => (
+                <TableRow key={e.id}>
+                  <TableCell>
+                    {e.name}
+                    <div className="text-xs text-muted-foreground">{date(e.startsAt)}</div>
+                  </TableCell>
+                  {organiser && (
+                    <TableCell className="text-right tabular-nums">{e.tickets}</TableCell>
+                  )}
+                  <TableCell className="text-right tabular-nums">
+                    {money(e.earnedCents, e.currency)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Stat
+          title="On hold"
+          value={sum("onHoldCents")}
+          note={
+            program.holdDays
+              ? `Approved ${program.holdDays} days after each sale`
+              : "Waiting for approval"
+          }
+        />
+        <Stat title="Ready to pay" value={sum("readyCents")} note="Paid with the next payout">
+          {!partner.paidOut && payoutCountries.length > 0 && (
+            <SetUpPayouts countries={payoutCountries} country={country} busy={busy} run={run} />
+          )}
+        </Stat>
+        <Stat title="Paid" value={sum("paidCents")} note="All time" />
+      </div>
+      {feedback}
     </>
   );
 }

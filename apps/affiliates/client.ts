@@ -5,9 +5,14 @@
 import { parse } from "hono/utils/cookie";
 import type Stripe from "stripe";
 import type { z } from "zod";
+import { activityHeaders } from "activity/trace";
 import {
   CheckoutInput,
   CheckoutOutput,
+  EventsInput,
+  EventsOutput,
+  OnSaleInput,
+  OnSaleOutput,
   REF_COOKIE,
   SignupInput,
   SignupOutput,
@@ -15,7 +20,8 @@ import {
   StripeEventOutput,
 } from "./src/host-contract.ts";
 
-export { REF_COOKIE };
+export { REF_COOKIE, OnSaleInput, OnSaleOutput };
+export type { Event } from "./src/host-contract.ts";
 
 /** What the host sends when a user signs up (its queue message too). */
 export type Signup = z.input<typeof SignupInput>;
@@ -37,7 +43,12 @@ export function affiliates(binding: Pick<Fetcher, "fetch">, token: string) {
   ): Promise<z.output<O>> {
     const res = await binding.fetch(new URL(path, "https://affiliates.internal"), {
       method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${token}`,
+        // The action this call is part of, for the control plane (packages/activity).
+        ...activityHeaders(),
+      },
       body: JSON.stringify(input.parse(body)),
     });
     if (!res.ok) throw new Error(`affiliates ${path}: ${res.status} ${await res.text()}`);
@@ -50,6 +61,8 @@ export function affiliates(binding: Pick<Fetcher, "fetch">, token: string) {
     /** Before creating a Stripe Checkout Session: the metadata to add, and the partner's buyer discount. */
     checkout: (body: z.input<typeof CheckoutInput>) =>
       call("/api/host/checkout", CheckoutInput, CheckoutOutput, body),
+    /** The events on sale, soonest first. */
+    events: () => call("/api/host/events", EventsInput, EventsOutput, {}),
     /** Every Stripe event the host's Better Auth Stripe plugin receives (its onEvent). */
     stripeEvent: (event: Stripe.Event) =>
       call("/api/host/stripe-event", StripeEventInput, StripeEventOutput, event),

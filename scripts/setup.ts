@@ -30,6 +30,7 @@ const wanted: Record<string, Record<string, string>> = {
     ADMIN_EMAILS: "admin@example.test",
     // A local signing secret for the shop's Stripe webhook (Better Auth's Stripe plugin).
     STRIPE_WEBHOOK_SECRET: `whsec_${random()}`,
+    EMAIL_LINK_SECRET: random(),
   },
 };
 

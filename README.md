@@ -18,15 +18,19 @@ from [HolotypePteLtd/affiliate-tracking](https://github.com/HolotypePteLtd/affil
 The shop sells tickets to 3 online events. Open it and press **Sign in as the admin**. You land
 on the service's admin page.
 
+- **Events tab:** each event's tickets sold, the money in, what the venue, the organiser and the
+  affiliates were paid, the profit, and how many more tickets it takes to break even. Book a new
+  event here, and add organisers and venues.
 - **Partners tab:** approve, suspend and set commission. To see the program as a partner, open a
   partner's menu and choose **View as**. Press **Back to admin** in the bar at the top to return.
 - **Who's who:** Maya is the busiest partner, then Leo, Priya, Tom (every sale of his is reviewed)
-  and Ana. Ken is suspended. Sam and Lena are waiting for approval.
+  and Ana. Ken is suspended. Sam and Lena are waiting for approval. Olivia and Raj are organisers.
+  Nina, Hugo and Mei are the contacts the 3 venues are paid through.
 - **Signing in as anyone:** every demo account uses the password `demo-password-2026` (public, for
   the demo only): `admin@demo.test`, `maya@demo.test` and so on, and `chris@demo.test` for a
   customer who never applied.
 
-The demo is written out in one file, `apps/affiliates/demo.ts`: its people, its 3 events, and
+The demo is written out in one file, `apps/affiliates/demo.ts`: its people, its 3 venues and 3 events, and
 every ticket sale, refund, bonus, payout and rule of the program, with exact amounts. Times are days before
 one instant. Both apps' seeds load it (`vp run demo`) and the tests check against it, so the demo
 can't drift from the code. Only the clicks behind the charts are generated, from a fixed seed.
@@ -60,9 +64,19 @@ can't drift from the code. Only the clicks behind the charts are generated, from
     to the partner's Stripe account.
     Commission is on the price, not the tax Stripe adds. A partner without a Stripe account gets a
     manual payout, for the admin to pay by hand.
+- **Events, venues and organisers.** An admin books an event at a venue, with an organiser. The
+  venue is paid its price at once, through Stripe like any payout. Once it's paid, the event goes on
+  sale, and the shop emails every user who hasn't unsubscribed. Each ticket pays the event's
+  organiser their percent of the price, and the affiliate who brought the buyer (if any) their
+  commission. An organiser or a venue's contact can't also be an affiliate.
 - **Slow work goes through queues.** Sign-ups reach the service through a queue. Payouts are queued
-  one partner at a time. A daily job approves sales once their hold period is over, and queues any
-  payout that didn't finish, so a crash can't leave one half done.
+  one partner at a time. The on-sale emails go out in batches, each batch queuing the next. A daily
+  job approves sales once their hold period is over, and queues any payout that didn't finish, so a
+  crash can't leave one half done.
+- **Each app says what its slow work did, as it happens.** Every queue announces its outcome on a
+  topic, with Void's live events (`void/live`, in each app's `src/live.ts`): paid, sent, or failed
+  with the error. Admins can watch an app's events at its `/live`. That's how the tests know work is
+  done: they never wait and look again.
 
 ## Where things are
 
@@ -132,6 +146,11 @@ shop's Better Auth with the demo password. The shop's calls to the service go th
 own client. Without Stripe, the dev tests send Stripe's events to the shop's webhook, signed as
 Stripe signs them. In the Stripe tests, Stripe sends them itself. There are no fakes or mocks.
 
+Nothing in the tests waits and looks again. Each step waits for the app's own answer: a form
+waits for its action's response, and work done through a queue is waited for by watching the app's
+live events (`watch()` in `e2e/dev/helpers.ts`). A failure ends the test at once, with the app's own
+error: a "failed" event, a server error on any page, or a failed job in either app's log.
+
 CI (`.github/workflows/ci.yml`) runs the first three on every push.
 
 ## Deploy
@@ -151,6 +170,9 @@ Commit each app's `void.lock.json` after deploying: it records the app's databas
 Cloudflare resources.
 
 `vp run demo:production` replaces the live databases with the demo. Use it only on the demo site.
+
+The shop's emails are from the address in its `void.config.ts` (`email.from`). Deploying sets up
+sending from that domain on the Cloudflare account.
 
 Not set up yet: Stripe on the live site (the `STRIPE_*` settings, and both webhooks in Stripe).
 

@@ -79,7 +79,8 @@ export const GET = defineHandler(async (c) => {
   c.header("cache-control", "private, no-store");
   c.header("referrer-policy", "strict-origin-when-cross-origin");
   if (found && !isAutomated(c.req.raw)) {
-    c.executionCtx.waitUntil(recordClick(c.req.raw, found));
+    // Counted before the visitor is sent on (one small write), so it's there when they arrive.
+    await recordClick(c.req.raw, found);
     // 30 days, for the parent domain so the host's site gets it too.
     setCookie(c, REF_COOKIE, referralValue(found), {
       path: "/",

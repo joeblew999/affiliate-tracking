@@ -7,7 +7,6 @@ import {
   apply,
   checkoutVia,
   demoPartner,
-  eventually,
   follow,
   linksOf,
   newBrowser,
@@ -16,6 +15,7 @@ import {
   partnerButton,
   partnerMe,
   partnerPage,
+  press,
   saleOf,
   salesOf,
   seededPartner,
@@ -54,7 +54,7 @@ test("a referral link sends the visitor to the shop, sets the cookie and counts 
   expect(first.location).toBe(`${SHOP}/?utm_source=youtube`);
   expect(first.cookie).toMatch(/^affiliate_ref=[0-9a-f-]{36}$/);
   await follow(`/r/ana`); // same visitor again: still one click
-  await eventually(async () => expect((await partnerMe(ana)).clicks).toBe(before + 1));
+  expect((await partnerMe(ana)).clicks).toBe(before + 1);
 });
 
 test("a short link counts its own clicks and sales", async () => {
@@ -62,7 +62,7 @@ test("a short link counts its own clicks and sales", async () => {
   await open(priya.page, `${AFFILIATES}/`);
   await priya.page.getByLabel("Goes to").fill("/pricing");
   await priya.page.getByLabel("Campaign").fill("Newsletter");
-  await priya.page.getByRole("button", { name: "Create link" }).click();
+  await press(priya.page, priya.page.getByRole("button", { name: "Create link" }));
   await priya.page.getByRole("cell", { name: "Newsletter" }).waitFor();
   const link = (await linksOf(priya)).find((l) => l.campaign === "Newsletter");
   if (!link) throw new Error("no link made");
@@ -76,11 +76,9 @@ test("a short link counts its own clicks and sales", async () => {
     ip: null,
   });
   await stripeEvent("checkout.session.completed", paidSession(checkout.metadata));
-  await eventually(async () => {
-    expect((await linksOf(priya)).find((l) => l.campaign === "Newsletter")).toMatchObject({
-      clicks: 1,
-      sales: 1,
-    });
+  expect((await linksOf(priya)).find((l) => l.campaign === "Newsletter")).toMatchObject({
+    clicks: 1,
+    sales: 1,
   });
 });
 
@@ -89,8 +87,8 @@ test("a user who signs up through a referral link stays the partner's at checkou
   const before = (await partnerMe(leo)).signups;
   const buyer = await signUp("Buyer", { via: `/r/leo` });
   const userId = await userIdOf(buyer);
-  // The shop tells the service through a queue (apps/shop/queues/affiliate-signups.ts).
-  await eventually(async () => expect((await partnerMe(leo)).signups).toBe(before + 1));
+  // The shop told the service through its queue (apps/shop/queues/affiliate-signups.ts).
+  expect((await partnerMe(leo)).signups).toBe(before + 1);
   const checkout = await shop().checkout({ userId, ref: null, promoCode: null, ip: null });
   expect(checkout.metadata).toMatchObject({
     affiliate_partner_id: seededPartnerId("leo"),

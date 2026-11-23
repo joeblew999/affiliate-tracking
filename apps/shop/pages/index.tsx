@@ -50,7 +50,7 @@ function Events({ events }: Pick<Props, "events">) {
               <Link href={routeUrl("/events/[id]", { params: { id: e.id } })}>{e.name}</Link>
             </CardTitle>
             <CardDescription>
-              {e.when}. {e.price}
+              {e.when}. {e.soldOut ? "Sold out" : e.price}
             </CardDescription>
           </CardHeader>
         </Card>

@@ -2,7 +2,7 @@
 // has already checked Stripe's signature. Sales (checkout.session.completed and
 // async_payment_succeeded), renewals (invoice.paid), refunds and disputes (charge.refunded,
 // charge.dispute.created and closed: src/refunds.ts). Others are ignored. A failure is an error, so
-// the host's webhook fails and Stripe sends the event again.
+// the host's queue for Stripe's events tries it again.
 import { defineHandler } from "void";
 import { StripeEventInput, type StripeEventOutput } from "../../../src/host-contract.ts";
 import { noteDispute, noteRefund } from "../../../src/refunds.ts";

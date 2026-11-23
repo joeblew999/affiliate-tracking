@@ -5,6 +5,7 @@ import { CheckoutInput, type CheckoutOutput } from "../../../src/host-contract.t
 import { activePartner, type Partner } from "../../../src/partners.ts";
 import { parseReferral } from "../../../src/referral-cookie.ts";
 import { referringPartner } from "../../../src/referrals.ts";
+import { ticketTerms } from "../../../src/events.ts";
 import { META } from "../../../src/sales.ts";
 import { hashIp } from "../../../src/visitor.ts";
 
@@ -21,7 +22,11 @@ export const POST = defineHandler.withValidator({ body: CheckoutInput })(async (
         .select()
         .from(partners)
         .where(
-          and(eq(partners.promoCode, body.promoCode.toUpperCase()), eq(partners.status, "active")),
+          and(
+            eq(partners.promoCode, body.promoCode.toUpperCase()),
+            eq(partners.status, "active"),
+            eq(partners.role, "affiliate"),
+          ),
         )
         .limit(1)
     : [];
@@ -29,6 +34,8 @@ export const POST = defineHandler.withValidator({ body: CheckoutInput })(async (
 
   const metadata: Record<string, string> = {};
   if (body.userId) metadata[META.userId] = body.userId;
+  // The event it's for: its organiser's share (src/sales.ts), whoever brought the buyer.
+  if (body.eventId && (await ticketTerms(body.eventId))) metadata[META.eventId] = body.eventId;
   if (!partner) return { metadata, promotionCode: null } satisfies CheckoutOutput;
   metadata[META.partnerId] = partner.id;
   metadata[META.source] = typed ? "promo_code" : fromUser ? "referral" : "cookie";

@@ -7,10 +7,13 @@ import type { ChildProcess } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, inject, test } from "vite-plus/test";
 import { demoEvents } from "../../apps/affiliates/demo.ts";
 import {
+  activity,
+  admin,
+  AFFILIATES,
   decideSale,
   demoPartner,
-  eventually,
   partnerButton,
+  open,
   partnerMe,
   payoutsOf,
   runPayouts,
@@ -39,6 +42,28 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
     listener?.kill();
   });
 
+  /**
+   * Buy a workshop ticket on Stripe's Checkout, done once Stripe's webhook for it has been handled
+   * all the way, as the admin's control plane shows it. Its payment.
+   */
+  async function buyAndRecord(buyer: Person): Promise<string> {
+    const pane = await adminPane();
+    const before = await pane.seen();
+    await buyTicket(buyer, "workshop");
+    await pane.finished("Stripe webhook", {
+      step: "Stripe checkout.session.completed",
+      after: before,
+    });
+    return (await ticketPayment(buyer)).id;
+  }
+
+  /** The admin's Activity pane, on their admin page. */
+  async function adminPane() {
+    const { page } = await admin();
+    await open(page, `${AFFILIATES}/admin`);
+    return activity(page);
+  }
+
   // Tom: every sale of his reviewed, and nothing ready to pay in the seed.
   const tom = demoPartner("tom");
   let tomsBuyer: Person;
@@ -48,12 +73,10 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
     { timeout: 180_000 },
     async () => {
       tomsBuyer = await signUp("Ticket Buyer", { via: `/r/${tom.code}` });
-      await buyTicket(tomsBuyer, "workshop");
-      await eventually(async () => {
-        const sale = await saleOf(tom.name, tomsBuyer.email);
-        expect(sale).toMatchObject({ commissionCents: commission(tom.code), status: "pending" });
-        expect(sale?.paidCents).toBeGreaterThanOrEqual(ticket); // and any tax Stripe added
-      });
+      await buyAndRecord(tomsBuyer);
+      const sale = await saleOf(tom.name, tomsBuyer.email);
+      expect(sale).toMatchObject({ commissionCents: commission(tom.code), status: "pending" });
+      expect(sale?.paidCents).toBeGreaterThanOrEqual(ticket); // and any tax Stripe added
     },
   );
 
@@ -69,24 +92,19 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
       txn.currency === charge.currency
         ? commission(tom.code)
         : Math.round((commission(tom.code) * txn.amount) / charge.amount);
-    await eventually(async () => {
-      expect(await payoutsOf(tom.name)).toMatchObject([
-        { amountCents: expected, status: "manual" },
-      ]);
-    });
+    expect(await payoutsOf(tom.name)).toMatchObject([{ amountCents: expected, status: "manual" }]);
   });
 
   test("a refunded ticket refunds the sale", async () => {
     const priya = await seededPartner("priya");
     const buyer = await signUp("Refund Buyer", { via: `/r/${priya.code}` });
-    await buyTicket(buyer, "workshop");
-    await eventually(async () => {
-      expect(await saleOf(priya.name, buyer.email)).toBeTruthy();
-    });
-    await stripe().refunds.create({ payment_intent: (await ticketPayment(buyer)).id });
-    await eventually(async () => {
-      expect((await saleOf(priya.name, buyer.email))?.status).toBe("refunded");
-    });
+    const paymentIntent = await buyAndRecord(buyer);
+    expect(await saleOf(priya.name, buyer.email)).toBeTruthy();
+    const pane = await adminPane();
+    const before = await pane.seen();
+    await stripe().refunds.create({ payment_intent: paymentIntent });
+    await pane.finished("Stripe webhook", { step: "Stripe charge.refunded", after: before });
+    expect((await saleOf(priya.name, buyer.email))?.status).toBe("refunded");
   });
 
   test(
@@ -104,14 +122,12 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
       expect(promotion?.metadata).toMatchObject({ partner_id: seededPartnerId(sam.code) });
 
       const samsBuyer = await signUp("Discount Buyer", { via: `/r/${sam.code}` });
-      await buyTicket(samsBuyer, "workshop");
+      await buyAndRecord(samsBuyer);
       const discounted = Math.round((ticket * (100 - inject("couponPercent"))) / 100);
       // His commission is on the discounted price, not counting tax.
-      await eventually(async () => {
-        expect(await saleOf(sam.name, samsBuyer.email)).toMatchObject({
-          commissionCents: Math.round((discounted * sam.commissionPct) / 100),
-          status: "pending",
-        });
+      expect(await saleOf(sam.name, samsBuyer.email)).toMatchObject({
+        commissionCents: Math.round((discounted * sam.commissionPct) / 100),
+        status: "pending",
       });
     },
   );

@@ -24,6 +24,8 @@ import { alias } from "void/schema-d1";
 import { refundShare } from "./refunds.ts";
 import { hasPayoutsStripe, hasSalesStripe, payoutsStripe, salesStripe } from "./stripe.ts";
 import { now as clock } from "./clock.ts";
+import { venuePaid } from "./events.ts";
+import { queues } from "./activity.ts";
 
 type Payout = typeof payouts.$inferSelect;
 const transferGroup = (payoutId: string) => `affiliates_payout_${payoutId}`;
@@ -191,7 +193,8 @@ async function release(payout: Payout, reason: string): Promise<void> {
         ),
       ),
     ...inIt.map((sale) => {
-      const isSale = sale.kind === "checkout" || sale.kind === "renewal";
+      const isSale =
+        sale.kind === "checkout" || sale.kind === "renewal" || sale.kind === "organiser";
       // Each sale as it is now, guarded by its refundVersion: a refund being applied at the same
       // moment starts again from the sale as this leaves it.
       const mine = and(eq(sales.id, sale.id), eq(sales.refundVersion, sale.refundVersion));
@@ -240,6 +243,8 @@ async function finish(
       .set({ status: "paid", paidAt: now })
       .where(and(eq(sales.payoutId, payout.id), eq(sales.status, "paying"))),
   ]);
+  // A venue paid for an event: the event goes on sale (src/events.ts).
+  await venuePaid(payout.id);
 }
 
 /**
@@ -283,6 +288,11 @@ async function transfer(payout: Payout, destination: string): Promise<string> {
     { idempotencyKey: `affiliates_transfer_${payout.batchKey}` },
   );
   return made.id;
+}
+
+/** Pay these partners, each through the payouts queue (queues/payouts.ts). */
+export async function queuePayouts(partnerIds: string[]): Promise<void> {
+  for (const partnerId of partnerIds) await queues.payouts.send({ partnerId });
 }
 
 export async function payPartner(partnerId: string) {
