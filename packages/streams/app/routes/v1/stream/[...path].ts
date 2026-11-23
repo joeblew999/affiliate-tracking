@@ -15,7 +15,7 @@ const streams = createStreams({
   signing: Signing,
 });
 
-const handle = defineHandler((c) => streams(c.req.raw, env as never));
+const handle = defineHandler((c) => streams.handle(c.req.raw, env as never));
 
 // GET answers HEAD too (Void sends it here).
 export const GET = handle;

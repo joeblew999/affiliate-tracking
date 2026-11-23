@@ -7,3 +7,5 @@ export {
 } from "./subscription.ts";
 export { directoryState } from "./directory.ts";
 export { signingState } from "./signing.ts";
+export { acknowledge, readOn, serverKeys, wakeIsSigned, type Wake } from "./subscriber.ts";
+export type { PublicJwk } from "./keys.ts";

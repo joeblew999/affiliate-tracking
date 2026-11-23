@@ -130,7 +130,8 @@ async function bodyOf(request: Request): Promise<unknown> {
 }
 
 /**
- * The handler: `(request, env) => Response`, for a route that catches everything under the root.
+ * The streams: `handle` for a route that catches everything under the root, and the same things
+ * for the app's own code to do without a request (append, subscribe, recheck).
  */
 export function createStreams<Env>(options: StreamsOptions<Env>) {
   const root = `/${relative(options.root)}`;
@@ -257,43 +258,126 @@ export function createStreams<Env>(options: StreamsOptions<Env>) {
     return refuse(404, "SUBSCRIPTION_NOT_FOUND", "Durable Streams control route not found");
   }
 
-  /** After a write the server accepted: tell the subscriptions that follow the stream. */
-  async function told(request: Request, response: Response, path: string) {
+  /**
+   * After a write the server accepted: tell the subscriptions that follow the stream. Answers
+   * with the ones told of something new.
+   */
+  async function told(request: Request, response: Response, path: string): Promise<string[]> {
     const created = request.method === "PUT" && response.status === 201;
     const appended =
       request.method === "POST" && (response.status === 200 || response.status === 204);
     const deleted = request.method === "DELETE" && response.status === 204;
-    if (!created && !appended && !deleted) return;
+    if (!created && !appended && !deleted) return [];
     const change = created ? "created" : deleted ? "deleted" : undefined;
     const shards = new Set([shardOf(path), ANY]);
-    const ids = new Set(
-      (
-        await Promise.all([...shards].map((shard) => directory.get(shard).written(path, change)))
-      ).flat(),
-    );
+    const ids = [
+      ...new Set(
+        (
+          await Promise.all([...shards].map((shard) => directory.get(shard).written(path, change)))
+        ).flat(),
+      ),
+    ];
     const tail = response.headers.get("stream-next-offset");
+    // A new stream with nothing in it yet has nothing to wake anyone for.
+    const news = !deleted && tail !== null && tail > ZERO_OFFSET;
     await Promise.all(
-      [...ids].map(async (id) => {
-        if (deleted) return subscriptions.get(id).deleted(path);
-        // A new stream with nothing in it yet has nothing to wake anyone for.
-        if (tail && tail > ZERO_OFFSET) return subscriptions.get(id).appended(path, tail);
+      ids.map(async (id) => {
+        if (deleted) await subscriptions.get(id).deleted(path);
+        else if (news) await subscriptions.get(id).appended(path, tail);
       }),
     );
+    return news ? ids : [];
   }
 
-  return async (request: Request, env: Env): Promise<Response> => {
+  /** A request to a stream: the server's answer, and the subscriptions told of what it wrote. */
+  async function stream(request: Request, env: Env) {
     const url = new URL(request.url);
-    if (url.pathname === control || url.pathname.startsWith(`${control}/`))
-      return controlRoute(request, env, url);
     const response = await options.streams(request, env);
+    let subscribers: string[] = [];
     if (url.pathname.startsWith(`${root}/`)) {
       try {
-        await told(request, response, url.pathname.slice(root.length + 1));
+        subscribers = await told(request, response, url.pathname.slice(root.length + 1));
       } catch (error) {
-        // The write itself stands. The subscribers hear of it with the stream's next write.
+        // The write itself stands. The subscribers hear of it with the stream's next write, or
+        // at the next check (recheck).
         console.error("streams: couldn't tell subscribers of a write to", url.pathname, error);
       }
     }
-    return response;
+    return { response, subscribers };
+  }
+
+  const JSON_TYPE = { "content-type": "application/json" };
+
+  return {
+    /** Any request under the root, from a route that catches them all. */
+    async handle(request: Request, env: Env): Promise<Response> {
+      const url = new URL(request.url);
+      if (url.pathname === control || url.pathname.startsWith(`${control}/`))
+        return controlRoute(request, env, url);
+      return (await stream(request, env)).response;
+    },
+
+    /**
+     * From the app's own code: add events to a JSON stream, making the stream if it isn't there.
+     * `origin` is the address the app is served at. Answers with where the stream now ends, and
+     * the subscriptions that were told.
+     */
+    async append(env: Env, origin: string, path: string, events: unknown) {
+      const url = `${origin}${root}/${relative(path)}`;
+      const add = () =>
+        stream(
+          new Request(url, { method: "POST", headers: JSON_TYPE, body: JSON.stringify(events) }),
+          env,
+        );
+      let added = await add();
+      if (added.response.status === 404) {
+        await stream(new Request(url, { method: "PUT", headers: JSON_TYPE }), env);
+        added = await add();
+      }
+      if (!added.response.ok)
+        throw new Error(`stream ${path}: ${added.response.status} ${await added.response.text()}`);
+      return {
+        offset: added.response.headers.get("stream-next-offset") ?? ZERO_OFFSET,
+        subscribers: added.subscribers,
+      };
+    },
+
+    /**
+     * From the app's own code: make sure a subscription is there (the same request as its PUT).
+     * Answers whether it was made now.
+     */
+    async subscribe(env: Env, origin: string, id: string, input: Record<string, unknown>) {
+      const response = await controlRoute(
+        new Request(`${origin}${control}/subscriptions/${encodeURIComponent(id)}`, {
+          method: "PUT",
+          headers: JSON_TYPE,
+          body: JSON.stringify(input),
+        }),
+        env,
+        new URL(`${origin}${control}/subscriptions/${encodeURIComponent(id)}`),
+      );
+      if (!response.ok)
+        throw new Error(`subscription ${id}: ${response.status} ${await response.text()}`);
+      return response.status === 201;
+    },
+
+    /**
+     * Look at where each stream a subscription follows by name ends now, and wake the subscriber
+     * if that's past what it has acknowledged. For a wake lost between a write and telling the
+     * subscribers: run now and then (a daily job).
+     */
+    async recheck(env: Env, origin: string, id: string): Promise<void> {
+      const found = (await subscriptions.get(id).read()) as {
+        streams: { path: string }[];
+      } | null;
+      if (!found) return;
+      const base = `${origin}${root}`;
+      await Promise.all(
+        found.streams.map(async ({ path }) => {
+          const tail = await tailOf(base, path, env);
+          if (tail > ZERO_OFFSET) await subscriptions.get(id).appended(path, tail);
+        }),
+      );
+    },
   };
 }
