@@ -11,6 +11,7 @@ import { createStreams } from "streams";
 import { Directory } from "../durable-objects/stream-directory.ts";
 import { Signing } from "../durable-objects/stream-signing.ts";
 import { Subscriptions } from "../durable-objects/stream-subscriptions.ts";
+import { RecentActions } from "../durable-objects/recent-actions.ts";
 import { Streams } from "../durable-objects/streams.ts";
 
 /** Where the streams are mounted. */
@@ -67,20 +68,47 @@ export function streamOf(viewer: string) {
       }),
     add: (event: ActivityEvent) =>
       object.fetch(url, { method: "POST", headers: JSON_TYPE, body: JSON.stringify(event) }),
+    /** Where it ends now; "-1" (its start) if it isn't there. */
+    async end(): Promise<string> {
+      const head = await object.fetch(url, { method: "HEAD" });
+      return (head.ok && head.headers.get("stream-next-offset")) || "-1";
+    },
+    /** Its events after `offset`, up to where it ends now, and that end. */
+    async since(offset: string): Promise<{ events: unknown[]; offset: string }> {
+      const events: unknown[] = [];
+      let at = offset;
+      for (;;) {
+        const read = await object.fetch(`${url}?offset=${encodeURIComponent(at)}`);
+        if (!read.ok) return { events, offset: at };
+        events.push(...((await read.json()) as unknown[]));
+        at = read.headers.get("stream-next-offset") ?? at;
+        if (read.headers.get("stream-up-to-date") === "true") return { events, offset: at };
+      }
+    },
   };
 }
 
 /**
  * One event of the control plane, added to the end of a viewer's stream; the stream is made by its
  * first event. Straight to the stream's own object: nothing subscribes to a viewer's stream, and
- * every step of every action is written here, so it doesn't stop to look for subscribers.
+ * every step of every action is written here, so it doesn't stop to look for subscribers. Where
+ * each action starts is noted (durable-objects/recent-actions.ts), for recent() below.
  */
 export async function append(viewer: string, event: ActivityEvent) {
   const stream = streamOf(viewer);
+  if (event.type === "started") await RecentActions.get(viewer).started(await stream.end());
   let added = await stream.add(event);
   if (added.status === 404) {
     await stream.create();
     added = await stream.add(event);
   }
   if (!added.ok) throw new Error(`Stream of ${viewer}: ${added.status} ${await added.text()}`);
+}
+
+/**
+ * A viewer's latest actions' events, and the offset they go up to: what a page starts with
+ * (packages/activity's pane), reading on from that offset itself.
+ */
+export async function recent(viewer: string) {
+  return streamOf(viewer).since(await RecentActions.get(viewer).from());
 }

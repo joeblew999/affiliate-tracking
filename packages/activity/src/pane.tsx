@@ -17,7 +17,20 @@ import { ActivityEvent, apply, shown, type Action } from "./model.ts";
 type Props = {
   /** Whose activity: the signed-in user's id, or "admins" for an admin. */
   viewer: string;
+  /**
+   * Their latest events when the page was made, and the offset those go up to. The pane starts
+   * with them and reads on from that offset, so nothing between the page being made and the pane
+   * connecting is missed. Without it, the pane reads the stream from its start.
+   */
+  initial?: { events: unknown[]; offset: string } | null;
 };
+
+/** The actions a list of events tells of. */
+function actionsOf(events: unknown[]): Map<string, Action> {
+  const all = new Map<string, Action>();
+  for (const event of events) apply(all, ActivityEvent.parse(event));
+  return all;
+}
 
 const STATE_WORDS: Record<Action["state"], string> = {
   running: "running",
@@ -25,9 +38,14 @@ const STATE_WORDS: Record<Action["state"], string> = {
   failed: "failed",
 };
 
-export function ActivityPane({ viewer }: Props) {
-  const [actions, setActions] = useState<Action[]>([]);
-  const [live, setLive] = useState<"connecting" | "connected" | "reconnecting">("connecting");
+export function ActivityPane({ viewer, initial }: Props) {
+  const [actions, setActions] = useState<Action[]>(() =>
+    initial ? shown(actionsOf(initial.events)) : [],
+  );
+  // With what the page came with, it already shows everything so far.
+  const [live, setLive] = useState<"connecting" | "connected" | "reconnecting">(
+    initial ? "connected" : "connecting",
+  );
   // Open or closed stays as the person left it, from page to page (this browser only).
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -87,12 +105,12 @@ export function ActivityPane({ viewer }: Props) {
   useEffect(() => {
     const stop = new AbortController();
     // Every action the stream has told of, worked out from its events as they're read.
-    const all = new Map<string, Action>();
+    const all = initial ? actionsOf(initial.events) : new Map<string, Action>();
     // Reading what was already there isn't news: only what arrives after it reloads the page.
-    let caughtUp = false;
+    let caughtUp = Boolean(initial);
     void stream<unknown>({
       url: new URL(`/streams/${viewer}`, location.origin).href,
-      offset: "-1",
+      offset: initial?.offset ?? "-1",
       // One connection, held open (server-sent events): who may read is asked once, when it
       // opens, so the read isn't refused halfway when the session changes under it (an admin
       // viewing the program as a partner, and coming back).

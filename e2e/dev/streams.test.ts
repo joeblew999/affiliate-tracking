@@ -1,5 +1,6 @@
 // The control plane's streams (apps/shop/durable-objects/streams.ts): what the shop's work is
-// written to, read in a browser from the shop's own address (routes/streams/[...path].ts).
+// written to, read in a browser (routes/streams/[...path].ts, and the service's route of the same
+// name, which passes the request on to the shop).
 import { expect, test } from "vite-plus/test";
 import {
   activity,
@@ -13,16 +14,14 @@ import {
 } from "./helpers.ts";
 
 test("an admin reads the admins' stream: what's there, then what's added, live", async () => {
-  const { page, context } = await admin();
+  const { page } = await admin();
   await open(page, `${AFFILIATES}/admin`);
   const pane = await activity(page);
   await addBonus(demoPartner("ana").name, "10", "First");
   await pane.finished("Bonus");
 
-  // A second tab of the admin's browser, on the shop, where the streams are.
-  const reader = await context.newPage();
-  await open(reader, SHOP);
-  const sofar = await reader.evaluate(async () => {
+  // Read from the admin's own page, on the service's address: its /streams passes on to the shop.
+  const sofar = await page.evaluate(async () => {
     const response = await fetch("/streams/admins?offset=-1");
     return {
       status: response.status,
@@ -35,7 +34,7 @@ test("an admin reads the admins' stream: what's there, then what's added, live",
 
   // From where that read ended, live: the next action started arrives by itself.
   const before = await pane.seen();
-  const arrived = reader.evaluate(
+  const arrived = page.evaluate(
     (offset) =>
       new Promise<string>((resolve) => {
         const source = new EventSource(`/streams/admins?offset=${offset}&live=sse`);
@@ -50,7 +49,6 @@ test("an admin reads the admins' stream: what's there, then what's added, live",
   await addBonus(demoPartner("ana").name, "20", "Second");
   expect(await arrived).toContain("Bonus");
   await pane.finished("Bonus", { after: before });
-  await reader.close();
 });
 
 test("someone who isn't an admin can't read the admins' stream", async () => {

@@ -6,15 +6,16 @@
 import { HTTPException } from "hono/http-exception";
 import { defineMiddleware } from "void";
 import { env } from "void/env";
-import { currentUser, signInUrl, type User } from "../src/user.ts";
+import { currentUser, signInUrl, toShop, type User } from "../src/user.ts";
 
 declare module "void" {
   interface CloudContextVariables {
     shopUser: User | null;
     shared: {
       shopUrl: string;
-      /** Whose activity this page's Activity pane shows. */
+      /** Whose activity this page's Activity pane shows, and their latest when the page was made. */
       viewer: string | null;
+      activity: { events: unknown[]; offset: string } | null;
       user: { email: string; isAdmin: boolean; viewingAs: string | null } | null;
     };
   }
@@ -28,6 +29,17 @@ declare module "void" {
 const PUBLIC_PREFIXES = ["/api/auth/", "/r/", "/api/host/", "/api/stripe/", "/streams/"];
 const PAGES = new Set(["/", "/admin"]);
 
+/** A viewer's latest activity, from the shop (its /api/affiliates/recent). */
+async function recentActivity(c: Parameters<typeof toShop>[0], viewer: string) {
+  const res = await toShop(
+    c,
+    new Request(new URL(`/api/affiliates/recent?viewer=${encodeURIComponent(viewer)}`, c.req.url), {
+      headers: { authorization: `Bearer ${env.AFFILIATES_HOST_TOKEN}` },
+    }),
+  );
+  return res.ok ? ((await res.json()) as { events: unknown[]; offset: string }) : null;
+}
+
 export default defineMiddleware(async (c, next) => {
   const path = c.req.path;
   if (PUBLIC_PREFIXES.some((prefix) => path.startsWith(prefix))) {
@@ -36,9 +48,13 @@ export default defineMiddleware(async (c, next) => {
   }
   const user = await currentUser(c);
   c.set("shopUser", user);
+  const viewer = user ? (user.role === "admin" ? "admins" : user.id) : null;
   c.set("shared", {
     shopUrl: env.HOST_SITE_URL,
-    viewer: user ? (user.role === "admin" ? "admins" : user.id) : null,
+    viewer,
+    // Only for a page itself: asked of the shop, which has the streams.
+    activity:
+      viewer && PAGES.has(path) && c.req.method === "GET" ? await recentActivity(c, viewer) : null,
     user: user && {
       email: user.email,
       isAdmin: user.role === "admin",

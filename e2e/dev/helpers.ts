@@ -132,9 +132,7 @@ export async function signUp(name = "Test User", { via }: { via?: string } = {})
   const email = `${crypto.randomUUID()}@example.test`;
   // The shop passes each new user to the service through its queue: done once the sign-up's
   // action is, as the admin's control plane shows it.
-  const watcher = await admin();
-  await open(watcher.page, `${AFFILIATES}/admin`);
-  const pane = await activity(watcher.page);
+  const pane = await activity(await adminPage());
   const before = await pane.seen();
   await createAccount(page, name, email);
   await pane.finished("Sign up", { after: before });
@@ -356,14 +354,22 @@ export async function linksOf(person: Person) {
 
 /** Open a tab of the admin page. */
 export async function adminTab(tab: RegExp) {
-  const { page } = await admin();
-  // Already there: the page keeps itself up to date (it reloads its data when an action finishes,
-  // and finished() below waits for that), so it isn't opened again to look.
-  const there = new URL(page.url());
-  if (`${there.origin}${there.pathname}${there.search}` !== `${AFFILIATES}/admin`)
-    await open(page, `${AFFILIATES}/admin`);
+  const page = await adminPage();
   await page.getByRole("tab", { name: tab }).click();
   return page.getByRole("tabpanel");
+}
+
+/**
+ * The admin's browser, on the service's admin page. Opened only if it isn't there already: the
+ * page keeps itself up to date (it reloads its data when an action finishes, and finished() waits
+ * for that), so nothing opens it again just to look, or to watch its Activity pane.
+ */
+export async function adminPage(): Promise<Page> {
+  const { page } = await admin();
+  const there = page.url() === "about:blank" ? null : new URL(page.url());
+  if (!there || `${there.origin}${there.pathname}${there.search}` !== `${AFFILIATES}/admin`)
+    await open(page, `${AFFILIATES}/admin`);
+  return page;
 }
 
 /** A partner's sales (bonuses and clawbacks too), as the admin's Sales tab shows them. */
@@ -451,8 +457,7 @@ export async function addRule(
  * done once that action is. Before each test file (each-file.ts).
  */
 export async function resetDemo(): Promise<void> {
-  const { page } = await admin();
-  await open(page, `${AFFILIATES}/admin`);
+  const page = await adminPage();
   const pane = await activity(page);
   const before = await pane.seen();
   await press(page, page.getByRole("button", { name: "Reset demo" }));
@@ -563,9 +568,7 @@ export async function stripeEvent(
   });
   // The shop queues each event for the service: done once that webhook's action is, in the admin's
   // control plane.
-  const { page } = await admin();
-  await open(page, `${AFFILIATES}/admin`);
-  const pane = await activity(page);
+  const pane = await activity(await adminPage());
   const before = await pane.seen();
   const res = await fetch(`${SHOP}/api/auth/stripe/webhook`, {
     method: "POST",
@@ -614,9 +617,7 @@ export async function sell(partner: Partner, overrides: Record<string, unknown> 
  */
 export async function runCron(cron: string, { daysLater = 0 } = {}): Promise<void> {
   // The run is an action of its own in the admin's control plane: done once that is.
-  const { page } = await admin();
-  await adminTab(/^Sales/);
-  const pane = await activity(page);
+  const pane = await activity(await adminPage());
   const before = await pane.seen();
   const res = await fetch(`${AFFILIATES}/__void/scheduled`, {
     method: "POST",
