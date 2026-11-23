@@ -89,8 +89,10 @@ export async function recordCheckoutSale(session: Stripe.Checkout.Session, event
   const at = event.created * 1000;
   // Lowercase: one customer however they typed it (counted in src/stats.ts, capped in src/commission.ts).
   const customerEmail = session.customer_details?.email?.toLowerCase() ?? null;
+  // Commission is on the price, not the tax Stripe collected with it (Stripe Tax, or Managed
+  // Payments, where Stripe withholds it).
   const commission = await computeCommission(partner, {
-    amountCents,
+    amountCents: amountCents - (session.total_details?.amount_tax ?? 0),
     currency,
     customerEmail,
     at,
@@ -98,7 +100,7 @@ export async function recordCheckoutSale(session: Stripe.Checkout.Session, event
       productId: items[i]?.productId ?? null,
       priceId: line.price?.id ?? null,
       quantity: line.quantity ?? 1,
-      amountCents: line.amount_total,
+      amountCents: line.amount_total - line.amount_tax,
     })),
   });
   const fraudReason = await selfReferralReason(partner, {

@@ -47,7 +47,12 @@ can't drift from the code. Only the clicks behind the charts are generated, from
 - **Stripe stays with the host.** The shop sells one plan, Pro, through its Better Auth Stripe
   plugin: Stripe's Checkout and the subscription. The plugin receives Stripe's webhook and
   passes every event on. The service turns them into sales, renewals, refunds and disputes, and
-  pays partners with Stripe Connect.
+  pays partners with Stripe Connect. A partner without a Stripe Connect account gets a manual
+  payout, for the admin to pay by hand.
+- **Tax is Stripe's.** A host that charges tax turns on Stripe Tax in its checkout. Commission is
+  on the price, not the tax Stripe collected with it. Stripe's Managed Payments (Stripe as merchant
+  of record) can't be used with this: Stripe doesn't allow it on an account that's a Connect
+  platform.
 - **Slow work goes through queues.** Sign-ups reach the service through a queue. Payouts are queued
   one partner at a time. A daily job approves sales once their hold period is over, and queues any
   payout that didn't finish, so a crash can't leave one half done.

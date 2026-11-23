@@ -81,8 +81,11 @@ export async function recordRenewal(invoice: Stripe.Invoice, event: Stripe.Event
     variant: null,
     quantity: line.quantity ?? 1,
   }));
+  // Commission is on the price, not the tax Stripe collected with it (as for a sale: src/sales.ts).
+  const tax = (taxes: { amount: number }[] | null | undefined) =>
+    (taxes ?? []).reduce((sum, t) => sum + t.amount, 0);
   const commission = await computeCommission(first.partner, {
-    amountCents: invoice.amount_paid,
+    amountCents: invoice.amount_paid - tax(invoice.total_taxes),
     currency,
     customerEmail: invoice.customer_email?.toLowerCase() ?? null,
     at: paidAt,
@@ -90,7 +93,8 @@ export async function recordRenewal(invoice: Stripe.Invoice, event: Stripe.Event
       productId: items[i]?.productId ?? null,
       priceId: idOf(line.pricing?.price_details?.price),
       quantity: line.quantity ?? 1,
-      amountCents: line.amount,
+      // A line's amount includes its tax only when the price includes tax.
+      amountCents: line.amount - tax(line.taxes?.filter((t) => t.tax_behavior === "inclusive")),
     })),
   });
   const paymentIntent = await invoicePaymentIntent(invoice);

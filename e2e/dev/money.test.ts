@@ -54,7 +54,8 @@ test("a renewal pays the first sale's partner for their recurring months, once p
     id: `in_test_maya_2_${n}`,
     object: "invoice",
     billing_reason: "subscription_cycle",
-    amount_paid: 2900,
+    amount_paid: 3190, // $29 and 10% tax, which earns nothing
+    total_taxes: [{ amount: 290, tax_behavior: "exclusive" }],
     currency: "usd",
     customer: "cus_demo_maya_2",
     customer_email: "maya_2@customer.demo.test",
@@ -80,4 +81,14 @@ test("a renewal pays the first sale's partner for their recurring months, once p
   await setRenewalMonths(maya.name, 3);
   await stripeEvent("invoice.paid", invoice(2));
   expect(await renewals()).toHaveLength(before.length + 1);
+});
+
+test("commission is on the price, not the tax collected with it", async () => {
+  // Leo, 20%: a $50 sale with $5 tax on top earns 20% of $50.
+  const leo = await seededPartner("leo");
+  const customer = await sell(leo, {
+    amount_total: 5500,
+    total_details: { amount_discount: 0, amount_shipping: 0, amount_tax: 500 },
+  });
+  expect(await commissionOf(leo, [customer])).toEqual([1000]);
 });
