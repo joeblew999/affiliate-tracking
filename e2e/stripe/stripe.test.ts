@@ -81,7 +81,7 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
   );
 
   test("approved and paid out: the partner's commission, in the payouts account's currency", async () => {
-    await decideSale(tomsBuyer.email, "Approve");
+    await decideSale(tom.name, tomsBuyer.email, "Approve");
     await runPayouts();
     const charge = (await ticketPayment(tomsBuyer)).latest_charge;
     const txn = charge && typeof charge === "object" ? charge.balance_transaction : null;

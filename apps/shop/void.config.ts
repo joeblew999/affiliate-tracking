@@ -15,6 +15,9 @@ export default defineConfig({
   // Who the shop's emails (events going on sale) are from. Deploying sets up sending from this
   // domain on the Cloudflare account; locally it's the sender in the dev inbox.
   email: { from: "Example shop <events@shop.ubuntusoftware.net>" },
+  // Email on, though no file here imports void/email itself: the shop sends through the control
+  // plane's wrapper (src/activity.ts), which Void's scan of the app doesn't see.
+  inference: { bindings: { email: true } },
   // AFFILIATES: the affiliate service (apps/affiliates), called through its client.
   cloudflare: {
     name: "shop",

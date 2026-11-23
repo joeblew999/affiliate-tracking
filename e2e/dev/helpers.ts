@@ -213,9 +213,7 @@ export async function apply(person: Person): Promise<void> {
 
 /** The admin page's row for this partner, on its Partners tab. */
 async function partnerRow(name: string) {
-  const { page } = await admin();
-  await open(page, `${AFFILIATES}/admin`);
-  return page.getByRole("row").filter({ hasText: name });
+  return (await adminTab(/^Partners/)).getByRole("row").filter({ hasText: name });
 }
 
 /**
@@ -397,9 +395,14 @@ export async function saleOf(name: string, sale: string | Record<string, unknown
 }
 
 /** An admin's decision on a sale (Approve, Reject, Back to pending), found by its customer. */
-export async function decideSale(customer: string, decision: string): Promise<void> {
+export async function decideSale(
+  partner: string,
+  customer: string,
+  decision: string,
+): Promise<void> {
   const panel = await adminTab(/^Sales/);
-  const row = panel.getByRole("row").filter({ hasText: customer });
+  // The partner's row: a ticket also has a row for its event's organiser, with the same customer.
+  const row = panel.getByRole("row").filter({ hasText: customer }).filter({ hasText: partner });
   await press((await admin()).page, row.getByRole("button", { name: decision, exact: true }));
 }
 
@@ -542,12 +545,19 @@ export async function stripeEvent(
     payload,
     secret: globalThis.apps.webhookSecret,
   });
+  // The shop queues each event for the service: done once that webhook's action is, in the admin's
+  // control plane.
+  const { page } = await admin();
+  await open(page, `${AFFILIATES}/admin`);
+  const pane = await activity(page);
+  const before = await pane.seen();
   const res = await fetch(`${SHOP}/api/auth/stripe/webhook`, {
     method: "POST",
     headers: { "stripe-signature": signature },
     body: payload,
   });
   if (!res.ok) throw new Error(`${type}: ${res.status} ${await res.text()}`);
+  await pane.finished("Stripe webhook", { step: `Stripe ${type}`, after: before });
   return res;
 }
 

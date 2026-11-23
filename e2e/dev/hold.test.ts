@@ -21,7 +21,7 @@ test("25 days on, the daily job approves the sales past their hold, and only tho
     payment_intent: disputed.paymentIntent,
     status: "needs_response",
   });
-  await decideSale(seededSale("priya_3").customer, "Reject");
+  await decideSale(demoPartner("priya").name, seededSale("priya_3").customer, "Reject");
 
   await runCron(DAILY, { daysLater: 25 });
   expect({
