@@ -10,6 +10,7 @@
 import type { SaleItem } from "./schema.ts";
 import { defineSeed } from "void/seed";
 import {
+  customerOf,
   demoPayouts,
   demoPeople,
   demoProducts,
@@ -17,6 +18,7 @@ import {
   demoSales,
   fixtureId,
   HOLD_DAYS,
+  paymentIntentOf,
 } from "../demo.ts";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -128,11 +130,10 @@ export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) =
       status: s.status,
       stripeSessionId: s.kind === "checkout" ? `cs_demo_${s.label}` : null,
       stripeInvoiceId: s.kind === "renewal" ? `in_demo_${s.label}` : null,
-      paymentIntent: product ? `pi_demo_${s.label}` : null,
+      paymentIntent: product ? paymentIntentOf(s.label) : null,
       stripeCustomerId: product ? `cus_demo_${first}` : null,
       stripeSubscriptionId: product?.variant === "Monthly" ? `sub_demo_${first}` : null,
-      customerEmail:
-        s.kind === "bonus" ? null : (s.customerEmail ?? `${s.of ?? s.label}@customer.demo.test`),
+      customerEmail: customerOf(s),
       customerCountry: product ? "US" : null,
       amountCents: product?.cents ?? 0,
       currency: "usd",
@@ -156,7 +157,7 @@ export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) =
   const refunds = demoSales
     .filter((s) => s.refundedCents)
     .map((s) => ({
-      paymentIntent: `pi_demo_${s.label}`,
+      paymentIntent: paymentIntentOf(s.label),
       refundedCents: s.refundedCents ?? 0,
       createdAt: ago(s.daysAgo),
     }));

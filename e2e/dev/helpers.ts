@@ -7,7 +7,14 @@ import { chromium, type Browser, type BrowserContext, type Locator, type Page } 
 import Stripe from "stripe";
 import { expect } from "vite-plus/test";
 import { affiliates } from "../../apps/affiliates/client.ts";
-import { DEMO_PASSWORD, demoPeople } from "../../apps/affiliates/demo.ts";
+import {
+  customerOf,
+  DEMO_PASSWORD,
+  demoPeople,
+  demoSales,
+  fixtureId,
+  paymentIntentOf,
+} from "../../apps/affiliates/demo.ts";
 
 /** This test file's two apps (each-file.ts, ../apps.ts); none in a suite that's skipped. */
 export const SHOP = globalThis.apps?.shop ?? "";
@@ -161,27 +168,27 @@ export async function setRenewalMonths(name: string, months: number): Promise<vo
   expect(await (await partnerRow(name)).getByLabel(label).inputValue()).toBe(String(months));
 }
 
-/** Have every sale of this partner reviewed by an admin; done once their row says so. */
-export async function reviewEverySale(name: string): Promise<void> {
-  const row = await partnerRow(name);
-  await row.getByRole("button", { name: /^More for / }).click();
-  await (await admin()).page.getByRole("menuitem", { name: "Review every sale" }).click();
-  await row.getByText("every sale reviewed").waitFor();
-}
-
 export interface Partner extends Person {
   /** Their code: their referral link is /r/<code>. */
   code: string;
 }
 
-/** A shop user who applied and an admin approved: an active partner, with a name of their own. */
-export async function activePartner(name = "Nick"): Promise<Partner> {
-  const person = await signUp(`${name} ${crypto.randomUUID().slice(0, 6)}`);
-  await apply(person);
-  await partnerButton(person.name, "Approve");
-  const me = await partnerMe(person);
-  return { ...person, code: me.link.split("/r/")[1] ?? "" };
+/** A seeded partner (apps/affiliates/demo.ts, by their code), signed in. */
+export async function seededPartner(code: string): Promise<Partner> {
+  const person = demoPeople.find((p) => p.partner?.code === code);
+  if (!person) throw new Error(`no demo partner ${code}`);
+  return { ...(await signInAs(person.email)), code };
 }
+
+/** A seeded sale (apps/affiliates/demo.ts), with its customer and Stripe payment as seeded. */
+export function seededSale(label: string) {
+  const sale = demoSales.find((s) => s.label === label);
+  if (!sale) throw new Error(`no demo sale ${label}`);
+  return { ...sale, customer: customerOf(sale) ?? "", paymentIntent: paymentIntentOf(label) };
+}
+
+/** A seeded partner's id: made from their label, as the seed makes it. */
+export const seededPartnerId = (code: string) => fixtureId(`partner:${code}`);
 
 /** An amount as a page shows it ("$12.50", "-$5.00"), in minor units. */
 export function cents(text: string): number {
@@ -278,9 +285,11 @@ export async function salesOf(name: string) {
   return out;
 }
 
-/** The sale of this paid checkout, found by its customer's email. */
-export async function saleOf(name: string, session: Record<string, unknown>) {
-  const email = (session.customer_details as { email?: string } | null)?.email?.toLowerCase();
+/** A sale, by its customer's email, or the paid checkout it came from. */
+export async function saleOf(name: string, sale: string | Record<string, unknown>) {
+  const email = (
+    typeof sale === "string" ? sale : (sale.customer_details as { email?: string } | null)?.email
+  )?.toLowerCase();
   // A clawback shows its sale's customer too: the sale is the one that isn't a clawback.
   return (await salesOf(name)).find((s) => s.customer === email && !s.notes.startsWith("clawback"));
 }
@@ -446,15 +455,18 @@ export async function eventually(check: () => Promise<void>): Promise<void> {
   }
 }
 
-/** Run one of the service's crons now, through Void's dev endpoint (guide/jobs.md). */
-export async function runCron(cron: string): Promise<void> {
+/**
+ * Run one of the service's crons, through Void's dev endpoint (guide/jobs.md): as of now, or as of
+ * `daysLater` days on, so the seeded sales have aged that much for it.
+ */
+export async function runCron(cron: string, { daysLater = 0 } = {}): Promise<void> {
   const res = await fetch(`${AFFILIATES}/__void/scheduled`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       "x-void-dev-trigger": globalThis.apps.cronToken,
     },
-    body: JSON.stringify({ cron, scheduledTime: now() }),
+    body: JSON.stringify({ cron, scheduledTime: now() + daysLater * 24 * 60 * 60 * 1000 }),
   });
   if (!res.ok) throw new Error(`cron ${cron}: ${res.status} ${await res.text()}`);
 }

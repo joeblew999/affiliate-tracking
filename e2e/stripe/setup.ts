@@ -2,7 +2,8 @@
 // shell (a test-mode key: sk_test_… or rk_test_…; anything else is refused). Prepares the seeded
 // apps as the dev tests do (../apps.ts), and has every file start them with that key, a new test
 // coupon (the partners' buyer discount), and the payout currency set to the Stripe account's own,
-// so the "other currency" sale really is in another currency. Deletes the coupon after. Runs only
+// so the "other currency" sale really is in another currency. Deletes the coupon and turns off
+// its promotion codes after. Runs only
 // when asked for by name.
 import Stripe from "stripe";
 import type { TestProject } from "vite-plus/test/node";
@@ -48,6 +49,9 @@ export default async function setup(project: TestProject) {
   project.provide("saleCurrency", payoutCurrency === "eur" ? "gbp" : "eur");
   return async () => {
     removeApps(template);
+    // The seeded partners' codes (SAM) come back every run: free them for the next one.
+    for await (const promo of stripe.promotionCodes.list({ coupon: coupon.id, active: true }))
+      await stripe.promotionCodes.update(promo.id, { active: false });
     await stripe.coupons.del(coupon.id);
   };
 }

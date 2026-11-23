@@ -552,6 +552,15 @@ export const demoRules = [
   },
 ];
 
+/** A seeded sale's customer: a renewal's or clawback's is its first sale's; a bonus has none. */
+export function customerOf(sale: Pick<DemoSale, "label" | "kind" | "of" | "customerEmail">) {
+  if (sale.kind === "bonus") return null;
+  return sale.customerEmail ?? `${sale.of ?? sale.label}@customer.demo.test`;
+}
+
+/** A seeded sale's Stripe payment, by its label. */
+export const paymentIntentOf = (label: string) => `pi_demo_${label}`;
+
 /** A fixture's id, made from its label: the same on every load, as Rails' fixtures do it. */
 export function fixtureId(label: string): string {
   // FNV-1a, four ways, for 32 hex digits, in a UUID's shape.

@@ -5,14 +5,15 @@
 import Stripe from "stripe";
 import { describe, expect, inject, test } from "vite-plus/test";
 import {
-  activePartner,
   checkoutVia,
   decideSale,
   eventually,
   partnerMe,
+  partnerButton,
   payoutsOf,
   runPayouts,
-  salesOf,
+  saleOf,
+  seededPartner,
   shop,
   stripeEvent,
   type Partner,
@@ -61,10 +62,12 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
   }
 
   test("approving a partner makes their promotion code in Stripe; typing it at checkout makes the sale theirs", async () => {
-    const nick = await activePartner("Nick Stripe");
-    const promo = (await partnerMe(nick)).promoCode;
-    expect(promo).toBe(nick.code.toUpperCase());
-    const partnerId = (await checkoutVia(nick)).metadata.affiliate_partner_id;
+    // Sam, waiting for approval in the seed: approving him makes his code.
+    const partner = await seededPartner("sam");
+    await partnerButton(partner.name, "Approve");
+    const promo = (await partnerMe(partner)).promoCode;
+    expect(promo).toBe(partner.code.toUpperCase());
+    const partnerId = (await checkoutVia(partner)).metadata.affiliate_partner_id;
     const found = await stripe().promotionCodes.list({ code: promo ?? "", limit: 1 });
     expect(found.data[0]?.metadata).toMatchObject({ partner_id: partnerId });
 
@@ -84,7 +87,8 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
   });
 
   test("a sale in another currency is paid out at the rate Stripe settled it at", async () => {
-    const nick = await activePartner("Nick FX");
+    // Tom: every sale of his is reviewed, and he has nothing ready, so the payout is this sale's.
+    const partner = await seededPartner("tom");
     const intent = await pay(5000, inject("saleCurrency"));
     const charge = intent.latest_charge;
     const txn = charge && typeof charge === "object" ? charge.balance_transaction : null;
@@ -92,7 +96,7 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
       throw new Error("no settled charge");
     expect(txn.currency).toBe(inject("payoutCurrency"));
 
-    await decideSale(await sell(nick, intent), "Approve");
+    await decideSale(await sell(partner, intent), "Approve");
     await runPayouts();
 
     const expected = Math.round((1000 * txn.amount) / charge.amount); // 20% of 5000, converted
@@ -101,16 +105,16 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
       currency: inject("payoutCurrency").toUpperCase(),
     }).format(expected / 100);
     await eventually(async () => {
-      expect(await payoutsOf(nick.name)).toEqual([
+      expect(await payoutsOf(partner.name)).toEqual([
         { amount: shown, amountCents: expected, status: "manual" },
       ]);
     });
   });
 
   test("a real refund marks the sale refunded", async () => {
-    const nick = await activePartner("Nick Refund");
+    const partner = await seededPartner("priya");
     const intent = await pay(3000, inject("payoutCurrency"));
-    await sell(nick, intent);
+    const customer = await sell(partner, intent);
     await stripe().refunds.create({ payment_intent: intent.id });
     const charge = await stripe().charges.retrieve(
       typeof intent.latest_charge === "string"
@@ -118,6 +122,6 @@ describe.skipIf(skip)(`Stripe end-to-end${skip ? ` (${skip})` : ""}`, () => {
         : (intent.latest_charge?.id ?? ""),
     );
     await stripeEvent("charge.refunded", { ...charge });
-    expect((await salesOf(nick.name)).map((s) => s.status)).toEqual(["refunded"]);
+    expect((await saleOf(partner.name, customer))?.status).toBe("refunded");
   });
 });

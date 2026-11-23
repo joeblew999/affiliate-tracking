@@ -16,7 +16,8 @@ export async function ensurePromotionCode(partner: Partner): Promise<void> {
       code,
       metadata: { partner_id: partner.id },
     },
-    { idempotencyKey: `affiliates_promotion_${partner.id}` },
+    // One per partner and coupon: a new coupon gets new codes.
+    { idempotencyKey: `affiliates_promotion_${partner.id}_${env.AFFILIATES_COUPON_ID}` },
   );
   await db
     .update(partners)

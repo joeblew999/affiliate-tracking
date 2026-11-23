@@ -2,10 +2,10 @@
 // page fits a phone. Any error on a page fails the test.
 import { devices } from "playwright";
 import { expect, test } from "vite-plus/test";
-import { activePartner, admin, AFFILIATES, newBrowser, open, SHOP } from "./helpers.ts";
+import { admin, AFFILIATES, newBrowser, open, seededPartner, SHOP } from "./helpers.ts";
 
 test("an admin lands on the admin page, views the program as a partner, and comes back", async () => {
-  const pat = await activePartner("Pat Viewed");
+  const pat = await seededPartner("maya");
   const { page, errors } = await admin();
   await open(page, `${AFFILIATES}/`);
   await page.waitForURL(`${AFFILIATES}/admin`);
