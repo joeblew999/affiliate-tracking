@@ -187,8 +187,7 @@ its steps and the error, and so does a server error on any page. A failed test a
 apps printed.
 
 Files run one after another, not side by side: the program is one program, and a payout run or
-the daily job touches everyone in it. Running them together needs the program split by a key
-(`plans/2026-11-23-06-streams.md`).
+the daily job touches everyone in it. A deployment is one program, so that's how it stays.
 
 CI (`.github/workflows/ci.yml`) runs the first four on every push.
 
