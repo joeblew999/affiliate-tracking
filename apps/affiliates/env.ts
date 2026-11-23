@@ -40,6 +40,9 @@ export default defineEnv({
   // A Stripe coupon (the buyer discount). With it, each partner gets a promotion code for it when
   // approved; checkouts through them get the discount.
   AFFILIATES_COUPON_ID: string().optional(),
+  // Set (to anything) on a demo site only: admins get a "Reset demo" button that deletes everything
+  // in the program and loads the demo again (src/demo-reset.ts). Never on a real program.
+  AFFILIATES_DEMO: string().optional(),
   // Pins the service's clock (src/clock.ts) to this instant (ISO 8601), for tests and the local
   // demo: the demo fixtures are dated from it. Unset in production: the real time.
   AFFILIATES_NOW: string().optional(),

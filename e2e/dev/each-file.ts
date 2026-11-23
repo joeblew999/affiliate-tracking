@@ -1,29 +1,26 @@
-// Before each test file: both apps started from the run's seeded template (../apps.ts), so the
-// file starts from exactly the demo fixtures. Each test starts with nothing failed (helpers.ts
-// fails a test the moment either app reports an error). After it: its browsers closed, its apps stopped.
-// (The Stripe suite, when not asked for, has no template and starts nothing.)
-import { afterAll, beforeEach, inject, onTestFailed } from "vite-plus/test";
-import { startApps, type Apps } from "../apps.ts";
+// Before each test file: the run's two apps (../apps.ts), with the demo put back as it was, by the
+// admin pressing "Reset demo" (helpers.ts), so the file starts from exactly the fixtures whatever
+// the files before it changed. Each test starts with nothing failed. After the file: its browsers
+// closed. (The Stripe suite, when not asked for, has no apps and does nothing.)
+import { afterAll, beforeAll, beforeEach, inject, onTestFailed } from "vite-plus/test";
+import { systemNow, systemOutput, type System } from "../apps.ts";
 
 declare global {
-  /** This test file's apps (helpers.ts reads them). */
-  var apps: Apps;
+  /** The run's apps (helpers.ts reads them). */
+  var apps: System & { now: () => number };
 }
 
-const template = inject("template");
-if (template) {
-  globalThis.apps = await startApps(template, inject("appEnv"));
-  const { startTest } = await import("./helpers.ts");
+const system = inject("system");
+if (system) {
+  globalThis.apps = { ...system, now: () => systemNow(system) };
+  const { closeBrowsers, resetDemo, startTest } = await import("./helpers.ts");
+  beforeAll(resetDemo);
   beforeEach(() => {
     startTest();
     // A failed test shows what both apps printed, so the failure says what went wrong.
     onTestFailed(() => {
-      console.log(`--- what the apps printed ---\n${globalThis.apps.output()}`);
+      console.log(`--- what the apps printed ---\n${systemOutput(system)}`);
     });
   });
-  afterAll(async () => {
-    const { closeBrowsers } = await import("./helpers.ts");
-    await closeBrowsers();
-    await globalThis.apps.stop();
-  });
+  afterAll(closeBrowsers);
 }

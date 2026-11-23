@@ -1,19 +1,20 @@
-// Both apps for the tests, as Void's own integration tests run theirs (voidzero-dev/void,
-// test/integration-helpers.ts), from the demo fixtures (apps/affiliates/demo.ts):
+// Both apps for the tests, from the demo fixtures (apps/affiliates/demo.ts): started once for the
+// whole run.
 //
-// - prepareApps(), once per run: both apps copied (nothing generated), migrated and seeded with the
-//   fixtures, dated from DEMO_NOW. That seeded state is the template.
-// - startApps(), once per test file: both apps copied again, given a copy of the template's
-//   databases, their own worker names (so their service bindings reach each other and never your
-//   `vp run dev`), free ports and the debugger off, and started. So every file starts from exactly
-//   the fixtures, and nothing a file changes reaches another, or your local data.
+// startSystem(), once per run: both apps copied (nothing generated), migrated and seeded with the
+// fixtures, dated from DEMO_NOW, given their own worker names (so their service bindings reach
+// each other and never your `vp run dev`), free ports and the debugger off, and started. Every
+// test file uses that one running pair. What a file changed is put back before the next by the
+// apps themselves: the service's "Reset demo" (apps/affiliates/src/demo-reset.ts), pressed by the
+// admin like anything else (dev/each-file.ts). So no file pays for the apps starting again.
 //
 // The service's clock is pinned (src/clock.ts): it reads DEMO_NOW when the run starts and runs on
 // from there, so "on hold", "ready" and "the last 30 days" are the same on every run.
-// Copies go in .e2e/ (ignored), inside the repo so Vite serves the linked packages; removed after.
+// The copy goes in .e2e/ (ignored), inside the repo so Vite serves the linked packages; removed after.
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import {
+  appendFileSync,
   cpSync,
   existsSync,
   mkdirSync,
@@ -44,17 +45,9 @@ const GENERATED = new Set([
   "node_modules",
 ]);
 
-/** The run's seeded template, and what every test file's apps share. */
-export interface Template {
-  dir: string;
-  hostToken: string;
-  webhookSecret: string;
-  ipSalt: string;
-  /** The real time (ms) at which the service's clock reads DEMO_NOW. */
-  clockFrom: number;
-}
-
-export interface Apps {
+/** The run's two apps: where they are, and what the tests need to call them. Plain values, so
+ * the run's setup can hand it to every test file. */
+export interface System {
   shop: string;
   affiliates: string;
   hostToken: string;
@@ -63,16 +56,22 @@ export interface Apps {
   cronToken: string;
   /** Void's token for the shop's dev inbox, where its emails are caught (guide/email/sending.md). */
   inboxToken: string;
-  /** Now, by the service's clock. */
-  now: () => number;
-  /**
-   * Call `listener` with the error as soon as either app reports work that failed: a queue job or a
-   * scheduled job (Void logs "[void] … failed" and the error), so a test stops then, not at a timeout.
-   */
-  onFailure: (listener: (error: string) => void) => void;
-  /** What each app has printed lately: shown with a failed test, so it says what went wrong. */
-  output: () => string;
-  stop: () => Promise<void>;
+  /** The real time (ms) at which the service's clock reads DEMO_NOW. */
+  clockFrom: number;
+  /** A file with what both apps have printed: shown with a failed test. */
+  log: string;
+}
+
+/** Now, by the service's clock. */
+export const systemNow = (system: System) => Date.parse(DEMO_NOW) + (Date.now() - system.clockFrom);
+
+/** The end of what the apps have printed. */
+export function systemOutput(system: System): string {
+  try {
+    return readFileSync(system.log, "utf8").slice(-20_000);
+  } catch {
+    return "";
+  }
 }
 
 /** Every app started, to stop when the run ends, however it ends. */
@@ -95,9 +94,6 @@ function killGroup(pid: number) {
     // already gone
   }
 }
-
-/** What an app reports when its own work fails (Void's dev runtime, for queues and crons). */
-const FAILED = /\[void\] (Queue handler|Scheduled job) .* failed/;
 
 /** A free port now (another process could still take it; the app then fails to start, and says so). */
 async function freePort(): Promise<number> {
@@ -172,15 +168,14 @@ function run(cwd: string, args: string[], env: Record<string, string> = {}): Pro
 }
 
 /**
- * `vp dev` in an app's copy on this port; resolves once it says it's listening there. After that,
- * `failed` hears of each failure the app reports, with what it logged.
+ * `vp dev` in an app's copy on this port; resolves once it says it's listening there. What it
+ * prints goes to the run's log.
  */
 function serve(
   cwd: string,
   port: number,
   env: Record<string, string>,
-  failed: (error: string) => void,
-  printed: string[],
+  log: string,
 ): Promise<ChildProcess> {
   const child = spawn(
     "vp",
@@ -194,33 +189,23 @@ function serve(
   );
   running.add(child);
   child.once("exit", () => running.delete(child));
-  let log = "";
+  let started = "";
   let ready = false;
   return new Promise((resolve, reject) => {
     const onData = (chunk: Buffer) => {
       const text = stripVTControlCharacters(chunk.toString());
-      log += text;
-      printed.push(`[${basename(cwd)}] ${text}`);
-      if (printed.length > 400) printed.splice(0, printed.length - 400);
-      if (!ready && log.includes(`http://127.0.0.1:${port}/`)) {
+      appendFileSync(log, `[${basename(cwd)}] ${text}`);
+      if (ready) return;
+      started += text;
+      if (started.includes(`http://127.0.0.1:${port}/`)) {
         ready = true;
-        log = "";
         resolve(child);
       }
-      if (!ready) return;
-      // The failure's line and its error (logged with it, in one write).
-      const at = log.search(FAILED);
-      if (at !== -1) {
-        failed(`${basename(cwd)}: ${log.slice(at, at + 4000)}`);
-        log = "";
-      }
-      log = log.slice(-2000);
     };
     child.stdout?.on("data", onData);
     child.stderr?.on("data", onData);
     child.on("exit", (code) => {
-      if (ready) failed(`${basename(cwd)} stopped (${code}):\n${log}`);
-      else reject(new Error(`${basename(cwd)} stopped (${code}):\n${log}`));
+      if (!ready) reject(new Error(`${basename(cwd)} stopped (${code}):\n${started}`));
     });
   });
 }
@@ -245,110 +230,78 @@ const envFile = (values: Record<string, string>) =>
     .map(([key, value]) => `${key}=${value}\n`)
     .join("");
 
-/** The service's clock settings (src/clock.ts) for this run. */
-const clockEnv = (template: Template) => ({
-  AFFILIATES_NOW: DEMO_NOW,
-  AFFILIATES_NOW_FROM: String(template.clockFrom),
-});
-
-/** Once per run: both apps migrated and seeded with the fixtures, in .e2e/<run>/template. */
-export async function prepareApps(): Promise<Template> {
+/**
+ * Once per run: both apps, seeded and running. `env`: more settings for both (the Stripe tests'
+ * keys). `webhookSecret`: the shop's Stripe webhook secret, when Stripe itself signs the events.
+ */
+export async function startSystem(
+  env: Record<string, string> = {},
+  webhookSecret = `whsec_${randomBytes(32).toString("hex")}`,
+): Promise<{ system: System; stop: () => Promise<void> }> {
   mkdirSync(join(ROOT, ".e2e"), { recursive: true });
   const dir = mkdtempSync(join(ROOT, ".e2e", "run-"));
-  const template: Template = {
-    dir: join(dir, "template"),
-    hostToken: randomBytes(32).toString("hex"),
-    webhookSecret: `whsec_${randomBytes(32).toString("hex")}`,
-    ipSalt: randomBytes(32).toString("hex"),
-    clockFrom: Date.now(),
-  };
-  await Promise.all(
-    APPS.map(async (app) => {
-      const root = copyApp(app, template.dir, "template");
-      // Void's generated types and config (the shop's seed reads its Better Auth schema), as after
-      // a fresh clone.
-      await run(root, ["exec", "void", "prepare"]);
-      await run(root, ["run", "db:migrate"]);
-      await run(root, ["run", "db:seed"], clockEnv(template));
-    }),
-  );
-  return template;
-}
-
-/** Remove the run's copies. */
-export function removeApps(template: Template): void {
-  rmSync(join(template.dir, ".."), {
-    recursive: true,
-    force: true,
-    maxRetries: 20,
-    retryDelay: 100,
-  });
-}
-
-/** Once per test file: both apps from the template, started. `env`: more settings for both. */
-export async function startApps(
-  template: Template,
-  env: Record<string, string> = {},
-): Promise<Apps> {
-  const dir = mkdtempSync(join(template.dir, "..", "file-"));
-  const id = basename(dir).slice(5).toLowerCase();
+  const log = join(dir, "apps.log");
+  writeFileSync(log, "");
+  const hostToken = randomBytes(32).toString("hex");
+  const secret = randomBytes(32).toString("hex");
+  const clockFrom = Date.now();
+  // The service's clock settings (src/clock.ts) for this run.
+  const clock = { AFFILIATES_NOW: DEMO_NOW, AFFILIATES_NOW_FROM: String(clockFrom) };
   const [shopPort, affiliatesPort] = [await freePort(), await freePort()];
   const shop = `http://127.0.0.1:${shopPort}`;
   const affiliates = `http://127.0.0.1:${affiliatesPort}`;
   const roots = Object.fromEntries(
-    APPS.map((app) => {
-      const root = copyApp(app, dir, id);
-      // The template's seeded databases (.void/v3: Void's local state; the database's identity
-      // comes from void.lock.json, copied with the app).
-      cpSync(join(template.dir, app, ".void", "v3"), join(root, ".void", "v3"), {
-        recursive: true,
-      });
-      return [app, root];
-    }),
+    await Promise.all(
+      APPS.map(async (app) => {
+        const root = copyApp(app, dir, "e2e");
+        // Void's generated types and config (the shop's seed reads its Better Auth schema), as
+        // after a fresh clone.
+        await run(root, ["exec", "void", "prepare"]);
+        await run(root, ["run", "db:migrate"]);
+        await run(root, ["run", "db:seed"], clock);
+        return [app, root] as const;
+      }),
+    ),
   ) as Record<(typeof APPS)[number], string>;
   writeFileSync(
     join(roots.affiliates, ".env"),
     envFile({
-      AFFILIATES_HOST_TOKEN: template.hostToken,
+      AFFILIATES_HOST_TOKEN: hostToken,
       HOST_SITE_URL: shop,
-      AFFILIATES_IP_SALT: template.ipSalt,
+      AFFILIATES_IP_SALT: secret,
       AFFILIATES_HOLD_DAYS: String(HOLD_DAYS),
-      ...clockEnv(template),
+      // A demo site: the tests put the demo back between files (dev/each-file.ts).
+      AFFILIATES_DEMO: "on",
+      ...clock,
     }),
   );
   writeFileSync(
     join(roots.shop, ".env"),
     envFile({
-      AFFILIATES_HOST_TOKEN: template.hostToken,
+      AFFILIATES_HOST_TOKEN: hostToken,
       AFFILIATES_SITE_URL: affiliates,
-      STRIPE_WEBHOOK_SECRET: template.webhookSecret,
-      EMAIL_LINK_SECRET: template.ipSalt, // any long random value for the run
+      STRIPE_WEBHOOK_SECRET: webhookSecret,
+      EMAIL_LINK_SECRET: secret, // any long random value for the run
     }),
   );
-  const listeners: ((error: string) => void)[] = [];
-  let stopping = false;
-  const failed = (error: string) => {
-    if (!stopping) for (const listener of listeners) listener(error);
-  };
-  const printed: string[] = [];
   const servers = await Promise.all([
-    serve(roots.affiliates, affiliatesPort, env, failed, printed),
-    serve(roots.shop, shopPort, env, failed, printed),
+    serve(roots.affiliates, affiliatesPort, env, log),
+    serve(roots.shop, shopPort, env, log),
   ]);
   await untilReady(affiliates);
   return {
-    shop,
-    affiliates,
-    hostToken: template.hostToken,
-    webhookSecret: template.webhookSecret,
-    cronToken: readFileSync(join(roots.affiliates, ".void", "dev-trigger-token"), "utf8").trim(),
-    inboxToken: readFileSync(join(roots.shop, ".void", "dev-trigger-token"), "utf8").trim(),
-    now: () => Date.parse(DEMO_NOW) + (Date.now() - template.clockFrom),
-    onFailure: (listener) => void listeners.push(listener),
-    output: () => printed.join("").slice(-20_000),
+    system: {
+      shop,
+      affiliates,
+      hostToken,
+      webhookSecret,
+      cronToken: readFileSync(join(roots.affiliates, ".void", "dev-trigger-token"), "utf8").trim(),
+      inboxToken: readFileSync(join(roots.shop, ".void", "dev-trigger-token"), "utf8").trim(),
+      clockFrom,
+      log,
+    },
+    // Each app stopped (its process group), then the run's copy removed.
     async stop() {
-      stopping = true;
-      // Each app stopped (its process group), then its copy removed.
       await Promise.all(
         servers.map(
           (server) =>

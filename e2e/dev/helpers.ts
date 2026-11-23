@@ -18,7 +18,7 @@ import {
   paymentIntentOf,
 } from "../../apps/affiliates/demo.ts";
 
-/** This test file's two apps (each-file.ts, ../apps.ts); none in a suite that's skipped. */
+/** The run's two apps (each-file.ts, ../apps.ts); none in a suite that's skipped. */
 export const SHOP = globalThis.apps?.shop ?? "";
 export const AFFILIATES = globalThis.apps?.affiliates ?? "";
 
@@ -55,8 +55,6 @@ export function fail(error: string): void {
 export function startTest(): void {
   failure = null;
 }
-
-globalThis.apps?.onFailure(fail);
 
 /** The message an app's error page carries (Void puts it in the page's data), or the page's start. */
 async function errorOf(response: Response | import("playwright").Response): Promise<string> {
@@ -359,7 +357,11 @@ export async function linksOf(person: Person) {
 /** Open a tab of the admin page. */
 export async function adminTab(tab: RegExp) {
   const { page } = await admin();
-  await open(page, `${AFFILIATES}/admin`);
+  // Already there: the page keeps itself up to date (it reloads its data when an action finishes,
+  // and finished() below waits for that), so it isn't opened again to look.
+  const there = new URL(page.url());
+  if (`${there.origin}${there.pathname}${there.search}` !== `${AFFILIATES}/admin`)
+    await open(page, `${AFFILIATES}/admin`);
   await page.getByRole("tab", { name: tab }).click();
   return page.getByRole("tabpanel");
 }
@@ -442,6 +444,19 @@ export async function addRule(
   if (rule.capPerCustomer)
     await form.getByPlaceholder("Most per customer").fill(rule.capPerCustomer);
   await press((await admin()).page, form.getByRole("button", { name: "Add rule" }));
+}
+
+/**
+ * Put the demo back as it was (apps/affiliates/src/demo-reset.ts): the admin presses "Reset demo",
+ * done once that action is. Before each test file (each-file.ts).
+ */
+export async function resetDemo(): Promise<void> {
+  const { page } = await admin();
+  await open(page, `${AFFILIATES}/admin`);
+  const pane = await activity(page);
+  const before = await pane.seen();
+  await press(page, page.getByRole("button", { name: "Reset demo" }));
+  await pane.finished("Reset demo", { after: before });
 }
 
 /** A one-off bonus, added on the admin's Rules tab. */
@@ -598,6 +613,11 @@ export async function sell(partner: Partner, overrides: Record<string, unknown> 
  * `daysLater` days on, so the seeded sales have aged that much for it.
  */
 export async function runCron(cron: string, { daysLater = 0 } = {}): Promise<void> {
+  // The run is an action of its own in the admin's control plane: done once that is.
+  const { page } = await admin();
+  await adminTab(/^Sales/);
+  const pane = await activity(page);
+  const before = await pane.seen();
   const res = await fetch(`${AFFILIATES}/__void/scheduled`, {
     method: "POST",
     headers: {
@@ -607,6 +627,7 @@ export async function runCron(cron: string, { daysLater = 0 } = {}): Promise<voi
     body: JSON.stringify({ cron, scheduledTime: now() + daysLater * 24 * 60 * 60 * 1000 }),
   });
   if (!res.ok) throw new Error(`cron ${cron}: ${res.status} ${await res.text()}`);
+  await pane.finished("Daily job", { after: before });
 }
 
 /** Close every browser: after each test file (each-file.ts). */
@@ -648,6 +669,8 @@ export async function activity(page: Page) {
       await settled.waitFor();
       if ((await settled.getAttribute("data-state")) === "failed")
         throw new Error(`${title} failed: ${await settled.innerText()}`);
+      // And the page shows what the action saved (it reloads its data when one finishes).
+      await page.locator("aside[aria-label='Activity'][data-page='fresh']").waitFor();
       return settled;
     },
   };

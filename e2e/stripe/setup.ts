@@ -5,14 +5,14 @@
 // - STRIPE_TEST_PAYOUTS_KEY: the payouts account, a Connect platform.
 // Anything but test-mode keys (sk_test_… or rk_test_…) is refused. Makes a coupon in the selling
 // account (the partners' buyer discount), and prepares the seeded apps as the dev tests do
-// (../apps.ts), every file's apps given the keys, the coupon and the payouts account's currency.
+// (../apps.ts), given the keys, the coupon and the payouts account's currency.
 // The shop's webhook secret is the Stripe CLI's (`stripe listen --print-secret`), so the events
 // `stripe listen` forwards (./listen.ts) are signed by Stripe for it. After: the coupon deleted
 // and its promotion codes turned off. Runs only when asked for by name.
 import { execFileSync } from "node:child_process";
 import Stripe from "stripe";
 import type { TestProject } from "vite-plus/test/node";
-import { prepareApps, removeApps } from "../apps.ts";
+import { startSystem } from "../apps.ts";
 
 declare module "vite-plus/test" {
   interface ProvidedContext {
@@ -45,6 +45,7 @@ const testKey = (name: string) => {
 export default async function setup(project: TestProject) {
   if (!project.vitest.config.project.includes("stripe")) {
     project.provide("stripeSkip", "run it with `vp run test:stripe`");
+    project.provide("system", null);
     return;
   }
   const salesKey = testKey("STRIPE_TEST_SECRET_KEY");
@@ -57,23 +58,25 @@ export default async function setup(project: TestProject) {
     duration: "once",
     name: "affiliates e2e",
   });
-  const template = await prepareApps();
-  template.webhookSecret = stripeCli(salesKey, ["listen", "--print-secret"]);
-  project.provide("template", template);
   // Both apps get the lot; each reads its own (the shop: STRIPE_SECRET_KEY, its selling account).
-  project.provide("appEnv", {
-    STRIPE_SECRET_KEY: salesKey,
-    STRIPE_SALES_KEY: salesKey,
-    STRIPE_PAYOUTS_KEY: payoutsKey,
-    AFFILIATES_COUPON_ID: coupon.id,
-    AFFILIATES_PAYOUT_CURRENCY: payoutCurrency,
-  });
+  // The shop's webhook secret is the Stripe CLI's, so what it forwards is signed for it.
+  const { system, stop } = await startSystem(
+    {
+      STRIPE_SECRET_KEY: salesKey,
+      STRIPE_SALES_KEY: salesKey,
+      STRIPE_PAYOUTS_KEY: payoutsKey,
+      AFFILIATES_COUPON_ID: coupon.id,
+      AFFILIATES_PAYOUT_CURRENCY: payoutCurrency,
+    },
+    stripeCli(salesKey, ["listen", "--print-secret"]),
+  );
+  project.provide("system", system);
   project.provide("stripeSkip", "");
   project.provide("stripeKey", salesKey);
   project.provide("payoutCurrency", payoutCurrency);
   project.provide("couponPercent", COUPON_PERCENT);
   return async () => {
-    removeApps(template);
+    await stop();
     // The seeded partners' codes (SAM) come back every run: free them for the next one.
     for await (const promo of selling.promotionCodes.list({ coupon: coupon.id, active: true }))
       await selling.promotionCodes.update(promo.id, { active: false });

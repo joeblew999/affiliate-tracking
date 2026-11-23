@@ -6,8 +6,9 @@
 // is what's now saved.
 //
 // For people and tests alike: data-live on the pane says whether it's listening ("connected" once
-// it has read everything so far), and each action carries data-action, data-title, data-by and
-// data-state, so a test can find one without depending on the wording.
+// it has read everything so far), data-page whether the page shows what's saved ("fresh", or
+// "reloading" after an action finished), and each action carries data-action, data-title, data-by
+// and data-state, so a test can find one without depending on the wording.
 import { useNavigation, useRouter } from "@void/react";
 import { useEffect, useRef, useState } from "react";
 import { FetchError, stream } from "@durable-streams/client";
@@ -51,11 +52,15 @@ export function ActivityPane({ viewer }: Props) {
   // would abort that request. So a reload waits until the page is idle; one at a time, and once
   // more afterwards if more work finished meanwhile.
   const refreshing = useRef({ busy: false, again: false, waiting: false });
+  // Whether the page shows what's saved: false from the moment an action finishes until its data
+  // has been reloaded. For people nothing to see; a test waits on it before it reads the page.
+  const [fresh, setFresh] = useState(true);
   const idle = useRef(true);
   idle.current = navigation.state === "idle";
   const refreshRef = useRef<() => Promise<void>>(async () => {});
   refreshRef.current = async () => {
     const r = refreshing.current;
+    setFresh(false);
     if (!idle.current) {
       r.waiting = true;
       return;
@@ -70,6 +75,7 @@ export function ActivityPane({ viewer }: Props) {
       await router.refresh({ resolveOn: "data" });
     } while (r.again);
     r.busy = false;
+    if (!r.waiting) setFresh(true);
   };
   useEffect(() => {
     if (navigation.state === "idle" && refreshing.current.waiting) {
@@ -147,6 +153,7 @@ export function ActivityPane({ viewer }: Props) {
     <aside
       aria-label="Activity"
       data-live={live}
+      data-page={fresh ? "fresh" : "reloading"}
       className={
         open
           ? "fixed top-0 right-0 z-50 flex h-svh w-[min(24rem,100vw)] flex-col gap-2 border-l bg-background p-3"

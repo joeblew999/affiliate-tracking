@@ -166,22 +166,29 @@ come from the database schema and the pages' loaders and actions.
   `STRIPE_TEST_PAYOUTS_KEY` (payouts). On GitHub, it runs from Actions → **Stripe end-to-end** →
   Run workflow (`.github/workflows/stripe.yml`), with those keys saved as repository secrets.
 
-The tests work as Void's own do (`e2e/apps.ts`). Once per run, both apps are copied, migrated and
-seeded with the demo fixtures. Each test file then gets its own copy of that seeded state, on free
-ports, so every file starts from exactly the fixtures and nothing it changes reaches another file,
-your local data or your `vp run dev`. The service's clock is pinned to the fixtures' instant
-(`DEMO_NOW`, by `AFFILIATES_NOW`; `apps/affiliates/src/clock.ts`), so "on hold", "ready to pay" and
-"the last 30 days" come out the same on every run, and the tests check exact amounts from
-`demo.ts`. People are real browsers on the real pages, and the demo's people sign in through the
-shop's Better Auth with the demo password. The shop's calls to the service go through its
-own client. Without Stripe, the dev tests send Stripe's events to the shop's webhook, signed as
-Stripe signs them. In the Stripe tests, Stripe sends them itself. There are no fakes or mocks.
+The tests run against both apps, started once for the whole run (`e2e/apps.ts`): copied,
+migrated and seeded with the demo fixtures, on free ports, so nothing reaches your local data or
+your `vp run dev`. Before each test file the demo is put back as it was, by the admin pressing
+**Reset demo** (a demo site's button: `apps/affiliates/src/demo-reset.ts`), so every file starts
+from exactly the fixtures without the apps starting again. The service's clock is pinned to the
+fixtures' instant (`DEMO_NOW`, by `AFFILIATES_NOW`; `apps/affiliates/src/clock.ts`), so "on
+hold", "ready to pay" and "the last 30 days" come out the same on every run, and the tests check
+exact amounts from `demo.ts`. People are real browsers on the real pages, and the demo's people
+sign in through the shop's Better Auth with the demo password. The shop's calls to the service go
+through its own client. Without Stripe, the dev tests send Stripe's events to the shop's webhook,
+signed as Stripe signs them. In the Stripe tests, Stripe sends them itself. There are no fakes or
+mocks.
 
 Nothing in the tests waits and looks again. A test watches the Activity pane, as a person would:
-it presses the button, then waits for that action to read done (`activity()` in
-`e2e/dev/helpers.ts`), and then checks the page. An action that fails ends the test at once, with
+it presses the button, then waits for that action to read done and the page to have reloaded its
+data (`activity()` in `e2e/dev/helpers.ts`), and then reads the page it's already on. A page is
+never opened again just to look. An action that fails ends the test at once, with
 its steps and the error, and so does a server error on any page. A failed test also shows what both
 apps printed.
+
+Files run one after another, not side by side: the program is one program, and a payout run or
+the daily job touches everyone in it. Running them together needs the program split by a key
+(`plans/2026-11-23-06-streams.md`).
 
 CI (`.github/workflows/ci.yml`) runs the first four on every push.
 
@@ -202,6 +209,8 @@ Commit each app's `void.lock.json` after deploying: it records the app's databas
 Cloudflare resources.
 
 `vp run demo:production` replaces the live databases with the demo. Use it only on the demo site.
+On a demo site, set the service's `AFFILIATES_DEMO` (to anything): its admins then get a **Reset
+demo** button that does the same from the admin page.
 
 The shop's emails are from the address in its `void.config.ts` (`email.from`). Deploying sets up
 sending from that domain on the Cloudflare account.

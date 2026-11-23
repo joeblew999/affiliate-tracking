@@ -26,6 +26,7 @@ import { bookEvent, bookingChoices, eventFigures } from "../../src/events.ts";
 import { addOrganiser, addVenue } from "../../src/payees.ts";
 import { shopUserByEmail } from "../../src/user.ts";
 import { now as clock } from "../../src/clock.ts";
+import { isDemo, resetDemo } from "../../src/demo-reset.ts";
 
 // The admin page: everything, for the host's admins only. ?partner=<id>: only that partner's sales
 // and payouts. ?links=<partner id>: that partner's short links too, for the dialog that shows them.
@@ -88,6 +89,8 @@ export const loader = defineHandler(async (c) => {
     links: linksFor ? { partnerId: linksFor, links: await linksOf(linksFor, origin) } : null,
     events,
     choices,
+    /** A demo site: the page offers to put the demo back. */
+    demo: isDemo(),
   };
 });
 export type Props = InferProps<typeof loader>;
@@ -97,6 +100,10 @@ export const head = defineHead(() => ({ title: "Admin" }));
 // What the admin page does (Void's page actions: each re-runs the loader after). Admins only, as
 // the whole page is (middleware/01.user.ts).
 export const actions = {
+  // On a demo site: everything deleted and the demo loaded again, here and in the shop.
+  resetDemo: defineHandler(async () => {
+    await resetDemo();
+  }),
   // Book an event at a venue: its venue is paid at once (through the payout queue), and once that's
   // gone it's on sale and the shop tells its users (src/events.ts).
   bookEvent: defineHandler.withValidator({ body: eventBooking })(async (_c, { body }) => {

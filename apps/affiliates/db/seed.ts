@@ -42,8 +42,14 @@ function random(seed: number) {
   return { next, pick, chance: (p: number) => next() < p };
 }
 
-export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) => {
-  const now = process.env.AFFILIATES_NOW ? Date.parse(process.env.AFFILIATES_NOW) : Date.now();
+type Schema = typeof import("./schema.ts");
+type Seeding = Parameters<Parameters<typeof defineSeed<Schema>>[0]>[0];
+
+/**
+ * The demo's rows, into empty tables, dated from `now`. The seed below calls it, and so does the
+ * running service to put the demo back (src/demo-reset.ts).
+ */
+export async function loadDemo({ db, schema }: Pick<Seeding, "db" | "schema">, now: number) {
   const ago = (days: number) => now - days * DAY;
   const partnerOf = (code: string) => fixtureId(`partner:${code}`);
 
@@ -263,4 +269,11 @@ export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) =
   console.log(
     `demo: ${partners.length} payees, ${venues.length} venues, ${events.length} events, ${sales.length} sales, ${payouts.length} payouts, ${clicks.length} clicks, ${signups.length} signups`,
   );
-});
+}
+
+export default defineSeed<Schema>((seeding) =>
+  loadDemo(
+    seeding,
+    process.env.AFFILIATES_NOW ? Date.parse(process.env.AFFILIATES_NOW) : Date.now(),
+  ),
+);

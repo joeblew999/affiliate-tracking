@@ -87,6 +87,7 @@ export default function AdminPage(props: Props) {
   return (
     <>
       <main className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
+        {props.demo && <ResetDemo />}
         <Tabs defaultValue="events">
           <TabsList className="mb-4 w-full justify-start overflow-x-auto sm:w-auto">
             <TabsTrigger value="events">Events</TabsTrigger>
@@ -684,6 +685,27 @@ function Events({ events, choices, payees }: Props) {
         </Form>
         {venue.recentlySuccessful && <p className="text-sm text-muted-foreground">Venue added.</p>}
       </Section>
+    </div>
+  );
+}
+
+/** On a demo site: put the demo back as it was. */
+function ResetDemo() {
+  const { run, busy, feedback } = useAction();
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+      <span>This is a demo. Anything changed here can be put back.</span>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={busy}
+        onClick={() =>
+          void run(() => action("/admin?resetDemo", { data: {} }), "The demo is back as it was.")
+        }
+      >
+        Reset demo
+      </Button>
+      {feedback}
     </div>
   );
 }
