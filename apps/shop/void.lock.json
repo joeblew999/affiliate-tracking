@@ -48,6 +48,18 @@
         {
           "name": "STREAMS",
           "class_name": "StreamsDurableObject"
+        },
+        {
+          "name": "STREAM_DIRECTORY",
+          "class_name": "StreamDirectoryDurableObject"
+        },
+        {
+          "name": "STREAM_SIGNING",
+          "class_name": "StreamSigningDurableObject"
+        },
+        {
+          "name": "STREAM_SUBSCRIPTIONS",
+          "class_name": "StreamSubscriptionsDurableObject"
         }
       ]
     },
@@ -55,6 +67,18 @@
       {
         "tag": "void-durable-streams-v1",
         "new_sqlite_classes": ["StreamsDurableObject"]
+      },
+      {
+        "tag": "void-durable-stream-directory-v1",
+        "new_sqlite_classes": ["StreamDirectoryDurableObject"]
+      },
+      {
+        "tag": "void-durable-stream-signing-v1",
+        "new_sqlite_classes": ["StreamSigningDurableObject"]
+      },
+      {
+        "tag": "void-durable-stream-subscriptions-v1",
+        "new_sqlite_classes": ["StreamSubscriptionsDurableObject"]
       }
     ],
     "send_email": [
@@ -66,5 +90,5 @@
       "__VOID_EMAIL_FROM": "Example shop <events@shop.ubuntusoftware.net>"
     }
   },
-  "text": "{\n  \"name\": \"shop\",\n  \"services\": [\n    {\n      \"binding\": \"AFFILIATES\",\n      \"service\": \"affiliates\"\n    }\n  ],\n  \"routes\": [\n    {\n      \"pattern\": \"shop.ubuntusoftware.net\",\n      \"custom_domain\": true\n    }\n  ],\n  \"compatibility_date\": \"2026-02-24\",\n  \"account_id\": \"7384af54e33b8a54ff240371ea368440\",\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"shop-db\",\n      \"database_id\": \"ff970b5b-47a1-4176-b6b1-ddbb57699b8a\",\n      \"migrations_dir\": \"./db/migrations\"\n    }\n  ],\n  \"workers_dev\": false,\n  \"preview_urls\": false,\n  \"durable_objects\": {\n    \"bindings\": [\n      {\n        \"name\": \"STREAMS\",\n        \"class_name\": \"StreamsDurableObject\"\n      }\n    ]\n  },\n  \"migrations\": [\n    {\n      \"tag\": \"void-durable-streams-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamsDurableObject\"\n      ]\n    }\n  ],\n  \"send_email\": [\n    {\n      \"name\": \"SEND_EMAIL\"\n    }\n  ],\n  \"vars\": {\n    \"__VOID_EMAIL_FROM\": \"Example shop <events@shop.ubuntusoftware.net>\"\n  }\n}\n"
+  "text": "{\n  \"name\": \"shop\",\n  \"services\": [\n    {\n      \"binding\": \"AFFILIATES\",\n      \"service\": \"affiliates\"\n    }\n  ],\n  \"routes\": [\n    {\n      \"pattern\": \"shop.ubuntusoftware.net\",\n      \"custom_domain\": true\n    }\n  ],\n  \"compatibility_date\": \"2026-02-24\",\n  \"account_id\": \"7384af54e33b8a54ff240371ea368440\",\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"shop-db\",\n      \"database_id\": \"ff970b5b-47a1-4176-b6b1-ddbb57699b8a\",\n      \"migrations_dir\": \"./db/migrations\"\n    }\n  ],\n  \"workers_dev\": false,\n  \"preview_urls\": false,\n  \"durable_objects\": {\n    \"bindings\": [\n      {\n        \"name\": \"STREAMS\",\n        \"class_name\": \"StreamsDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_DIRECTORY\",\n        \"class_name\": \"StreamDirectoryDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_SIGNING\",\n        \"class_name\": \"StreamSigningDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_SUBSCRIPTIONS\",\n        \"class_name\": \"StreamSubscriptionsDurableObject\"\n      }\n    ]\n  },\n  \"migrations\": [\n    {\n      \"tag\": \"void-durable-streams-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamsDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-directory-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamDirectoryDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-signing-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamSigningDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-subscriptions-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamSubscriptionsDurableObject\"\n      ]\n    }\n  ],\n  \"send_email\": [\n    {\n      \"name\": \"SEND_EMAIL\"\n    }\n  ],\n  \"vars\": {\n    \"__VOID_EMAIL_FROM\": \"Example shop <events@shop.ubuntusoftware.net>\"\n  }\n}\n"
 }
