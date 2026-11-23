@@ -5,7 +5,7 @@
 // - the Stripe plugin: each user's Stripe customer (made at sign-up), and Stripe's webhook, every
 //   event of which goes on to the affiliate service (onEvent). Tickets are one-off payments, which
 //   the plugin doesn't make: the event page makes their checkout (pages/events/[id].server.ts);
-// - a new-user hook telling the affiliate service, through a queue (queues/affiliate-signups.ts).
+// - a new-user hook publishing each new user (src/published.ts), which the affiliate service follows.
 //
 // `void prepare` runs this file in plain Node, with no Worker env, to build the auth schema. So the
 // plugins don't depend on the env (the Stripe plugin adds tables, and the schema must be the same
@@ -13,7 +13,7 @@
 import { stripe } from "@better-auth/stripe";
 import { admin } from "better-auth/plugins";
 import { defineAuth } from "void/auth";
-import { referralFrom } from "affiliates/client";
+import { referralFrom, SIGNUPS_STREAM } from "affiliates/client";
 import { stripeClient } from "./src/stripe.ts";
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
@@ -63,13 +63,14 @@ export default defineAuth(({ defaults, env }) => {
           before: async (user) => ({
             data: { ...user, role: admins.has(user.email.toLowerCase()) ? "admin" : "user" },
           }),
-          // Tell the affiliate service, through a queue: a sign-up never waits on it or fails
-          // because of it, and a failed call is retried.
+          // Publish it (src/published.ts): the affiliate service follows new users. A sign-up never
+          // waits on that or fails because of it.
           after: async (user, ctx) => {
-            const { queues } = await import("./src/activity.ts");
-            await queues["affiliate-signups"].send({
-              userId: user.id,
-              ref: referralFrom(ctx?.headers?.get("cookie")),
+            const { publish } = await import("./src/published.ts");
+            await publish({
+              stream: SIGNUPS_STREAM,
+              type: "signed-up",
+              data: { userId: user.id, ref: referralFrom(ctx?.headers?.get("cookie")) },
             });
           },
         },

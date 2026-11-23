@@ -14,9 +14,11 @@ function base64url(bytes: ArrayBuffer | Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-function fromBase64url(value: string): Uint8Array {
+export function fromBase64url(value: string): Uint8Array<ArrayBuffer> {
   const binary = atob(value.replace(/-/g, "+").replace(/_/g, "/"));
-  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 export const randomHex = (bytes: number) =>

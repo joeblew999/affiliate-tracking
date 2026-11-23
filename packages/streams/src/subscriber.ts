@@ -3,7 +3,9 @@
 // woken at a route: the route checks the wake and queues it, and the queue's consumer does the
 // reading, the work and the acknowledging. `fetch` here is however the app reaches the server:
 // the runtime's, or a service binding's.
-import type { PublicJwk } from "./keys.ts";
+import { fromBase64url, type PublicJwk } from "./keys.ts";
+
+export type { PublicJwk };
 
 /** A wake, as the server sends it. */
 export type Wake = {
@@ -24,8 +26,6 @@ export type Wake = {
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
 
 const text = new TextEncoder();
-const fromBase64url = (value: string) =>
-  Uint8Array.from(atob(value.replace(/-/g, "+").replace(/_/g, "/")), (char) => char.charCodeAt(0));
 
 /** How old a wake's signature may be (the protocol's suggested five minutes). */
 const TOLERANCE_SECONDS = 300;
@@ -94,15 +94,18 @@ export async function readOn<Event>(
 
 /**
  * Acknowledge a wake: each stream read, up to the offset dealt with, and the wake finished.
- * Answers false when the wake is no longer the current one (its lease ran out and another was
- * sent): that one's subscriber acknowledges instead.
+ * - "done": acknowledged;
+ * - "stale": the wake is no longer the current one (its lease ran out and another was sent), so
+ *   that one's subscriber acknowledges instead;
+ * - "ahead": an offset is past where the subscription knows the stream to end, and nothing was
+ *   acknowledged.
  */
 export async function acknowledge(
   fetch: Fetch,
   callbackUrl: string,
   wake: Wake,
   acks: { stream: string; offset: string }[],
-): Promise<boolean> {
+): Promise<"done" | "stale" | "ahead"> {
   const response = await fetch(callbackUrl, {
     method: "POST",
     headers: {
@@ -111,9 +114,11 @@ export async function acknowledge(
     },
     body: JSON.stringify({ wake_id: wake.wake_id, generation: wake.generation, acks, done: true }),
   });
-  if (response.ok) return true;
-  if (response.status === 409) return false;
-  throw new Error(
-    `acknowledge ${wake.subscription_id}: ${response.status} ${await response.text()}`,
-  );
+  if (response.ok) return "done";
+  const said = await response.text();
+  if (response.status === 409 && said.includes("FENCED")) return "stale";
+  if (response.status === 409 && said.includes("beyond stream tail")) return "ahead";
+  // A subscription that's gone has nothing to acknowledge.
+  if (response.status === 404) return "stale";
+  throw new Error(`acknowledge ${wake.subscription_id}: ${response.status} ${said}`);
 }

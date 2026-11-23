@@ -141,6 +141,9 @@ importers:
       shadcn:
         specifier: 4.23.0
         version: 4.23.0(supports-color@10.2.2)
+      streams:
+        specifier: workspace:*
+        version: link:../../packages/streams
       stripe:
         specifier: 'catalog:'
         version: 23.2.0(@types/node@26.6.6)
@@ -220,6 +223,9 @@ importers:
       shadcn:
         specifier: 4.23.0
         version: 4.23.0(supports-color@10.2.2)
+      streams:
+        specifier: workspace:*
+        version: link:../../packages/streams
       stripe:
         specifier: 'catalog:'
         version: 23.2.0(@types/node@26.6.6)

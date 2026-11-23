@@ -1,27 +1,46 @@
-// Reading the control plane's streams (src/streams.ts), from a browser: your own stream, or any if
-// you're an admin (the one with everyone's actions, and a person's own while viewing the program
-// as them). A stream's address is this route's own path. The Activity pane reads here
-// (packages/activity), the affiliate service's pages through that app's route of the same name.
-// Only the shop's code writes to streams, so there is nothing here but reading.
-import { createStreamsHandler } from "@durable-streams/server-cloudflare";
-import { env } from "cloudflare:workers";
+// The shop's streams (src/streams.ts), and who may do what with them:
+// - the affiliate service, with the shop's token (through its binding): anything. It reads the
+//   streams it follows, and asks for the key its wakes are signed with;
+// - a subscriber acknowledging a wake: that request carries the wake's own token, which the
+//   subscription checks;
+// - a browser: reading your own stream, or any stream if you're an admin (everyone's actions, and
+//   a person's own while viewing the program as them). The Activity pane reads here
+//   (packages/activity), the affiliate service's pages through that app's route of the same name.
 import { defineHandler } from "void";
 import { getUser } from "void/auth";
-import { streamOf } from "../../src/streams.ts";
+import { env as vars } from "void/env";
+import { serve, streamOf } from "../../src/streams.ts";
 
-// Who may read is decided below, with the shop's sign-in. Saying so here also stops anything
-// caching what's read.
-const streams = createStreamsHandler({ cors: false, auth: () => undefined });
-const read = (request: Request) => streams(request, env as never);
+/** A subscriber's answer to a wake, which its own token allows. */
+const ANSWER = /^__ds\/subscriptions\/[^/]+\/(callback|ack|release)$/;
 
-export const GET = defineHandler(async (c) => {
+/** Whether two texts are the same, taking the same time whichever character differs. */
+function sameText(a: string, b: string) {
+  let different = a.length ^ b.length;
+  for (let i = 0; i < a.length; i++)
+    different |= a.charCodeAt(i) ^ b.charCodeAt(i % (b.length || 1));
+  return different === 0;
+}
+
+const handle = defineHandler(async (c) => {
+  const path = c.req.param("path") ?? "";
+  const sent = c.req.header("authorization") ?? "";
+  if (sameText(sent, `Bearer ${vars.AFFILIATES_HOST_TOKEN}`)) return serve(c.req.raw);
+  if (c.req.method === "POST" && ANSWER.test(path)) return serve(c.req.raw);
+
   const user = getUser();
-  const viewer = c.req.param("path");
-  if (!user || !viewer || (viewer !== user.id && user.role !== "admin"))
-    return c.text("Not yours to watch", 403);
-  const found = await read(c.req.raw);
-  if (found.status !== 404) return found;
+  const reading = c.req.method === "GET" || c.req.method === "HEAD";
+  const theirs = path === user?.id || user?.role === "admin";
+  if (!user || !reading || !theirs || path === "" || path.startsWith("__ds"))
+    return c.text("Not yours", 403);
+  const found = await serve(c.req.raw);
+  if (found.status !== 404 || path.includes("/")) return found;
   // Nothing has happened for them yet: an empty stream, so the page can wait on it.
-  await streamOf(viewer).create();
-  return read(c.req.raw);
+  await streamOf(path).create();
+  return serve(c.req.raw);
 });
+
+export const GET = handle;
+export const POST = handle;
+export const PUT = handle;
+export const DELETE = handle;

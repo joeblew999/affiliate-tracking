@@ -14,16 +14,18 @@ import {
   OnSaleInput,
   OnSaleOutput,
   REF_COOKIE,
+  SignedUp,
+  SIGNUPS_STREAM,
+  SIGNUPS_SUBSCRIPTION,
   SignupInput,
-  SignupOutput,
   StripeEventInput,
   StripeEventOutput,
 } from "./src/host-contract.ts";
 
-export { REF_COOKIE, OnSaleInput, OnSaleOutput };
+export { REF_COOKIE, OnSaleInput, OnSaleOutput, SignedUp, SIGNUPS_STREAM, SIGNUPS_SUBSCRIPTION };
 export type { Event } from "./src/host-contract.ts";
 
-/** What the host sends when a user signs up (its queue message too). */
+/** What the host says of a user who signed up (the data of its "signed-up" event). */
 export type Signup = z.input<typeof SignupInput>;
 /** What the service answers at checkout: the metadata and discount to add. */
 export type Checkout = z.output<typeof CheckoutOutput>;
@@ -55,9 +57,6 @@ export function affiliates(binding: Pick<Fetcher, "fetch">, token: string) {
     return output.parse(await res.json());
   }
   return {
-    /** A user signed up on the host, with the referral cookie's value (referralFrom) or null. */
-    signup: (body: z.input<typeof SignupInput>) =>
-      call("/api/host/signup", SignupInput, SignupOutput, body),
     /** Before creating a Stripe Checkout Session: the metadata to add, and the partner's buyer discount. */
     checkout: (body: z.input<typeof CheckoutInput>) =>
       call("/api/host/checkout", CheckoutInput, CheckoutOutput, body),

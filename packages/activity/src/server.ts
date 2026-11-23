@@ -78,6 +78,25 @@ async function asStep<T>(trace: Trace, id: string, name: string, work: () => Pro
   }
 }
 
+/**
+ * A step of the current action that other work will run later, somewhere this app can't follow it
+ * (another app, woken by a stream): shown waiting until that work runs it (runStep). Null outside
+ * any action.
+ */
+export async function waiting(id: string, name: string): Promise<Trace | null> {
+  const trace = current.getStore();
+  if (!trace) return null;
+  await step(trace, id, name, "queued", null);
+  return trace;
+}
+
+/** Run `work` as a step that was left waiting for it (waiting), of the action it belongs to. */
+export const runStep = <T>(trace: Trace, id: string, name: string, work: () => Promise<T>) =>
+  asStep(trace, id, name, work);
+
+/** The action the current work belongs to, to send along with something another app will handle. */
+export const currentTrace = (): Trace | null => current.getStore() ?? null;
+
 /** "bookEvent" → "Book event"; "sign-up/email" → "Sign up". */
 function words(text: string) {
   const spaced = text
@@ -120,7 +139,7 @@ async function reasonOf(response: Response) {
 }
 
 /** Paths that aren't work: the control plane itself, and Void's and Cloudflare's own. */
-const NOT_WORK = ["/activity/", "/__void/", "/cdn-cgi/", "/live"];
+const NOT_WORK = ["/streams/", "/__void/", "/cdn-cgi/"];
 
 /**
  * Every request that does something (not a GET) is a step: of the action the other app sent it

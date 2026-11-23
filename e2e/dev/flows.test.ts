@@ -87,7 +87,8 @@ test("a user who signs up through a referral link stays the partner's at checkou
   const before = (await partnerMe(leo)).signups;
   const buyer = await signUp("Buyer", { via: `/r/leo` });
   const userId = await userIdOf(buyer);
-  // The shop told the service through its queue (apps/shop/queues/affiliate-signups.ts).
+  // The shop published the sign-up, and the service, following it, recorded it
+  // (apps/shop/src/published.ts, apps/affiliates/queues/wakes.ts).
   expect((await partnerMe(leo)).signups).toBe(before + 1);
   const checkout = await shop().checkout({ userId, ref: null, promoCode: null, ip: null });
   expect(checkout.metadata).toMatchObject({

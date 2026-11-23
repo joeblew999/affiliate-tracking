@@ -14,7 +14,25 @@ const userId = z.string().min(1).max(255);
 const ref = z.string().max(512).nullable();
 
 export const SignupInput = z.object({ userId, ref });
-export const SignupOutput = z.object({ userId, referred: z.boolean() });
+
+/**
+ * A user signed up on the host. Not a call: the host writes each one to a stream (Durable Streams,
+ * packages/streams), and this service follows that stream with a subscription. So a sign-up is
+ * kept in order whether or not this service is up, and it's this service that says how far it
+ * has got.
+ */
+export const SIGNUPS_STREAM = "events/signups";
+export const SIGNUPS_SUBSCRIPTION = "affiliates-signups";
+export const SignedUp = z.object({
+  /** The event's own id. */
+  id: z.string(),
+  type: z.literal("signed-up"),
+  /** With the referral cookie's value if the browser had one (client.ts: referralFrom). */
+  data: SignupInput,
+  /** The action the sign-up is part of, for the control plane (packages/activity). */
+  activity: z.object({ actionId: z.string(), viewers: z.array(z.string()) }).nullable(),
+});
+export type SignedUp = z.output<typeof SignedUp>;
 
 export const CheckoutInput = z.object({
   userId: userId.nullable(),
@@ -77,6 +95,5 @@ export const OnSaleOutput = z.object({ queued: z.literal(true) });
 export type Event = z.output<typeof Event>;
 export type EventsOutput = z.output<typeof EventsOutput>;
 export type OnSaleOutput = z.output<typeof OnSaleOutput>;
-export type SignupOutput = z.output<typeof SignupOutput>;
 export type StripeEventOutput = z.output<typeof StripeEventOutput>;
 export type CheckoutOutput = z.output<typeof CheckoutOutput>;

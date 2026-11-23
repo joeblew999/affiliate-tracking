@@ -69,8 +69,7 @@ can't drift from the code. Only the clicks behind the charts are generated, from
   sale, and the shop emails every user who hasn't unsubscribed. Each ticket pays the event's
   organiser their percent of the price, and the affiliate who brought the buyer (if any) their
   commission. An organiser or a venue's contact can't also be an affiliate.
-- **Slow work goes through queues.** Sign-ups reach the service through a queue. Payouts are queued
-  one partner at a time. The on-sale emails go out in batches, each batch queuing the next. A daily
+- **Slow work goes through queues.** Payouts are queued one partner at a time. The on-sale emails go out in batches, each batch queuing the next. A daily
   job approves sales once their hold period is over, and queues any payout that didn't finish, so a
   crash can't leave one half done.
 - **The control plane: what the system is doing, on every page.** Every page of both apps has an
@@ -96,7 +95,13 @@ can't drift from the code. Only the clicks behind the charts are generated, from
   again when its lease runs out; a delivery that fails is tried again; and what's due survives
   a restart. It's built from Void's durable state (the subscription, with its alarm), a
   directory of who follows what, and a wrapper round the server that tells subscribers of each
-  write. Not used by the apps yet: nothing here needs to react to a stream today.
+  write.
+- **A new user is the first thing done this way.** The shop doesn't call the service at sign-up.
+  It publishes "signed-up" to a stream (`apps/shop/src/published.ts`), and the service, which
+  follows that stream, is woken (`apps/affiliates/routes/api/host/wake.ts`), reads on from where
+  it had got to, records the referral, and acknowledges (`apps/affiliates/queues/wakes.ts`). In
+  the Activity pane it's still one action, "Sign up", with the service's part as a step of it.
+  Once a day the shop checks each subscriber hasn't been left behind (`apps/shop/crons/daily.ts`).
   - The plan, and what's still to do: `plans/2026-11-23-05-activity.md`.
 
 ## Where things are
@@ -215,15 +220,16 @@ The example shop (`apps/shop`) does all of this:
    - add Better Auth's `admin` plugin;
    - add the service's address to `trustedOrigins`;
    - set your sign-in cookie for the parent domain (`AUTH_COOKIE_DOMAIN`);
-   - when a user is created, queue their sign-up for the service with the referral cookie
-     (`apps/shop/queues/affiliate-signups.ts`);
+   - when a user is created, publish it with the referral cookie (`apps/shop/src/published.ts`);
+     the service follows new users and is woken for each;
    - in Better Auth's Stripe plugin, queue every Stripe event for the service
      (`apps/shop/queues/stripe-events.ts`), so Stripe gets its answer at once.
    - At your checkout, ask the service what to add to it (`checkout()` in
      `apps/affiliates/client.ts`), as the shop's event page does.
 4. **Give your app the control plane** (see `apps/shop`): add `activity` (`packages/activity`) as
-   a dependency; the streams (`durable-objects/streams.ts`, `src/streams.ts`) and where pages
-   read them (`routes/streams/[...path].ts`); its setup and wrappers (`src/activity.ts`) used in
+   and `streams` (`packages/streams`) as dependencies; the streams and their subscriptions
+   (the four files in `durable-objects/`, `src/streams.ts`) and who may reach them
+   (`routes/streams/[...path].ts`); its setup and wrappers (`src/activity.ts`) used in
    place of Void's `queues`, `defineQueue` and `sendEmail`; its middleware
    (`middleware/00.activity.ts`); where the service's events arrive
    (`routes/api/affiliates/activity.ts`); and the `ActivityPane` in your layout.
