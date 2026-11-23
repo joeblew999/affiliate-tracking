@@ -11,7 +11,7 @@ const navLink =
   "hover:text-foreground data-void-active:font-medium data-void-active:text-foreground";
 
 export default function Layout({ children }: { children: ReactNode }) {
-  const { shopUrl, user, controlPlane, viewer } = useShared();
+  const { shopUrl, user, viewer } = useShared();
   return (
     <div className="min-h-svh bg-muted/40">
       {user?.viewingAs && <ViewingAsBar name={user.viewingAs} />}
@@ -39,7 +39,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         </div>
       </header>
       {children}
-      {viewer && <ActivityPane controlPlane={controlPlane} viewer={viewer} />}
+      {viewer && <ActivityPane viewer={viewer} />}
     </div>
   );
 }

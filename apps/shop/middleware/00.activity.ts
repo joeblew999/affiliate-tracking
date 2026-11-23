@@ -8,7 +8,7 @@ import "../src/activity.ts";
 
 declare module "void" {
   interface CloudContextVariables {
-    shared: { controlPlane: string; viewer: string | null };
+    shared: { viewer: string | null };
   }
 }
 
@@ -20,7 +20,6 @@ const track = activityMiddleware(() => {
 export default defineMiddleware(async (c, next) => {
   const user = getUser();
   c.set("shared", {
-    controlPlane: new URL(c.req.url).origin,
     viewer: user ? (user.role === "admin" ? "admins" : user.id) : null,
   });
   return track(c, next);

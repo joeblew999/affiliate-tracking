@@ -12,6 +12,7 @@
     "typecheck": "tsc"
   },
   "dependencies": {
+    "@durable-streams/client": "0.2.7",
     "@void/react": "catalog:",
     "void": "catalog:",
     "zod": "catalog:"

@@ -1,5 +1,5 @@
 // The service's part in the control plane (packages/activity): its work reports itself, and each
-// event goes to the shop, which holds the viewers' rooms (apps/shop/routes/activity/[viewer].ws.ts),
+// event goes to the shop, which holds the viewers' streams (apps/shop/src/streams.ts),
 // over the binding it already uses to tell the shop things. The service's code uses the wrappers
 // from here (queues, defineQueue, defineScheduled), never Void's own.
 import { env as bindings } from "cloudflare:workers";

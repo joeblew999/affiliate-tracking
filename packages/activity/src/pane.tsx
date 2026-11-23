@@ -1,19 +1,19 @@
 // The Activity pane: on every page of both apps, the viewer's actions and the steps each caused,
-// live from their room in the control plane (the shop's /activity/[viewer], Void's WebSocket
-// rooms). Failures are red, with the step and its error. When an action finishes, the page reloads
-// its data (Void's router.refresh()), so what it shows is what's now saved.
+// live from their stream in the control plane (Durable Streams, read at this app's own
+// /streams/<viewer>). It reads the stream's events from the start, then stays connected for each
+// new one, and works out the actions from them. Failures are red, with the step and its error.
+// When an action finishes, the page reloads its data (Void's router.refresh()), so what it shows
+// is what's now saved.
 //
 // For people and tests alike: data-live on the pane says whether it's listening ("connected" once
-// the room has sent its state), and each action carries data-action, data-title, data-by and
+// it has read everything so far), and each action carries data-action, data-title, data-by and
 // data-state, so a test can find one without depending on the wording.
 import { useNavigation, useRouter } from "@void/react";
 import { useEffect, useRef, useState } from "react";
-import { connect } from "void/ws";
-import { ServerMessage, type Action } from "./model.ts";
+import { stream } from "@durable-streams/client";
+import { ActivityEvent, apply, shown, type Action } from "./model.ts";
 
 type Props = {
-  /** The shop's address: where the control plane is. */
-  controlPlane: string;
   /** Whose activity: the signed-in user's id, or "admins" for an admin. */
   viewer: string;
 };
@@ -24,10 +24,8 @@ const STATE_WORDS: Record<Action["state"], string> = {
   failed: "failed",
 };
 
-export function ActivityPane({ controlPlane, viewer }: Props) {
+export function ActivityPane({ viewer }: Props) {
   const [actions, setActions] = useState<Action[]>([]);
-  // What's shown, also outside React's state, so a message can compare with it as it arrives.
-  const shown = useRef<Action[]>([]);
   const [live, setLive] = useState<"connecting" | "connected" | "reconnecting">("connecting");
   // Open or closed stays as the person left it, from page to page (this browser only).
   const [open, setOpen] = useState(false);
@@ -81,40 +79,46 @@ export function ActivityPane({ controlPlane, viewer }: Props) {
   }, [navigation.state]);
 
   useEffect(() => {
-    const refresh = () => refreshRef.current();
-    // The room is the other app's route on another address, so it isn't in this app's typed routes.
-    const socket = connect(
-      "/activity/[viewer]" as never,
-      {
-        baseURL: controlPlane,
-        params: { viewer },
-      } as never,
-    ) as unknown as {
-      on(event: "message", listener: (message: unknown) => void): void;
-      on(event: "close", listener: () => void): void;
-      close(): void;
-    };
-    socket.on("message", (raw) => {
-      const message = ServerMessage.parse(raw);
-      if (message.type === "snapshot") {
-        shown.current = message.actions;
-        setActions(message.actions);
-        setLive("connected");
-        return;
-      }
-      const action = message.action;
-      const before = shown.current.find((a) => a.id === action.id);
-      shown.current = [action, ...shown.current.filter((a) => a.id !== action.id)].sort(
-        (a, b) => b.startedAt - a.startedAt,
-      );
-      setActions(shown.current);
-      // Not for an action that changed who's signed in: the app moves on from that page itself.
-      if (action.state !== "running" && before?.state !== action.state && !action.changesSession)
-        void refresh();
-    });
-    socket.on("close", () => setLive("reconnecting"));
-    return () => socket.close();
-  }, [controlPlane, viewer]);
+    const stop = new AbortController();
+    // Every action the stream has told of, worked out from its events as they're read.
+    const all = new Map<string, Action>();
+    // Reading what was already there isn't news: only what arrives after it reloads the page.
+    let caughtUp = false;
+    void stream<unknown>({
+      url: new URL(`/streams/${viewer}`, location.origin).href,
+      offset: "-1",
+      live: true,
+      signal: stop.signal,
+      // The connection dropped: say so, and the client tries again from where it was.
+      onError: () => {
+        setLive("reconnecting");
+        return {};
+      },
+    })
+      .then((reading) => {
+        reading.subscribeJson((batch) => {
+          let finished = false;
+          for (const item of batch.items) {
+            const event = ActivityEvent.parse(item);
+            const before = all.get(event.actionId)?.state;
+            const action = apply(all, event);
+            // Not for an action that changed who's signed in: the app moves on from that page itself.
+            if (action.state !== "running" && before !== action.state && !action.changesSession)
+              finished = true;
+          }
+          setActions(shown(all));
+          if (caughtUp && finished) void refreshRef.current();
+          if (batch.upToDate) {
+            caughtUp = true;
+            setLive("connected");
+          }
+        });
+      })
+      .catch(() => {
+        // Stopped (the page moved on), or refused: nothing to show.
+      });
+    return () => stop.abort();
+  }, [viewer]);
 
   // Open, it's a column down the right-hand side: on a wide screen the page moves over for it, so it
   // never covers what's there; on a phone it's over the page until closed.

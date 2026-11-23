@@ -81,9 +81,12 @@ can't drift from the code. Only the clicks behind the charts are generated, from
   - The steps report themselves. Each app's code uses the wrappers in `packages/activity` (its
     `queues`, `defineQueue`, `defineScheduled`, `sendEmail`, and one middleware) rather than
     Void's own, so nothing in the apps announces anything by hand.
-  - The control plane itself is a Void WebSocket room per viewer, in the shop
-    (`apps/shop/routes/activity/[viewer].ws.ts`), where the users are. The service's work reaches
-    it over the binding, and its pages connect to it with the shop's sign-in.
+  - The control plane itself is a stream of events per viewer, in the shop, where the users are
+    ([Durable Streams](https://github.com/durable-streams/durable-streams), mounted in the shop:
+    `apps/shop/durable-objects/streams.ts`). Each stream keeps its events in order. A page reads
+    its viewer's stream from the start, then stays connected for each new event, at its own
+    app's `/streams/<viewer>`. The shop's sign-in decides who may read which. The service's work
+    reaches the streams over the binding.
   - When an action finishes, the page reloads its data, so what it shows is what's saved.
   - The plan, and what's still to do: `plans/2026-11-23-05-activity.md`.
 
@@ -206,9 +209,10 @@ The example shop (`apps/shop`) does all of this:
    - At your checkout, ask the service what to add to it (`checkout()` in
      `apps/affiliates/client.ts`), as the shop's event page does.
 4. **Give your app the control plane** (see `apps/shop`): add `activity` (`packages/activity`) as
-   a dependency; the room (`routes/activity/[viewer].ws.ts`); its setup and wrappers
-   (`src/activity.ts`) used in place of Void's `queues`, `defineQueue` and `sendEmail`; its
-   middleware (`middleware/00.activity.ts`); where the service's events arrive
+   a dependency; the streams (`durable-objects/streams.ts`, `src/streams.ts`) and where pages
+   read them (`routes/streams/[...path].ts`); its setup and wrappers (`src/activity.ts`) used in
+   place of Void's `queues`, `defineQueue` and `sendEmail`; its middleware
+   (`middleware/00.activity.ts`); where the service's events arrive
    (`routes/api/affiliates/activity.ts`); and the `ActivityPane` in your layout.
 5. **Point the service at your site:** set its `HOST_SITE_URL` to your site, and its
    `AFFILIATES_COOKIE_DOMAIN` to the parent domain. Give it the two Stripe accounts' keys:

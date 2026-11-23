@@ -13,8 +13,7 @@ declare module "void" {
     shopUser: User | null;
     shared: {
       shopUrl: string;
-      /** Where the control plane is (the shop), and whose activity this page shows. */
-      controlPlane: string;
+      /** Whose activity this page's Activity pane shows. */
       viewer: string | null;
       user: { email: string; isAdmin: boolean; viewingAs: string | null } | null;
     };
@@ -22,10 +21,11 @@ declare module "void" {
 }
 
 /**
- * Not about anyone: the shop's Better Auth itself, referral links, the shop's own calls, and the
- * payouts account's Stripe webhook.
+ * Not for this app to say who's asking: the shop's Better Auth itself, referral links, the shop's
+ * own calls, the payouts account's Stripe webhook, and the control plane's streams (the shop
+ * decides who may read those).
  */
-const PUBLIC_PREFIXES = ["/api/auth/", "/r/", "/api/host/", "/api/stripe/"];
+const PUBLIC_PREFIXES = ["/api/auth/", "/r/", "/api/host/", "/api/stripe/", "/streams/"];
 const PAGES = new Set(["/", "/admin"]);
 
 export default defineMiddleware(async (c, next) => {
@@ -38,7 +38,6 @@ export default defineMiddleware(async (c, next) => {
   c.set("shopUser", user);
   c.set("shared", {
     shopUrl: env.HOST_SITE_URL,
-    controlPlane: env.HOST_SITE_URL,
     viewer: user ? (user.role === "admin" ? "admins" : user.id) : null,
     user: user && {
       email: user.email,

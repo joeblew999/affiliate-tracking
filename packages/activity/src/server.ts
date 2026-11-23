@@ -16,7 +16,7 @@ export { activityHeaders, type Trace, type Viewers } from "./trace.ts";
 /** A queued message: the app's body, and the action it belongs to. */
 export type Traced<Body> = { body: Body; activity: Trace & { stepId: string } };
 
-/** Where events go: the app's control plane (the room), directly or over a binding. */
+/** Where events go: the control plane (the viewers' streams), directly or over a binding. */
 export type Sink = (event: ActivityEvent, viewers: Viewers) => Promise<void>;
 
 let app = "app";

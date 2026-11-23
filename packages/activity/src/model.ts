@@ -57,17 +57,7 @@ export const ActivityEvent = z.discriminatedUnion("type", [
 ]);
 export type ActivityEvent = z.infer<typeof ActivityEvent>;
 
-/** What a viewer's page receives: everything at once when it connects, then each change. */
-export const ServerMessage = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("snapshot"), actions: z.array(Action) }),
-  z.object({ type: z.literal("action"), action: Action }),
-]);
-export type ServerMessage = z.infer<typeof ServerMessage>;
-
-/** A page sends nothing; the room only talks. */
-export const ClientMessage = z.object({ type: z.literal("hello") });
-
-/** How many finished actions a viewer keeps, besides any still running. */
+/** How many finished actions a viewer is shown, besides any still running. */
 export const KEEP_FINISHED = 20;
 
 /** An action's state, from its steps. */
@@ -113,10 +103,9 @@ export function apply(actions: Map<string, Action>, event: ActivityEvent): Actio
   return next;
 }
 
-/** The actions a viewer keeps: every one still running, and the latest finished ones. */
-export function kept(actions: Map<string, Action>): Action[] {
+/** The actions a viewer is shown, newest first: every one still running, and the latest finished. */
+export function shown(actions: Map<string, Action>): Action[] {
   const all = [...actions.values()].sort((a, b) => b.startedAt - a.startedAt);
-  const finished = all.filter((a) => a.state !== "running").slice(KEEP_FINISHED);
-  for (const old of finished) actions.delete(old.id);
-  return [...actions.values()].sort((a, b) => b.startedAt - a.startedAt);
+  const old = new Set(all.filter((a) => a.state !== "running").slice(KEEP_FINISHED));
+  return all.filter((a) => !old.has(a));
 }
