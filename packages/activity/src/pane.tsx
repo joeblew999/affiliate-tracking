@@ -10,7 +10,7 @@
 // data-state, so a test can find one without depending on the wording.
 import { useNavigation, useRouter } from "@void/react";
 import { useEffect, useRef, useState } from "react";
-import { stream } from "@durable-streams/client";
+import { FetchError, stream } from "@durable-streams/client";
 import { ActivityEvent, apply, shown, type Action } from "./model.ts";
 
 type Props = {
@@ -87,10 +87,15 @@ export function ActivityPane({ viewer }: Props) {
     void stream<unknown>({
       url: new URL(`/streams/${viewer}`, location.origin).href,
       offset: "-1",
-      live: true,
+      // One connection, held open (server-sent events): who may read is asked once, when it
+      // opens, so the read isn't refused halfway when the session changes under it (an admin
+      // viewing the program as a partner, and coming back).
+      live: "sse",
       signal: stop.signal,
-      // The connection dropped: say so, and the client tries again from where it was.
-      onError: () => {
+      onError: (error) => {
+        // Refused: not theirs to read (signed out since). Stop, rather than ask again.
+        if (error instanceof FetchError && (error.status === 401 || error.status === 403)) return;
+        // The connection dropped: say so, and the client tries again from where it was.
         setLive("reconnecting");
         return {};
       },
