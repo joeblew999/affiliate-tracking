@@ -96,8 +96,22 @@ export async function userIdOf(person: Person): Promise<string> {
   return data.user.id;
 }
 
-/** One of the demo's people (apps/affiliates/demo.ts, seeded in every run), signed in on the shop. */
+/**
+ * One of the demo's people (apps/affiliates/demo.ts, seeded in every run), signed in on the shop:
+ * the session Better Auth's test utils made for them in the template (../shop-sessions.ts), its
+ * cookies put in a browser of their own.
+ */
 export async function signInAs(email: string): Promise<Person> {
+  const person = demoPeople.find((p) => p.email === email);
+  const cookies = globalThis.apps.sessions[email];
+  if (!person || !cookies) throw new Error(`${email} isn't one of the demo's people`);
+  const { context, page, errors } = await newBrowser();
+  await context.addCookies(cookies.map((c) => ({ ...c, url: SHOP })));
+  return { name: person.name, email, context, page, errors };
+}
+
+/** Sign in on the shop's own form, with the demo's password. */
+export async function signInOnForm(email: string): Promise<Person> {
   const person = demoPeople.find((p) => p.email === email);
   if (!person) throw new Error(`${email} isn't one of the demo's people`);
   const { context, page, errors } = await newBrowser();

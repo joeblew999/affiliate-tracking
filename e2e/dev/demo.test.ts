@@ -3,7 +3,7 @@
 // tests start from it and check what the system does.
 import { expect, test } from "vite-plus/test";
 import { demoSales } from "../../apps/affiliates/demo.ts";
-import { admin, AFFILIATES, open, partnerPage, signInAs } from "./helpers.ts";
+import { admin, AFFILIATES, open, partnerPage, signInAs, signInOnForm } from "./helpers.ts";
 
 /** The commission of Maya's fixture sales in this status. */
 const maya = (status: string) =>
@@ -12,7 +12,8 @@ const maya = (status: string) =>
     .reduce((sum, s) => sum + s.commissionCents, 0);
 
 test("the seeded demo: a partner's money, each other kind of person, and the admin's view", async () => {
-  expect(await partnerPage(await signInAs("maya@demo.test"))).toMatchObject({
+  // Maya signs in on the real form, with the seeded password; the others by their seeded sessions.
+  expect(await partnerPage(await signInOnForm("maya@demo.test"))).toMatchObject({
     status: "active",
     link: `${AFFILIATES}/r/maya`,
     onHoldCents: maya("pending"),

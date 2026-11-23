@@ -28,9 +28,11 @@ import { createServer, type AddressInfo } from "node:net";
 import { basename, join, relative } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import { DEMO_NOW, HOLD_DAYS } from "../apps/affiliates/demo.ts";
+import type { Sessions } from "./shop-sessions.ts";
 
 const ROOT = join(import.meta.dirname, "..");
 const APPS = ["affiliates", "shop"] as const;
+const SHOP_SESSIONS = join(import.meta.dirname, "shop-sessions.ts");
 
 /** What an app makes when it runs, left out of its copy (as Void's test helpers leave it out). */
 const GENERATED = new Set([
@@ -49,6 +51,8 @@ export interface Template {
   hostToken: string;
   webhookSecret: string;
   ipSalt: string;
+  /** The shops' Better Auth secret: the template's sessions (./shop-sessions.ts) are signed with it. */
+  authSecret: string;
   /** The real time (ms) at which the service's clock reads DEMO_NOW. */
   clockFrom: number;
 }
@@ -58,6 +62,8 @@ export interface Apps {
   affiliates: string;
   hostToken: string;
   webhookSecret: string;
+  /** The demo's people's sessions, made in the template (./shop-sessions.ts): their cookies by email. */
+  sessions: Sessions;
   /** Void's token for running the service's crons in development (guide/jobs.md). */
   cronToken: string;
   /** Now, by the service's clock. */
@@ -177,6 +183,7 @@ export async function prepareApps(): Promise<Template> {
     hostToken: randomBytes(32).toString("hex"),
     webhookSecret: `whsec_${randomBytes(32).toString("hex")}`,
     ipSalt: randomBytes(32).toString("hex"),
+    authSecret: randomBytes(32).toString("hex"),
     clockFrom: Date.now(),
   };
   await Promise.all(
@@ -186,7 +193,13 @@ export async function prepareApps(): Promise<Template> {
       // a fresh clone.
       await run(root, ["exec", "void", "prepare"]);
       await run(root, ["run", "db:migrate"]);
-      await run(root, ["run", "db:seed"], clockEnv(template));
+      if (app === "shop")
+        // The shop's seed, and the demo's people signed in (./shop-sessions.ts).
+        await run(root, ["exec", "void", "db", "seed", "--yes", "--file", SHOP_SESSIONS], {
+          BETTER_AUTH_SECRET: template.authSecret,
+          E2E_SESSIONS: join(template.dir, "sessions.json"),
+        });
+      else await run(root, ["run", "db:seed"], clockEnv(template));
     }),
   );
   return template;
@@ -239,6 +252,7 @@ export async function startApps(
       AFFILIATES_HOST_TOKEN: template.hostToken,
       AFFILIATES_SITE_URL: affiliates,
       STRIPE_WEBHOOK_SECRET: template.webhookSecret,
+      BETTER_AUTH_SECRET: template.authSecret,
     }),
   );
   const servers = await Promise.all([
@@ -251,6 +265,7 @@ export async function startApps(
     affiliates,
     hostToken: template.hostToken,
     webhookSecret: template.webhookSecret,
+    sessions: JSON.parse(readFileSync(join(template.dir, "sessions.json"), "utf8")) as Sessions,
     cronToken: readFileSync(join(roots.affiliates, ".void", "dev-trigger-token"), "utf8").trim(),
     now: () => Date.parse(DEMO_NOW) + (Date.now() - template.clockFrom),
     async stop() {
