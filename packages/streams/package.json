@@ -1,0 +1,20 @@
+{
+  "name": "streams",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc && tsc -p test"
+  },
+  "dependencies": {
+    "void": "catalog:"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@durable-streams/server-conformance-tests": "0.3.7",
+    "@types/node": "26.6.6",
+    "typescript": "catalog:"
+  }
+}

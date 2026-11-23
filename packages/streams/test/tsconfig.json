@@ -1,0 +1,8 @@
+{
+  // The tests run in Node, not in a Worker.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"]
+}

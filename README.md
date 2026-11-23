@@ -88,6 +88,15 @@ can't drift from the code. Only the clicks behind the charts are generated, from
     app's `/streams/<viewer>`. The shop's sign-in decides who may read which. The service's work
     reaches the streams over the binding.
   - When an action finishes, the page reloads its data, so what it shows is what's saved.
+- **Subscriptions: a worker told when a stream has something new.** `packages/streams` puts the
+  protocol's subscriptions in front of the Durable Streams server, which doesn't have them on
+  Cloudflare. A subscription follows streams by name or by a pattern, and keeps how far each
+  has been acknowledged. When a followed stream is written to, the subscriber is sent a signed
+  wake, reads on from where it had got to, and acknowledges. Unacknowledged, the wake is sent
+  again when its lease runs out; a delivery that fails is tried again; and what's due survives
+  a restart. It's built from Void's durable state (the subscription, with its alarm), a
+  directory of who follows what, and a wrapper round the server that tells subscribers of each
+  write. Not used by the apps yet: nothing here needs to react to a stream today.
   - The plan, and what's still to do: `plans/2026-11-23-05-activity.md`.
 
 ## Where things are
@@ -101,6 +110,7 @@ can't drift from the code. Only the clicks behind the charts are generated, from
 | `apps/affiliates/src`    | The program's logic: commission, sales, refunds, payouts, stats.                               |
 | `apps/shop`              | The example host: sign-in, Stripe, and its calls to the service.                               |
 | `packages/activity`      | The control plane: the Activity pane, and the wrappers that make the apps' work report itself. |
+| `packages/streams`       | Durable Streams for a Void app, with subscriptions, and the small Void app its tests run in.   |
 | `e2e`                    | The tests, run against both apps.                                                              |
 | `scripts`                | Local setup, putting the demo on the live site, and screenshots.                               |
 | `plans`                  | The plans this was built to, by date.                                                          |
@@ -138,6 +148,9 @@ come from the database schema and the pages' loaders and actions.
 - `vp check` formats, lints and type-checks.
 - `vp run check:types` type-checks each project as a whole (both apps, the tests, the scripts), as
   Void's own repo does.
+- `vp run test:streams` runs the Durable Streams protocol's own conformance tests (338 of them,
+  its authors') and this repo's subscription tests against `packages/streams`, in its own small
+  Void app.
 - `vp run test:dev` runs the tests in `e2e/dev`. The first time, run `vp run install:browser` to
   get Chromium.
 - `vp run test:stripe` runs the tests in `e2e/stripe` against Stripe's test mode. Buyers buy
@@ -165,7 +178,7 @@ it presses the button, then waits for that action to read done (`activity()` in
 its steps and the error, and so does a server error on any page. A failed test also shows what both
 apps printed.
 
-CI (`.github/workflows/ci.yml`) runs the first three on every push.
+CI (`.github/workflows/ci.yml`) runs the first four on every push.
 
 ## Deploy
 

@@ -49,6 +49,9 @@ export default defineConfig({
       // in the shell: STRIPE_TEST_SECRET_KEY (selling) and STRIPE_TEST_PAYOUTS_KEY (payouts).
       // Run it on demand.
       "test:stripe": { command: "vp test run --project stripe", cache: false },
+      // The Durable Streams protocol's own conformance tests, and this repo's subscription tests,
+      // against packages/streams in its Void app (packages/streams/app). About two minutes.
+      "test:streams": { command: "vp test run --project streams", cache: false },
       // Screenshots of every page of both apps, desktop and phone, in .screens/, with demo data
       // made through the apps (scripts/screens.ts). Needs `vp run dev` running.
       screens: { command: "vpx scripts/screens.ts", cache: false },
@@ -67,6 +70,18 @@ export default defineConfig({
           // starting both apps longer still (Void's own integration tests allow 120 seconds).
           testTimeout: 120_000,
           hookTimeout: 180_000,
+          fileParallelism: false,
+        },
+      },
+      {
+        test: {
+          // The protocol's own conformance tests against packages/streams, in its Void app.
+          name: "streams",
+          include: ["packages/streams/test/*.test.ts"],
+          pool: "forks",
+          // Their long-poll tests wait out the server's own 20 seconds.
+          testTimeout: 60_000,
+          hookTimeout: 120_000,
           fileParallelism: false,
         },
       },

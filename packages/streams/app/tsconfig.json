@@ -1,0 +1,17 @@
+{
+  "extends": "./.void/tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noUnusedLocals": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "lib": ["ES2025"],
+    "types": ["void/env"]
+  },
+  "include": ["routes", "durable-objects", "*.ts"]
+}

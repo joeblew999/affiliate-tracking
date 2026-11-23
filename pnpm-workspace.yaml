@@ -1,6 +1,8 @@
 packages:
   - apps/*
   - packages/*
+  # A package's own Void app, which its tests run it in (packages/streams/app).
+  - packages/*/app
 
 allowBuilds:
   # The Stripe CLI's binary comes in its per-platform package; its install script only downloads
