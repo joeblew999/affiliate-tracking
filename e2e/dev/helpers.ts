@@ -10,6 +10,7 @@ import { affiliates } from "../../apps/affiliates/client.ts";
 import {
   customerOf,
   DEMO_PASSWORD,
+  demoPayouts,
   demoPeople,
   demoSales,
   fixtureId,
@@ -97,16 +98,31 @@ export async function userIdOf(person: Person): Promise<string> {
 }
 
 /**
- * One of the demo's people (apps/affiliates/demo.ts, seeded in every run), signed in on the shop:
- * the session Better Auth's test utils made for them in the template (../shop-sessions.ts), its
- * cookies put in a browser of their own.
+ * One of the demo's people (apps/affiliates/demo.ts, seeded in every run), signed in on the shop
+ * through its Better Auth sign-in, with the seeded password; the session's cookies go in a browser
+ * of their own.
  */
 export async function signInAs(email: string): Promise<Person> {
   const person = demoPeople.find((p) => p.email === email);
-  const cookies = globalThis.apps.sessions[email];
-  if (!person || !cookies) throw new Error(`${email} isn't one of the demo's people`);
+  if (!person) throw new Error(`${email} isn't one of the demo's people`);
+  let cookies: string[] = [];
+  const { error } = await shopAuth.signIn.email({
+    email,
+    password: DEMO_PASSWORD,
+    fetchOptions: {
+      // As the shop's page sends it: Better Auth refuses a sign-in from no origin.
+      headers: { origin: SHOP },
+      onResponse: ({ response }) => void (cookies = response.headers.getSetCookie()),
+    },
+  });
+  if (error) throw new Error(`${email} can't sign in: ${error.message}`);
   const { context, page, errors } = await newBrowser();
-  await context.addCookies(cookies.map((c) => ({ ...c, url: SHOP })));
+  await context.addCookies(
+    cookies.map((cookie) => {
+      const [name = "", ...value] = (cookie.split(";")[0] ?? "").split("=");
+      return { name, value: value.join("="), url: SHOP };
+    }),
+  );
   return { name: person.name, email, context, page, errors };
 }
 
@@ -187,12 +203,27 @@ export interface Partner extends Person {
   code: string;
 }
 
+/** A seeded partner as the fixtures write them (apps/affiliates/demo.ts), by their code. */
+export function demoPartner(code: string) {
+  const person = demoPeople.find((p) => p.partner?.code === code);
+  if (!person?.partner) throw new Error(`no demo partner ${code}`);
+  return { ...person, ...person.partner };
+}
+
 /** A seeded partner (apps/affiliates/demo.ts, by their code), signed in. */
 export async function seededPartner(code: string): Promise<Partner> {
-  const person = demoPeople.find((p) => p.partner?.code === code);
-  if (!person) throw new Error(`no demo partner ${code}`);
-  return { ...(await signInAs(person.email)), code };
+  return { ...(await signInAs(demoPartner(code).email)), code };
 }
+
+/** What the fixtures have ready to pay a partner: their approved sales, bonuses and clawbacks. */
+export const seededReadyCents = (code: string) =>
+  demoSales
+    .filter((s) => s.partner === code && s.status === "approved")
+    .reduce((sum, s) => sum + s.commissionCents, 0);
+
+/** How many payouts the fixtures have for a partner. */
+export const seededPayoutCount = (code: string) =>
+  demoPayouts.filter((p) => p.partner === code).length;
 
 /** A seeded sale (apps/affiliates/demo.ts), with its customer and Stripe payment as seeded. */
 export function seededSale(label: string) {
@@ -455,6 +486,13 @@ export function paidSession(
     metadata,
     ...overrides,
   };
+}
+
+/** A sale for this partner through their link, as Stripe reports it; the customer's email. */
+export async function sell(partner: Partner, overrides: Record<string, unknown> = {}) {
+  const session = paidSession((await checkoutVia(partner)).metadata, overrides);
+  await stripeEvent("checkout.session.completed", session);
+  return (session.customer_details as { email: string }).email;
 }
 
 /** Wait until check() passes (for work done through a queue). The test's own timeout ends it. */

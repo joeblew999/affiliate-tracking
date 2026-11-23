@@ -12,7 +12,7 @@ const maya = (status: string) =>
     .reduce((sum, s) => sum + s.commissionCents, 0);
 
 test("the seeded demo: a partner's money, each other kind of person, and the admin's view", async () => {
-  // Maya signs in on the real form, with the seeded password; the others by their seeded sessions.
+  // Maya signs in on the real form, with the seeded password; the others through Better Auth's sign-in.
   expect(await partnerPage(await signInOnForm("maya@demo.test"))).toMatchObject({
     status: "active",
     link: `${AFFILIATES}/r/maya`,

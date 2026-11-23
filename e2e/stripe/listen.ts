@@ -28,6 +28,10 @@ export function listen(key: string, shop: string): Promise<ChildProcess> {
       "listen",
       "--api-key",
       key,
+      // Events in the latest API version, which the installed Stripe SDK (23.2.0) is on, as the
+      // dev tests' events say they are (Stripe.API_VERSION); without it, the account's default.
+      "--latest",
+      "--skip-update", // its version is the one in package.json
       "--events",
       EVENTS.join(","),
       "--forward-to",

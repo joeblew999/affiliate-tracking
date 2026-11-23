@@ -62,10 +62,11 @@ and the one change that fixes it.
     that follows is that one sale's.
   - **A promotion code:** approving Sam makes his code. A buyer through Sam's link gets his
     discount at Checkout.
-  - **A renewal:** the subscription's billing period is restarted from now
-    (`billing_cycle_anchor`), so Stripe invoices the next month and charges the card. That's a
-    real `invoice.paid`, and the renewal is the partner's. A Stripe test clock can't be used: it
-    must be on the customer from the start, and the Stripe plugin makes the customer at sign-up.
+  - **A renewal:** each buyer's Stripe customer, made by the plugin at sign-up, is put on a Stripe
+    test clock of its own (`testClocks.create` with `customer`, Stripe's 2026-05-27 dahlia API).
+    Advancing the clock a month makes Stripe renew the subscription and send a real
+    `invoice.paid`, and the renewal is the partner's. Deleting the clocks afterwards deletes the
+    customers. No test-only code goes in the shop's `auth.ts`.
   - **A refund:** `refunds.create` on the renewal's payment. Stripe's real `charge.refunded`
     refunds that sale.
   - **Another currency:** Pro's price is in a currency other than the account's, so the payout is

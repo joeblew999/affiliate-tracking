@@ -2,11 +2,11 @@
 // Stripe's webhook: the seeded people (apps/affiliates/demo.ts) in a browser, the shop's calls, and
 // Stripe's events, through both apps. Each check is a change from what the seed starts with.
 import { expect, test } from "vite-plus/test";
-import { demoPeople } from "../../apps/affiliates/demo.ts";
 import {
   AFFILIATES,
   apply,
   checkoutVia,
+  demoPartner,
   eventually,
   follow,
   linksOf,
@@ -16,12 +16,12 @@ import {
   partnerButton,
   partnerMe,
   partnerPage,
-  salesOf,
   saleOf,
+  salesOf,
   seededPartner,
   seededPartnerId,
-  shop,
   SHOP,
+  shop,
   signInAs,
   signUp,
   stripeEvent,
@@ -121,8 +121,6 @@ test("checkout without a referral uses the cookie, and nothing without either", 
   expect(nothing).toEqual({ metadata: {}, promotionCode: null });
 });
 
-const name = (code: string) => demoPeople.find((p) => p.partner?.code === code)?.name ?? "";
-
 test("a paid checkout becomes a sale once, on hold", async () => {
   const priya = await seededPartner("priya");
   const session = paidSession((await checkoutVia(priya)).metadata);
@@ -187,5 +185,5 @@ test("a suspended partner's referrals and links stop counting", async () => {
   expect(checkout.metadata).toEqual({});
   const session = paidSession({ affiliate_partner_id: ken, affiliate_source: "cookie" });
   await stripeEvent("checkout.session.completed", session);
-  expect(await saleOf(name("ken"), session)).toBeUndefined();
+  expect(await saleOf(demoPartner("ken").name, session)).toBeUndefined();
 });

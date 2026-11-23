@@ -4,22 +4,14 @@
 import { expect, test } from "vite-plus/test";
 import {
   addRule,
-  checkoutVia,
   now,
-  paidSession,
   salesOf,
   seededPartner,
+  sell,
   setRenewalMonths,
   stripeEvent,
   type Partner,
 } from "./helpers.ts";
-
-/** A sale for this partner through their link, as Stripe reports it. */
-async function sell(partner: Partner, overrides: Record<string, unknown> = {}) {
-  const session = paidSession((await checkoutVia(partner)).metadata, overrides);
-  await stripeEvent("checkout.session.completed", session);
-  return (session.customer_details as { email: string }).email;
-}
 
 /** The commission of these customers' sales of this partner, in that order. */
 async function commissionOf(partner: Partner, customers: string[]) {

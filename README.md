@@ -45,8 +45,8 @@ can't drift from the code. Only the clicks behind the charts are generated, from
   call is defined once, in `apps/affiliates/src/host-contract.ts`. Calls carry a shared secret,
   `AFFILIATES_HOST_TOKEN`.
 - **Stripe stays with the host.** The shop sells one plan, Pro, through its Better Auth Stripe
-  plugin: Stripe's Checkout and the subscription. The plugin receives
-  Stripe's webhook and passes every event on. The service turns them into sales, renewals, refunds and disputes, and
+  plugin: Stripe's Checkout and the subscription. The plugin receives Stripe's webhook and
+  passes every event on. The service turns them into sales, renewals, refunds and disputes, and
   pays partners with Stripe Connect.
 - **Slow work goes through queues.** Sign-ups reach the service through a queue. Payouts are queued
   one partner at a time. A daily job approves sales once their hold period is over, and queues any
@@ -102,8 +102,8 @@ come from the database schema and the pages' loaders and actions.
 - `vp run test:dev` runs the tests in `e2e/dev`. The first time, run `vp run install:browser` to
   get Chromium.
 - `vp run test:stripe` runs the tests in `e2e/stripe` against Stripe's test mode. Buyers subscribe
-  on Stripe's own Checkout page with Stripe's test card. Renewals and refunds are real ones in
-  Stripe. Stripe's webhooks reach the shop through the Stripe CLI's `stripe listen` (the
+  on Stripe's own Checkout page with Stripe's test card. A month passes on Stripe's test clock for
+  a renewal, and refunds are real ones in Stripe. Stripe's webhooks reach the shop through the Stripe CLI's `stripe listen` (the
   `@stripe/cli` package). It needs a test-mode key in `STRIPE_TEST_SECRET_KEY`. On GitHub, it runs from
   Actions → **Stripe end-to-end** → Run workflow (`.github/workflows/stripe.yml`), with that key
   saved as a repository secret.
@@ -114,8 +114,8 @@ ports, so every file starts from exactly the fixtures and nothing it changes rea
 your local data or your `vp run dev`. The service's clock is pinned to the fixtures' instant
 (`DEMO_NOW`, by `AFFILIATES_NOW`; `apps/affiliates/src/clock.ts`), so "on hold", "ready to pay" and
 "the last 30 days" come out the same on every run, and the tests check exact amounts from
-`demo.ts`. People are real browsers on the real pages, and the demo's people are signed in with
-Better Auth's test utils (`e2e/shop-sessions.ts`). The shop's calls to the service go through its
+`demo.ts`. People are real browsers on the real pages, and the demo's people sign in through the
+shop's Better Auth with the demo password. The shop's calls to the service go through its
 own client. Without Stripe, the dev tests send Stripe's events to the shop's webhook, signed as
 Stripe signs them. In the Stripe tests, Stripe sends them itself. There are no fakes or mocks.
 

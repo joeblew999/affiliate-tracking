@@ -21,15 +21,19 @@ declare module "vite-plus/test" {
     /** Pro's price, in its currency's minor units. */
     priceCents: number;
     priceCurrency: string;
+    /** The partners' buyer discount, in percent off. */
+    couponPercent: number;
   }
 }
 
 /** Pro's monthly price in the tests: 29.00 of the price's currency. */
 const PRICE_CENTS = 2900;
+/** The partners' buyer discount in the tests. */
+const COUPON_PERCENT = 10;
 
 /** The Stripe CLI (@stripe/cli), as `vp exec stripe` runs it. */
 export function stripeCli(key: string, args: string[]): string {
-  return execFileSync("vp", ["exec", "stripe", ...args, "--api-key", key], {
+  return execFileSync("vp", ["exec", "stripe", ...args, "--api-key", key, "--skip-update"], {
     encoding: "utf8",
   }).trim();
 }
@@ -55,7 +59,7 @@ export default async function setup(project: TestProject) {
     product_data: { name: "Pro (affiliates e2e)" },
   });
   const coupon = await stripe.coupons.create({
-    percent_off: 10,
+    percent_off: COUPON_PERCENT,
     duration: "once",
     name: "affiliates e2e",
   });
@@ -73,6 +77,7 @@ export default async function setup(project: TestProject) {
   project.provide("payoutCurrency", payoutCurrency);
   project.provide("priceCents", PRICE_CENTS);
   project.provide("priceCurrency", priceCurrency);
+  project.provide("couponPercent", COUPON_PERCENT);
   return async () => {
     removeApps(template);
     // The seeded partners' codes (SAM) come back every run: free them for the next one.

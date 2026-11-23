@@ -2,14 +2,12 @@
 // after DEMO_NOW, approves exactly the sales then HOLD_DAYS old, and none that are flagged, under
 // an open dispute, rejected, too new, or of a partner who's suspended or has every sale reviewed.
 import { expect, test } from "vite-plus/test";
-import { decideSale, runCron, saleOf, seededSale, stripeEvent } from "./helpers.ts";
-import { demoPeople } from "../../apps/affiliates/demo.ts";
+import { decideSale, demoPartner, runCron, saleOf, seededSale, stripeEvent } from "./helpers.ts";
 
 const DAILY = "17 3 * * *";
-const name = (code: string) => demoPeople.find((p) => p.partner?.code === code)?.name ?? "";
 const statusOf = async (label: string) => {
   const sale = seededSale(label);
-  return (await saleOf(name(sale.partner), sale.customer))?.status;
+  return (await saleOf(demoPartner(sale.partner).name, sale.customer))?.status;
 };
 
 test("25 days on, the daily job approves the sales past their hold, and only those", async () => {
