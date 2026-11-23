@@ -4,9 +4,13 @@
 //      transaction), kept in fxSource. One Stripe can't convert stays out of the payout.
 //   2. Claim: in one transaction, a payout for the partner's settled sales (at least
 //      AFFILIATES_MIN_PAYOUT_CENTS), the sales marked paying. A pending payout is resumed instead.
-//   3. Pay: a Stripe transfer to the partner's Connect account. Its transfer_group is the payout's
-//      own, and Stripe is asked for that group's transfer before sending, so a retry at any age
-//      never pays twice. Without a Connect account the payout is manual: an admin pays it.
+//   3. Pay: first the money for it, added to the payouts account from the business's bank (a Stripe
+//      top-up, once per payout). Until it has arrived the payout waits; the payouts account's
+//      webhook (topup.succeeded: routes/api/stripe/payouts.ts) queues it again when it has, and
+//      the daily job does too. Then a Stripe transfer to the partner's Connect account. Its
+//      transfer_group is the payout's own, and Stripe is asked for that group's transfer before
+//      sending, so a retry at any age never pays twice. Without a Connect account the payout is
+//      manual: an admin pays it.
 //   4. Finish: payout sent (or manual), its sales paid. A refund of one of its sales before the
 //      transfer starts sends the payout back instead: failed, its sales approved again with the
 //      refund taken off them (src/refunds.ts), for the next run. A refund after that is a clawback
@@ -18,7 +22,7 @@ import { and, db, eq, inArray, isNotNull, isNull, ne, sql, sum } from "void/db";
 import { env } from "void/env";
 import { alias } from "void/schema-d1";
 import { refundShare } from "./refunds.ts";
-import { hasStripe, stripe } from "./stripe.ts";
+import { hasPayoutsStripe, hasSalesStripe, payoutsStripe, salesStripe } from "./stripe.ts";
 import { now as clock } from "./clock.ts";
 
 type Payout = typeof payouts.$inferSelect;
@@ -38,7 +42,7 @@ async function settle(partnerId: string): Promise<void> {
     .update(sales)
     .set({ payoutCurrency: target, payoutCents: sql`${sales.commissionCents}` })
     .where(and(unclaimed, eq(sales.currency, target)));
-  if (!hasStripe()) return;
+  if (!hasSalesStripe()) return;
   const foreign = await db
     .select({
       id: sales.id,
@@ -50,7 +54,8 @@ async function settle(partnerId: string): Promise<void> {
     .where(and(unclaimed, ne(sales.currency, target), isNotNull(sales.paymentIntent)))
     .limit(100);
   for (const sale of foreign) {
-    const intent = await stripe().paymentIntents.retrieve(sale.paymentIntent ?? "", {
+    // The sale is in the selling account: the rate Stripe settled it at there.
+    const intent = await salesStripe().paymentIntents.retrieve(sale.paymentIntent ?? "", {
       expand: ["latest_charge.balance_transaction"],
     });
     const charge = typeof intent.latest_charge === "object" ? intent.latest_charge : null;
@@ -237,13 +242,37 @@ async function finish(
   ]);
 }
 
+/**
+ * Step 3, first: the money for this payout in the payouts account. One top-up per payout (a new one
+ * only if the last failed); true once it has arrived.
+ */
+async function funded(payout: Payout): Promise<boolean> {
+  if (payout.stripeTopupId) {
+    const topup = await payoutsStripe().topups.retrieve(payout.stripeTopupId);
+    if (topup.status === "succeeded") return true;
+    if (topup.status === "pending") return false;
+  }
+  // None yet, or the last one failed or was canceled: a new one, keyed to the one it replaces.
+  const topup = await payoutsStripe().topups.create(
+    {
+      amount: payout.amountCents,
+      currency: payout.currency,
+      description: "Partner payout",
+      metadata: { payout_id: payout.id, partner_id: payout.partnerId },
+    },
+    { idempotencyKey: `affiliates_topup_${payout.batchKey}_${payout.stripeTopupId ?? "first"}` },
+  );
+  await db.update(payouts).set({ stripeTopupId: topup.id }).where(eq(payouts.id, payout.id));
+  return topup.status === "succeeded";
+}
+
 /** Step 3: the transfer for this payout, found (an earlier attempt's) or made. */
 async function transfer(payout: Payout, destination: string): Promise<string> {
   const group = transferGroup(payout.id);
-  const existing = await stripe().transfers.list({ transfer_group: group, limit: 1 });
+  const existing = await payoutsStripe().transfers.list({ transfer_group: group, limit: 1 });
   const found = existing.data[0];
   if (found) return found.id;
-  const made = await stripe().transfers.create(
+  const made = await payoutsStripe().transfers.create(
     {
       amount: payout.amountCents,
       currency: payout.currency,
@@ -268,9 +297,14 @@ export async function payPartner(partnerId: string) {
       reason: "a sale in it was refunded before paying",
     };
   }
-  if (!payout.stripeAccountId) {
+  if (!payout.stripeAccountId || !hasPayoutsStripe()) {
     await finish(payout, "manual", null);
     return { status: "manual", payoutId: payout.id, amountCents: payout.amountCents };
+  }
+  if (!payout.transferStartedAt && !(await funded(payout))) {
+    const reason = "waiting for the money added for it to arrive";
+    await db.update(payouts).set({ lastError: reason }).where(eq(payouts.id, payout.id));
+    return { status: "waiting", payoutId: payout.id, reason };
   }
   await db
     .update(payouts)

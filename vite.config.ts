@@ -44,8 +44,9 @@ export default defineConfig({
           output: [],
         },
       },
-      // Real Stripe test mode (e2e/stripe/): buyers pay on Stripe's Checkout, and Stripe's own
-      // webhooks reach the shop through the Stripe CLI. Needs STRIPE_TEST_SECRET_KEY in the shell.
+      // Real Stripe test mode (e2e/stripe/): buyers buy tickets on Stripe's Checkout, and Stripe's
+      // own webhooks reach the shop through the Stripe CLI. Needs the two accounts' test-mode keys
+      // in the shell: STRIPE_TEST_SECRET_KEY (selling) and STRIPE_TEST_PAYOUTS_KEY (payouts).
       // Run it on demand.
       "test:stripe": { command: "vp test run --project stripe", cache: false },
       // Screenshots of every page of both apps, desktop and phone, in .screens/, with demo data

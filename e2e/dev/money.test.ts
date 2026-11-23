@@ -4,7 +4,9 @@
 import { expect, test } from "vite-plus/test";
 import {
   addRule,
+  checkoutVia,
   now,
+  paidSession,
   salesOf,
   seededPartner,
   sell,
@@ -48,21 +50,31 @@ test("a capped rule stops paying for a customer once the cap is reached", async 
 });
 
 test("a renewal pays the first sale's partner for their recurring months, once per invoice", async () => {
-  // Maya's monthly Pro (seeded sale maya_2, 95 days ago) renews on its subscription.
+  // A host selling subscriptions: someone subscribed through Maya's link 95 days ago, at $29 a
+  // month. (The demo sells tickets only, so this subscription is the test's own.)
   const maya = await seededPartner("maya");
+  const first = paidSession((await checkoutVia(maya)).metadata, {
+    mode: "subscription",
+    amount_total: 2900,
+    payment_intent: null, // a subscription's payment is its invoice's
+    customer: "cus_test_maya_sub",
+    subscription: "sub_test_maya_sub",
+  });
+  await stripeEvent("checkout.session.completed", first, { daysAgo: 95 });
+  const email = (first.customer_details as { email: string }).email;
   const invoice = (n: number) => ({
-    id: `in_test_maya_2_${n}`,
+    id: `in_test_maya_sub_${n}`,
     object: "invoice",
     billing_reason: "subscription_cycle",
     amount_paid: 3190, // $29 and 10% tax, which earns nothing
     total_taxes: [{ amount: 290, tax_behavior: "exclusive" }],
     currency: "usd",
-    customer: "cus_demo_maya_2",
-    customer_email: "maya_2@customer.demo.test",
+    customer: "cus_test_maya_sub",
+    customer_email: email,
     customer_address: null,
     parent: {
       type: "subscription_details",
-      subscription_details: { subscription: "sub_demo_maya_2" },
+      subscription_details: { subscription: "sub_test_maya_sub" },
     },
     status_transitions: { paid_at: Math.floor(now() / 1000) },
     lines: { data: [] },

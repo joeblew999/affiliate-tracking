@@ -5,12 +5,12 @@ import { partners } from "@schema";
 import { db, eq } from "void/db";
 import { env } from "void/env";
 import type { Partner } from "./partners.ts";
-import { hasStripe, stripe } from "./stripe.ts";
+import { hasSalesStripe, salesStripe } from "./stripe.ts";
 
 export async function ensurePromotionCode(partner: Partner): Promise<void> {
-  if (partner.promoCodeId || !env.AFFILIATES_COUPON_ID || !hasStripe()) return;
+  if (partner.promoCodeId || !env.AFFILIATES_COUPON_ID || !hasSalesStripe()) return;
   const code = partner.code.toUpperCase();
-  const promotion = await stripe().promotionCodes.create(
+  const promotion = await salesStripe().promotionCodes.create(
     {
       promotion: { type: "coupon", coupon: env.AFFILIATES_COUPON_ID },
       code,

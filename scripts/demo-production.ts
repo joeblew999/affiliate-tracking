@@ -18,7 +18,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 const APPS = {
   shop: {
     clear: ["session", "verification"],
-    load: ["account", "subscription", "user"],
+    load: ["account", "user"],
     keep: [],
   },
   affiliates: {

@@ -36,6 +36,13 @@
       "when": 1795361034954,
       "tag": "20261122152354_store_codes_and_emails_in_one_case",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1795413015757,
+      "tag": "20261123055015_public_captain_cross",
+      "breakpoints": true
     }
   ]
 }

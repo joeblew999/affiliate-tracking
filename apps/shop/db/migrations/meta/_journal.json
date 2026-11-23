@@ -22,6 +22,13 @@
       "when": 1795358577566,
       "tag": "20261122144257_lumpy_klaw",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1795412918342,
+      "tag": "20261123054838_chemical_vertigo",
+      "breakpoints": true
     }
   ]
 }

@@ -9,9 +9,6 @@ import { stripVTControlCharacters } from "node:util";
 const EVENTS = [
   "checkout.session.completed",
   "checkout.session.async_payment_succeeded",
-  "customer.subscription.created",
-  "customer.subscription.updated",
-  "customer.subscription.deleted",
   "invoice.paid",
   "charge.refunded",
   "charge.dispute.created",

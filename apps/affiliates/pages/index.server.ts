@@ -4,11 +4,13 @@ import { defineHandler, defineHead, type InferProps } from "void";
 import type { Href } from "void/routes";
 import { db, eq } from "void/db";
 import { env } from "void/env";
+import { z } from "zod";
 import { requirePartner, requireUser } from "../src/access.ts";
 import { notePartnerIp } from "../src/fraud.ts";
 import { archiveLink, createLink, linksOf } from "../src/links.ts";
 import { partnerForUser } from "../src/partners.ts";
-import { hasStripe, stripe } from "../src/stripe.ts";
+import { payoutCountries } from "../src/payout-countries.ts";
+import { hasPayoutsStripe, payoutsStripe } from "../src/stripe.ts";
 import { earnings, stats } from "../src/stats.ts";
 import { requestIpHash } from "../src/visitor.ts";
 import { now as clock } from "../src/clock.ts";
@@ -41,6 +43,13 @@ export const loader = defineHandler(async (c) => {
     links: record && active ? await linksOf(record.id, origin) : [],
     stats: record && active ? await stats(record.id, 30) : null,
     earnings: record && active ? await earnings(record.id) : [],
+    // Setting up payouts: the countries their Stripe account can be in, theirs (by where they are
+    // now) first. None: payouts aren't set up on this service, or they have theirs.
+    payoutCountries:
+      record && active && !record.stripeAccountId && hasPayoutsStripe()
+        ? await payoutCountries()
+        : [],
+    country: (c.req.raw.cf?.country as string | undefined) ?? null,
   };
 });
 export type Props = InferProps<typeof loader>;
@@ -91,31 +100,39 @@ export const actions = {
     await archiveLink(partner.id, body.id);
   }),
 
-  // Getting paid: a Stripe Connect Express account (made the first time), then Stripe's own
-  // onboarding, which comes back here. Until then an admin pays the partner by hand.
-  connect: defineHandler(async (c) => {
-    const { partner } = await requirePartner(c);
-    if (!hasStripe())
-      throw new HTTPException(503, { message: "Payments aren't set up on this service" });
-    let account = partner.stripeAccountId;
-    if (!account) {
-      const made = await stripe().accounts.create(
-        { type: "express", email: partner.email, metadata: { partner_id: partner.id } },
-        { idempotencyKey: `affiliates_account_${partner.id}` },
-      );
-      account = made.id;
-      await db
-        .update(partners)
-        .set({ stripeAccountId: account })
-        .where(eq(partners.id, partner.id));
-    }
-    const back = new URL("/", c.req.url).toString();
-    const link = await stripe().accountLinks.create({
-      account,
-      type: "account_onboarding",
-      refresh_url: back,
-      return_url: back,
-    });
-    return c.redirect(link.url as Href);
-  }),
+  // Getting paid: a Stripe Connect Express account in the payouts account, in the country the
+  // partner chose (made the first time), then Stripe's own onboarding, which comes back here.
+  // Until then an admin pays the partner by hand.
+  connect: defineHandler.withValidator({ body: z.object({ country: z.string().length(2) }) })(
+    async (c, { body }) => {
+      const { partner } = await requirePartner(c);
+      if (!hasPayoutsStripe())
+        throw new HTTPException(503, { message: "Payouts aren't set up on this service" });
+      const country = body.country.toUpperCase();
+      if (!partner.stripeAccountId && !(await payoutCountries()).includes(country))
+        throw new HTTPException(400, {
+          message: "Stripe can't pay partners in that country from here",
+        });
+      let account = partner.stripeAccountId;
+      if (!account) {
+        const made = await payoutsStripe().accounts.create(
+          { type: "express", country, email: partner.email, metadata: { partner_id: partner.id } },
+          { idempotencyKey: `affiliates_account_${partner.id}` },
+        );
+        account = made.id;
+        await db
+          .update(partners)
+          .set({ stripeAccountId: account })
+          .where(eq(partners.id, partner.id));
+      }
+      const back = new URL("/", c.req.url).toString();
+      const link = await payoutsStripe().accountLinks.create({
+        account,
+        type: "account_onboarding",
+        refresh_url: back,
+        return_url: back,
+      });
+      return c.redirect(link.url as Href);
+    },
+  ),
 };

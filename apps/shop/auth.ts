@@ -2,8 +2,9 @@
 // - the admin plugin: emails in ADMIN_EMAILS are admins, who run the affiliate program;
 // - its session cookie for the parent domain (AUTH_COOKIE_DOMAIN), so the affiliate service on a
 //   subdomain receives it and asks this Better Auth who's signed in, through its binding;
-// - the Stripe plugin: the "pro" subscription, its checkout carrying the affiliate service's
-//   attribution, and every Stripe event passed on to the service (onEvent);
+// - the Stripe plugin: each user's Stripe customer (made at sign-up), and Stripe's webhook, every
+//   event of which goes on to the affiliate service (onEvent). Tickets are one-off payments, which
+//   the plugin doesn't make: the event page makes their checkout (pages/events/[id].server.ts);
 // - a new-user hook telling the affiliate service, through a queue (queues/affiliate-signups.ts).
 //
 // `void prepare` runs this file in plain Node, with no Worker env, to build the auth schema. So the
@@ -11,24 +12,12 @@
 // with or without a key), and values are read from the config's `env` or inside the hooks.
 import { stripe } from "@better-auth/stripe";
 import { admin } from "better-auth/plugins";
-import Stripe from "stripe";
 import { defineAuth } from "void/auth";
 import { queues } from "void/queues";
 import { referralFrom } from "affiliates/client";
+import { stripeClient } from "./src/stripe.ts";
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
-
-/** Stripe with the shop's key; without one, every Stripe call fails saying so. */
-function stripeClient(key: string): Stripe {
-  const httpClient = Stripe.createFetchHttpClient();
-  if (key) return new Stripe(key, { httpClient });
-  return new Stripe("", {
-    httpClient,
-    authenticator: async () => {
-      throw new Error("STRIPE_SECRET_KEY isn't set: the shop has no payments");
-    },
-  });
-}
 
 export default defineAuth(({ defaults, env }) => {
   const admins = new Set(
@@ -64,31 +53,6 @@ export default defineAuth(({ defaults, env }) => {
         onEvent: async (event) => {
           const { affiliatesService } = await import("./src/affiliates.ts");
           await affiliatesService().stripeEvent(event);
-        },
-        subscription: {
-          enabled: true,
-          plans: [{ name: "pro", priceId: text(env.STRIPE_PRO_PRICE_ID) }],
-          // Ask the affiliate service which partner this sale is for, and add their buyer discount.
-          getCheckoutSessionParams: async ({ user }, request) => {
-            const headers = request?.headers;
-            // Loaded here, inside the Worker: src/affiliates.ts uses "cloudflare:workers".
-            const { affiliatesService } = await import("./src/affiliates.ts");
-            const attribution = await affiliatesService().checkout({
-              userId: user.id,
-              ref: referralFrom(headers?.get("cookie")),
-              promoCode: null,
-              ip: headers?.get("cf-connecting-ip") ?? null,
-            });
-            return {
-              params: {
-                metadata: attribution.metadata,
-                subscription_data: { metadata: attribution.metadata },
-                ...(attribution.promotionCode
-                  ? { discounts: [{ promotion_code: attribution.promotionCode }] }
-                  : {}),
-              },
-            };
-          },
         },
       }),
     ],

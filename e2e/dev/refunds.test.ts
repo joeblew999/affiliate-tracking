@@ -25,7 +25,7 @@ const refund = (label: string, refunded: number) =>
   });
 
 test("a refund before payment comes off the sale; after payment it's clawed back from the next payout", async () => {
-  // Leo's yearly sale, approved, not paid yet: 30% refunded takes 30% off its $58.
+  // Leo's masterclass ticket, approved, not paid yet: 30% refunded takes 30% off its $58.
   await refund("leo_5", 8700);
   await refund("leo_5", 8700); // sent again: no change
   expect(await saleOf(demoPartner("leo").name, seededSale("leo_5").customer)).toMatchObject({
@@ -34,7 +34,7 @@ test("a refund before payment comes off the sale; after payment it's clawed back
     notes: "$87.00 refunded",
   });
 
-  // Maya's yearly sale, already paid its $72.50: 20% refunded is $14.50 clawed back.
+  // Maya's masterclass ticket, already paid its $72.50: 20% refunded is $14.50 clawed back.
   await refund("maya_1", 5800);
   expect(await saleOf(demoPartner("maya").name, seededSale("maya_1").customer)).toMatchObject({
     status: "paid",

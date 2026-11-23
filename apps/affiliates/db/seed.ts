@@ -1,5 +1,5 @@
 // `vp run demo` (both apps) or `vp run affiliates#db:seed`: resets the service's local database and
-// loads the demo: the fixtures in ../demo.ts, written out (partners, their links, sales, renewals,
+// loads the demo: the fixtures in ../demo.ts, written out (partners, their links, ticket sales,
 // bonuses, refunds, payouts, rules), with ids made from their labels. The tests check against the
 // same fixtures. Only the clicks and signups behind the charts are generated here, from a fixed
 // seed; nothing checks those exactly, and no money comes from them.
@@ -13,7 +13,7 @@ import {
   customerOf,
   demoPayouts,
   demoPeople,
-  demoProducts,
+  demoEvents,
   demoRules,
   demoSales,
   fixtureId,
@@ -102,26 +102,18 @@ export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) =
 
   const people = new Map(demoPeople.map((person) => [person.partner?.code, person]));
   const sales = demoSales.map((s) => {
-    const product = s.product ? demoProducts[s.product] : null;
+    const event = s.event ? demoEvents[s.event] : null;
     const pct = people.get(s.partner)?.partner?.commissionPct ?? null;
     const createdAt = ago(s.daysAgo);
     const payout = s.payout ? demoPayouts.find((p) => p.label === s.payout) : undefined;
-    const first = s.kind === "renewal" ? (s.of ?? s.label) : s.label;
     const approvedAt =
       s.status === "approved" || s.status === "paid"
         ? s.kind === "bonus" || s.kind === "clawback"
           ? createdAt
           : createdAt + HOLD_DAYS * DAY
         : null;
-    const items: SaleItem[] = product
-      ? [
-          {
-            productId: product.productId,
-            name: product.name,
-            variant: product.variant,
-            quantity: 1,
-          },
-        ]
+    const items: SaleItem[] = event
+      ? [{ productId: event.productId, name: event.name, variant: null, quantity: 1 }]
       : [];
     return {
       id: fixtureId(`sale:${s.label}`),
@@ -129,17 +121,15 @@ export default defineSeed<typeof import("./schema.ts")>(async ({ db, schema }) =
       kind: s.kind,
       status: s.status,
       stripeSessionId: s.kind === "checkout" ? `cs_demo_${s.label}` : null,
-      stripeInvoiceId: s.kind === "renewal" ? `in_demo_${s.label}` : null,
-      paymentIntent: product ? paymentIntentOf(s.label) : null,
-      stripeCustomerId: product ? `cus_demo_${first}` : null,
-      stripeSubscriptionId: product?.variant === "Monthly" ? `sub_demo_${first}` : null,
+      paymentIntent: event ? paymentIntentOf(s.label) : null,
+      stripeCustomerId: event ? `cus_demo_${s.label}` : null,
       customerEmail: customerOf(s),
-      customerCountry: product ? "US" : null,
-      amountCents: product?.cents ?? 0,
+      customerCountry: event ? "US" : null,
+      amountCents: event?.cents ?? 0,
       currency: "usd",
       commissionCents: s.commissionCents,
       grossCommissionCents: s.grossCommissionCents ?? s.commissionCents,
-      commissionPct: product ? pct : null,
+      commissionPct: event ? pct : null,
       refundedCents: s.refundedCents ?? 0,
       refundVersion: s.refundedCents ? 1 : 0,
       refundOf: s.kind === "clawback" && s.of ? fixtureId(`sale:${s.of}`) : null,

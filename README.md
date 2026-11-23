@@ -15,7 +15,8 @@ from [HolotypePteLtd/affiliate-tracking](https://github.com/HolotypePteLtd/affil
 
 ## Try the demo
 
-Open the shop and press **Sign in as the admin**. You land on the service's admin page.
+The shop sells tickets to 3 online events. Open it and press **Sign in as the admin**. You land
+on the service's admin page.
 
 - **Partners tab:** approve, suspend and set commission. To see the program as a partner, open a
   partner's menu and choose **View as**. Press **Back to admin** in the bar at the top to return.
@@ -25,8 +26,8 @@ Open the shop and press **Sign in as the admin**. You land on the service's admi
   the demo only): `admin@demo.test`, `maya@demo.test` and so on, and `chris@demo.test` for a
   customer who never applied.
 
-The demo is written out in one file, `apps/affiliates/demo.ts`: its people, and every sale,
-renewal, refund, bonus, payout and rule of the program, with exact amounts. Times are days before
+The demo is written out in one file, `apps/affiliates/demo.ts`: its people, its 3 events, and
+every ticket sale, refund, bonus, payout and rule of the program, with exact amounts. Times are days before
 one instant. Both apps' seeds load it (`vp run demo`) and the tests check against it, so the demo
 can't drift from the code. Only the clicks behind the charts are generated, from a fixed seed.
 
@@ -44,15 +45,21 @@ can't drift from the code. Only the clicks behind the charts are generated, from
   `apps/affiliates/client.ts`. It calls at sign-up, at checkout, and for every Stripe event. Each
   call is defined once, in `apps/affiliates/src/host-contract.ts`. Calls carry a shared secret,
   `AFFILIATES_HOST_TOKEN`.
-- **Stripe stays with the host.** The shop sells one plan, Pro, through its Better Auth Stripe
-  plugin: Stripe's Checkout and the subscription. The plugin receives Stripe's webhook and
-  passes every event on. The service turns them into sales, renewals, refunds and disputes, and
-  pays partners with Stripe Connect. A partner without a Stripe Connect account gets a manual
-  payout, for the admin to pay by hand.
-- **Tax is Stripe's.** A host that charges tax turns on Stripe Tax in its checkout. Commission is
-  on the price, not the tax Stripe collected with it. Stripe's Managed Payments (Stripe as merchant
-  of record) can't be used with this: Stripe doesn't allow it on an account that's a Connect
-  platform.
+- **A ticket is a Stripe Checkout, made by the host.** A signed-in user presses **Buy ticket** on
+  an event's page (`apps/shop/pages/events/[id].server.ts`). The shop asks the service what to add
+  to the checkout: the partner who brought the buyer, and their discount. It then makes a one-off
+  Stripe Checkout with it. The shop's Better Auth Stripe plugin makes each user's Stripe customer
+  at sign-up, receives Stripe's webhook, and passes every event on. The service turns them into
+  sales, refunds and disputes (and renewals, for a host that sells subscriptions).
+- **Stripe handles all the tax, on two Stripe accounts of one business.** Stripe won't allow
+  Managed Payments (Stripe as the seller, handling the tax) on an account that pays partners
+  through Stripe Connect. So:
+  - the **selling account** (the host's) has Managed Payments on, and takes the ticket money;
+  - the **payouts account** is the Connect platform. It holds no sales. Before each payout, the
+    service adds the money for it from the business's bank (a Stripe top-up), then transfers it
+    to the partner's Stripe account.
+    Commission is on the price, not the tax Stripe adds. A partner without a Stripe account gets a
+    manual payout, for the admin to pay by hand.
 - **Slow work goes through queues.** Sign-ups reach the service through a queue. Payouts are queued
   one partner at a time. A daily job approves sales once their hold period is over, and queues any
   payout that didn't finish, so a crash can't leave one half done.
@@ -106,12 +113,13 @@ come from the database schema and the pages' loaders and actions.
   Void's own repo does.
 - `vp run test:dev` runs the tests in `e2e/dev`. The first time, run `vp run install:browser` to
   get Chromium.
-- `vp run test:stripe` runs the tests in `e2e/stripe` against Stripe's test mode. Buyers subscribe
-  on Stripe's own Checkout page with Stripe's test card. A month passes on Stripe's test clock for
-  a renewal, and refunds are real ones in Stripe. Stripe's webhooks reach the shop through the Stripe CLI's `stripe listen` (the
-  `@stripe/cli` package). It needs a test-mode key in `STRIPE_TEST_SECRET_KEY`. On GitHub, it runs from
-  Actions → **Stripe end-to-end** → Run workflow (`.github/workflows/stripe.yml`), with that key
-  saved as a repository secret.
+- `vp run test:stripe` runs the tests in `e2e/stripe` against Stripe's test mode. Buyers buy
+  tickets on Stripe's own Checkout page with Stripe's test card, and refunds are real ones in
+  Stripe. Stripe's webhooks reach the shop through the Stripe CLI's `stripe listen` (the
+  `@stripe/cli` package). It needs the test-mode keys of two Stripe test accounts:
+  `STRIPE_TEST_SECRET_KEY` (selling, with Managed Payments turned on) and
+  `STRIPE_TEST_PAYOUTS_KEY` (payouts). On GitHub, it runs from Actions → **Stripe end-to-end** →
+  Run workflow (`.github/workflows/stripe.yml`), with those keys saved as repository secrets.
 
 The tests work as Void's own do (`e2e/apps.ts`). Once per run, both apps are copied, migrated and
 seeded with the demo fixtures. Each test file then gets its own copy of that seeded state, on free
@@ -144,7 +152,7 @@ Cloudflare resources.
 
 `vp run demo:production` replaces the live databases with the demo. Use it only on the demo site.
 
-Not set up yet: Stripe on the live site (the `STRIPE_*` settings, and the webhook in Stripe).
+Not set up yet: Stripe on the live site (the `STRIPE_*` settings, and both webhooks in Stripe).
 
 ## Add it to your app
 
@@ -160,17 +168,21 @@ The example shop (`apps/shop`) does all of this:
    - set your sign-in cookie for the parent domain (`AUTH_COOKIE_DOMAIN`);
    - when a user is created, queue their sign-up for the service with the referral cookie
      (`apps/shop/queues/affiliate-signups.ts`);
-   - in Better Auth's Stripe plugin, ask the service what to add to each checkout, and pass every
-     Stripe event on (`apps/shop/src/affiliates.ts`).
+   - in Better Auth's Stripe plugin, pass every Stripe event on (`apps/shop/src/affiliates.ts`).
+   - At your checkout, ask the service what to add to it (`checkout()` in
+     `apps/affiliates/client.ts`), as the shop's event page does.
 4. **Point the service at your site:** set its `HOST_SITE_URL` to your site, and its
-   `AFFILIATES_COOKIE_DOMAIN` to the parent domain.
-5. **In Stripe,** your webhook (`https://<your site>/api/auth/stripe/webhook`) needs these events:
-   - for Better Auth's Stripe plugin, which keeps each subscription's status:
-     `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`
-     and `customer.subscription.deleted`;
-   - for the affiliate service, which counts sales, renewals, refunds and disputes:
-     `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`,
-     `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`.
+   `AFFILIATES_COOKIE_DOMAIN` to the parent domain. Give it the two Stripe accounts' keys:
+   `STRIPE_SALES_KEY` (selling) and `STRIPE_PAYOUTS_KEY` (payouts).
+5. **In Stripe:**
+   - the selling account's webhook (`https://<your site>/api/auth/stripe/webhook`), for the
+     service to count sales, refunds and disputes: `checkout.session.completed`,
+     `checkout.session.async_payment_succeeded`, `charge.refunded`, `charge.dispute.created` and
+     `charge.dispute.closed`. If you sell subscriptions, add `invoice.paid` for renewals, and
+     Better Auth's plugin needs `customer.subscription.created`, `.updated` and `.deleted`.
+   - the payouts account's webhook (`https://<the service>/api/stripe/payouts`), for when money
+     added for a payout has arrived: `topup.succeeded`. Its signing secret is the service's
+     `STRIPE_PAYOUTS_WEBHOOK_SECRET`.
 
 ## License
 

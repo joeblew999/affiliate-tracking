@@ -1,6 +1,7 @@
 # The Stripe end-to-end tests (e2e/stripe/), on demand: Actions → "Stripe end-to-end" → Run workflow.
-# They use real Stripe test mode, with the repository secret STRIPE_TEST_SECRET_KEY (a test-mode key;
-# the tests refuse anything else). Same command as on your machine: `vp run test:stripe`.
+# They use real Stripe test mode, with the repository secrets STRIPE_TEST_SECRET_KEY (the selling
+# account) and STRIPE_TEST_PAYOUTS_KEY (the payouts account), test-mode keys; the tests refuse
+# anything else. Same command as on your machine: `vp run test:stripe`.
 name: Stripe end-to-end
 
 on:
@@ -24,3 +25,4 @@ jobs:
       - run: vp run test:stripe
         env:
           STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
+          STRIPE_TEST_PAYOUTS_KEY: ${{ secrets.STRIPE_TEST_PAYOUTS_KEY }}

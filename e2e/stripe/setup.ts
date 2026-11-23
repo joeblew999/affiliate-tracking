@@ -1,13 +1,14 @@
-// Global setup for `vp run test:stripe`: real Stripe test mode. Needs STRIPE_TEST_SECRET_KEY in the
-// shell (a test-mode key: sk_test_… or rk_test_…; anything else is refused). Makes, in Stripe:
-// - Pro's price (a monthly price, in a currency other than the account's, so a payout converts it
-//   at the rate Stripe settled each sale at);
-// - a coupon, the partners' buyer discount;
-// and prepares the seeded apps as the dev tests do (../apps.ts), with every file's apps given the
-// key, the price, the coupon and the account's currency for payouts. The shop's webhook secret is
-// the Stripe CLI's (`stripe listen --print-secret`), so the events `stripe listen` forwards
-// (./listen.ts) are signed by Stripe for it. After: the coupon deleted and its promotion codes
-// turned off, the price archived. Runs only when asked for by name.
+// Global setup for `vp run test:stripe`: real Stripe test mode, on the business's two accounts
+// (apps/affiliates/env.ts), each a test-mode key in the shell:
+// - STRIPE_TEST_SECRET_KEY: the selling account, with Managed Payments turned on in its Dashboard
+//   (Stripe sells the tickets and handles the tax);
+// - STRIPE_TEST_PAYOUTS_KEY: the payouts account, a Connect platform.
+// Anything but test-mode keys (sk_test_… or rk_test_…) is refused. Makes a coupon in the selling
+// account (the partners' buyer discount), and prepares the seeded apps as the dev tests do
+// (../apps.ts), every file's apps given the keys, the coupon and the payouts account's currency.
+// The shop's webhook secret is the Stripe CLI's (`stripe listen --print-secret`), so the events
+// `stripe listen` forwards (./listen.ts) are signed by Stripe for it. After: the coupon deleted
+// and its promotion codes turned off. Runs only when asked for by name.
 import { execFileSync } from "node:child_process";
 import Stripe from "stripe";
 import type { TestProject } from "vite-plus/test/node";
@@ -16,18 +17,14 @@ import { prepareApps, removeApps } from "../apps.ts";
 declare module "vite-plus/test" {
   interface ProvidedContext {
     stripeSkip: string;
+    /** The selling account's key. */
     stripeKey: string;
     payoutCurrency: string;
-    /** Pro's price, in its currency's minor units. */
-    priceCents: number;
-    priceCurrency: string;
     /** The partners' buyer discount, in percent off. */
     couponPercent: number;
   }
 }
 
-/** Pro's monthly price in the tests: 29.00 of the price's currency. */
-const PRICE_CENTS = 2900;
 /** The partners' buyer discount in the tests. */
 const COUPON_PERCENT = 10;
 
@@ -38,52 +35,48 @@ export function stripeCli(key: string, args: string[]): string {
   }).trim();
 }
 
+const testKey = (name: string) => {
+  const key = process.env[name] ?? "";
+  if (!/^(sk|rk)_test_/.test(key))
+    throw new Error(`${name} must be a Stripe test-mode key (sk_test_… or rk_test_…)`);
+  return key;
+};
+
 export default async function setup(project: TestProject) {
   if (!project.vitest.config.project.includes("stripe")) {
     project.provide("stripeSkip", "run it with `vp run test:stripe`");
     return;
   }
-  const key = process.env.STRIPE_TEST_SECRET_KEY ?? "";
-  if (!/^(sk|rk)_test_/.test(key))
-    throw new Error(
-      "STRIPE_TEST_SECRET_KEY must be a Stripe test-mode key (sk_test_… or rk_test_…)",
-    );
-  const stripe = new Stripe(key);
-  const balance = await stripe.balance.retrieve();
-  const payoutCurrency = balance.available[0]?.currency ?? "usd";
-  const priceCurrency = payoutCurrency === "eur" ? "gbp" : "eur";
-  const price = await stripe.prices.create({
-    currency: priceCurrency,
-    unit_amount: PRICE_CENTS,
-    recurring: { interval: "month" },
-    product_data: { name: "Pro (affiliates e2e)" },
-  });
-  const coupon = await stripe.coupons.create({
+  const salesKey = testKey("STRIPE_TEST_SECRET_KEY");
+  const payoutsKey = testKey("STRIPE_TEST_PAYOUTS_KEY");
+  const selling = new Stripe(salesKey);
+  const payoutCurrency =
+    (await new Stripe(payoutsKey).balance.retrieve()).available[0]?.currency ?? "usd";
+  const coupon = await selling.coupons.create({
     percent_off: COUPON_PERCENT,
     duration: "once",
     name: "affiliates e2e",
   });
   const template = await prepareApps();
-  template.webhookSecret = stripeCli(key, ["listen", "--print-secret"]);
+  template.webhookSecret = stripeCli(salesKey, ["listen", "--print-secret"]);
   project.provide("template", template);
+  // Both apps get the lot; each reads its own (the shop: STRIPE_SECRET_KEY, its selling account).
   project.provide("appEnv", {
-    STRIPE_SECRET_KEY: key,
-    STRIPE_PRO_PRICE_ID: price.id,
+    STRIPE_SECRET_KEY: salesKey,
+    STRIPE_SALES_KEY: salesKey,
+    STRIPE_PAYOUTS_KEY: payoutsKey,
     AFFILIATES_COUPON_ID: coupon.id,
     AFFILIATES_PAYOUT_CURRENCY: payoutCurrency,
   });
   project.provide("stripeSkip", "");
-  project.provide("stripeKey", key);
+  project.provide("stripeKey", salesKey);
   project.provide("payoutCurrency", payoutCurrency);
-  project.provide("priceCents", PRICE_CENTS);
-  project.provide("priceCurrency", priceCurrency);
   project.provide("couponPercent", COUPON_PERCENT);
   return async () => {
     removeApps(template);
     // The seeded partners' codes (SAM) come back every run: free them for the next one.
-    for await (const promo of stripe.promotionCodes.list({ coupon: coupon.id, active: true }))
-      await stripe.promotionCodes.update(promo.id, { active: false });
-    await stripe.coupons.del(coupon.id);
-    await stripe.prices.update(price.id, { active: false });
+    for await (const promo of selling.promotionCodes.list({ coupon: coupon.id, active: true }))
+      await selling.promotionCodes.update(promo.id, { active: false });
+    await selling.coupons.del(coupon.id);
   };
 }

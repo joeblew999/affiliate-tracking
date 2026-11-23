@@ -18,8 +18,11 @@ declare module "void" {
   }
 }
 
-/** Not about anyone: the shop's Better Auth itself, referral links, and the shop's own calls. */
-const PUBLIC_PREFIXES = ["/api/auth/", "/r/", "/api/host/"];
+/**
+ * Not about anyone: the shop's Better Auth itself, referral links, the shop's own calls, and the
+ * payouts account's Stripe webhook.
+ */
+const PUBLIC_PREFIXES = ["/api/auth/", "/r/", "/api/host/", "/api/stripe/"];
 const PAGES = new Set(["/", "/admin"]);
 
 export default defineMiddleware(async (c, next) => {

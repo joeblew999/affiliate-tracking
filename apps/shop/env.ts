@@ -7,12 +7,11 @@ export default defineEnv({
   // Comma-separated emails that get the admin role when they sign up (auth.ts). Admins run the
   // affiliate program.
   ADMIN_EMAILS: string().default(""),
-  // Stripe, for the shop's subscription (Better Auth's Stripe plugin). Without a key the shop runs
-  // with no payments: sign-in and the affiliate program still work.
+  // Stripe, the selling account (Managed Payments: Stripe sells the tickets and handles their tax),
+  // and its webhook's signing secret. Without a key the shop runs with no payments: sign-in and the
+  // affiliate program still work.
   STRIPE_SECRET_KEY: string().optional(),
   STRIPE_WEBHOOK_SECRET: string().optional(),
-  // The price of the shop's one plan, "pro".
-  STRIPE_PRO_PRICE_ID: string().optional(),
   // The parent domain the sign-in cookie is set for, so the affiliate service on a subdomain
   // receives it, e.g. "shop.example.com". Unset locally: localhost shares cookies across ports.
   AUTH_COOKIE_DOMAIN: string().optional(),

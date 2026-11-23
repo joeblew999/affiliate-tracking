@@ -20,6 +20,11 @@ export const payouts = sqliteTable(
     /** The idempotency key the transfer is sent with: a retry never pays twice. */
     batchKey: text().notNull().unique(),
     stripeTransferId: text(),
+    /**
+     * The money for the transfer, added to the payouts account from the business's bank (a Stripe
+     * top-up), before the transfer is sent. Null for a manual payout.
+     */
+    stripeTopupId: text(),
     /** The Connect account at the time, in case the partner's changes later. */
     stripeAccountId: text(),
     transferStartedAt: integer(),

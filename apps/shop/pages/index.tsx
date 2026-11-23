@@ -1,7 +1,8 @@
-// The example shop: sign up, sign in and out with the shop's own Better Auth, and subscribe to Pro
-// (Better Auth's Stripe plugin). The affiliate program is its own app on its own address; it sees
-// this sign-in, and the sales Pro brings.
-import { action, Form, useForm } from "@void/react";
+// The example shop: its online events, each with tickets on its own page, and sign up, sign in and
+// out with the shop's own Better Auth. The affiliate program is its own app on its own address; it
+// sees this sign-in, and the ticket sales partners bring.
+import { action, Form, Link, useForm } from "@void/react";
+import { routeUrl } from "void/routes";
 import { bind } from "affiliates/bind";
 import { useState, type ReactNode } from "react";
 import { Button } from "../src/components/ui/button.tsx";
@@ -19,24 +20,42 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../src/components/ui/t
 import { demoAccounts } from "../src/demo-accounts.ts";
 import type { Props } from "./index.server.ts";
 
-export default function Shop({ user, affiliatesUrl, back, payments, pro }: Props) {
+export default function Shop({ user, affiliatesUrl, back, events }: Props) {
   return (
     <main className="flex min-h-svh items-start justify-center bg-muted/40 px-4 py-10 sm:items-center">
       <div className="w-full max-w-sm space-y-4">
         <h1 className="text-center text-2xl font-semibold">Example shop</h1>
         {user ? (
-          <>
-            <Pro payments={payments} pro={pro} />
-            <Account user={user} affiliatesUrl={affiliatesUrl} />
-          </>
+          <Account user={user} affiliatesUrl={affiliatesUrl} />
         ) : (
           <>
             <Demo back={back} />
             <SignIn back={back} />
           </>
         )}
+        <Events events={events} />
       </div>
     </main>
+  );
+}
+
+function Events({ events }: Pick<Props, "events">) {
+  return (
+    <section aria-label="Events" className="space-y-3">
+      <h2 className="text-lg font-semibold">Upcoming events</h2>
+      {events.map((e) => (
+        <Card key={e.id}>
+          <CardHeader>
+            <CardTitle>
+              <Link href={routeUrl("/events/[id]", { params: { id: e.id } })}>{e.name}</Link>
+            </CardTitle>
+            <CardDescription>
+              {e.when}. {e.price}
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      ))}
+    </section>
   );
 }
 
@@ -82,40 +101,6 @@ function Account({
           Sign out
         </Button>
       </CardFooter>
-    </Card>
-  );
-}
-
-const day = (at: number) =>
-  new Date(at).toLocaleDateString("en-US", { dateStyle: "medium", timeZone: "UTC" });
-
-function Pro({ payments, pro }: Pick<Props, "payments" | "pro">) {
-  const [busy, setBusy] = useState(false);
-  const subscribe = () => {
-    setBusy(true);
-    void action("/?subscribe").finally(() => setBusy(false));
-  };
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Pro</CardTitle>
-        <CardDescription>
-          {!payments
-            ? "This shop isn't taking payments: it has no Stripe key."
-            : !pro
-              ? "Everything in the shop, paid monthly."
-              : pro.periodEnd
-                ? `${pro.status === "trialing" ? "Trial" : "Subscribed"}: ${pro.ending ? "ends" : "renews"} ${day(pro.periodEnd)}.`
-                : "Subscribed."}
-        </CardDescription>
-      </CardHeader>
-      {payments && !pro && (
-        <CardFooter>
-          <Button className="w-full" disabled={busy} onClick={subscribe}>
-            Subscribe to Pro
-          </Button>
-        </CardFooter>
-      )}
     </Card>
   );
 }

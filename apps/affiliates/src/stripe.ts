@@ -1,15 +1,21 @@
-// Stripe's own SDK, typed, on the Workers runtime (fetch and Web Crypto).
+// Stripe's own SDK, typed, on the Workers runtime (fetch and Web Crypto), for the business's two
+// accounts (env.ts): the selling account, which has the sales, and the payouts account, which
+// pays partners through Connect. Each call names which one it's for.
 import Stripe from "stripe";
 import { env } from "void/env";
 
-export function stripe(): Stripe {
-  if (!env.STRIPE_SECRET_KEY) throw new Error("STRIPE_SECRET_KEY isn't set");
-  return new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+function client(key: string | undefined, name: string): Stripe {
+  if (!key) throw new Error(`${name} isn't set`);
+  return new Stripe(key, { httpClient: Stripe.createFetchHttpClient() });
 }
 
-export function hasStripe(): boolean {
-  return Boolean(env.STRIPE_SECRET_KEY);
-}
+/** The selling account: its sales, refunds, settled exchange rates and promotion codes. */
+export const salesStripe = () => client(env.STRIPE_SALES_KEY, "STRIPE_SALES_KEY");
+export const hasSalesStripe = () => Boolean(env.STRIPE_SALES_KEY);
+
+/** The payouts account: partners' Connect accounts, top-ups and transfers. */
+export const payoutsStripe = () => client(env.STRIPE_PAYOUTS_KEY, "STRIPE_PAYOUTS_KEY");
+export const hasPayoutsStripe = () => Boolean(env.STRIPE_PAYOUTS_KEY);
 
 /** A Stripe object or its id, as an id. */
 export function idOf(value: string | { id: string } | null | undefined): string | null {
@@ -30,8 +36,8 @@ export async function invoicePaymentIntent(
       if (id) return id;
     }
   const id = typeof invoice === "string" ? invoice : invoice.id;
-  if (!id || !hasStripe()) return null;
-  const listed = await stripe().invoicePayments.list({ invoice: id, limit: 10 });
+  if (!id || !hasSalesStripe()) return null;
+  const listed = await salesStripe().invoicePayments.list({ invoice: id, limit: 10 });
   for (const payment of listed.data) {
     const intent = idOf(payment.payment.payment_intent);
     if (intent) return intent;

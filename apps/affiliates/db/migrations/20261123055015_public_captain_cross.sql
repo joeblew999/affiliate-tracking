@@ -1,0 +1,1 @@
+ALTER TABLE `payouts` ADD `stripe_topup_id` text;

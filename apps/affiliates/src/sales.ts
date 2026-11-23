@@ -13,7 +13,7 @@ import { selfReferralReason } from "./fraud.ts";
 import { activePartner, partnerForPromotion } from "./partners.ts";
 import { settleReferral } from "./referrals.ts";
 import { applyRefunds } from "./refunds.ts";
-import { hasStripe, idOf, invoicePaymentIntent, stripe } from "./stripe.ts";
+import { hasSalesStripe, idOf, invoicePaymentIntent, salesStripe } from "./stripe.ts";
 
 /** The checkout metadata keys this service sets (routes/api/host/checkout.ts) and reads back here. */
 export const META = {
@@ -26,8 +26,8 @@ export const META = {
 
 async function lineItems(session: Stripe.Checkout.Session): Promise<Stripe.LineItem[]> {
   // The webhook doesn't carry them. Without a Stripe key (local dev) the sale has no items.
-  if (!hasStripe()) return [];
-  const list = await stripe().checkout.sessions.listLineItems(session.id, {
+  if (!hasSalesStripe()) return [];
+  const list = await salesStripe().checkout.sessions.listLineItems(session.id, {
     limit: 100,
     expand: ["data.price.product"],
   });
@@ -154,7 +154,7 @@ export async function recordCheckoutSale(session: Stripe.Checkout.Session, event
 export async function disputedPaymentIntent(dispute: Stripe.Dispute): Promise<string | null> {
   const direct = idOf(dispute.payment_intent);
   if (direct) return direct;
-  if (typeof dispute.charge === "string" && hasStripe())
-    return idOf((await stripe().charges.retrieve(dispute.charge)).payment_intent);
+  if (typeof dispute.charge === "string" && hasSalesStripe())
+    return idOf((await salesStripe().charges.retrieve(dispute.charge)).payment_intent);
   return idOf(typeof dispute.charge === "string" ? null : dispute.charge.payment_intent);
 }

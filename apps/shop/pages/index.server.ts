@@ -1,6 +1,6 @@
-// The shop's page: sign up, sign in (or as a demo account) and out, and subscribe to Pro, as page
-// actions calling the shop's Better Auth (getAuth(c).api; Void sends the cookies it sets). Pro is
-// the Stripe plugin's (auth.ts): its checkout and its subscription.
+// The shop's page: its events, and sign up, sign in (or as a demo account) and out, as page actions
+// calling the shop's Better Auth (getAuth(c).api; Void sends the cookies it sets). Each event's
+// own page (events/[id]) sells its tickets.
 import { APIError } from "better-auth/api";
 import { HTTPException } from "hono/http-exception";
 import { defineHandler, defineHead, type CloudContext, type InferProps } from "void";
@@ -10,6 +10,7 @@ import type { Href } from "void/routes";
 import { z } from "zod";
 import { DEMO_PASSWORD } from "affiliates/demo";
 import { demoAccounts } from "../src/demo-accounts.ts";
+import { events, price, when } from "../src/events.ts";
 
 /** The affiliate service's page at this path or URL; null if it would be anywhere else. */
 function service(path: string | null | undefined): Href | null {
@@ -18,32 +19,22 @@ function service(path: string | null | undefined): Href | null {
   return url.origin === new URL(env.AFFILIATES_SITE_URL).origin ? (url.toString() as Href) : null;
 }
 
-/** Whether the shop takes payments: a Stripe key and Pro's price. */
-const payments = () => Boolean(env.STRIPE_SECRET_KEY && env.STRIPE_PRO_PRICE_ID);
-
-export const loader = defineHandler(async (c) => {
+export const loader = defineHandler((c) => {
   const user = getUser();
   // Sent here to sign in by the affiliate service (its middleware/01.user.ts): back there after.
   const back = service(c.req.query("redirect"));
   if (user && back) return c.redirect(back, 302);
-  const pro =
-    user && payments()
-      ? (await getAuth(c).api.listActiveSubscriptions({ headers: c.req.raw.headers })).find(
-          (s) => s.plan === "pro",
-        )
-      : undefined;
   return {
     back,
     user: user ? { email: user.email, name: user.name, isAdmin: user.role === "admin" } : null,
     affiliatesUrl: env.AFFILIATES_SITE_URL,
-    payments: payments(),
-    pro: pro
-      ? {
-          status: pro.status,
-          periodEnd: pro.periodEnd ? new Date(pro.periodEnd).getTime() : null,
-          ending: Boolean(pro.cancelAtPeriodEnd || pro.cancelAt),
-        }
-      : null,
+    events: events().map(({ id, name, startsAt, endsAt, location, cents }) => ({
+      id,
+      name,
+      when: when({ startsAt, endsAt }),
+      location,
+      price: price(cents),
+    })),
   };
 });
 export type Props = InferProps<typeof loader>;
@@ -60,22 +51,6 @@ async function withAuth(c: CloudContext, to: Href, call: (headers: Headers) => P
     throw err;
   }
   return c.redirect(to, 303);
-}
-
-/** A Better Auth call that answers with a Stripe page (Checkout): on to it. */
-async function toStripe(
-  c: CloudContext,
-  call: (headers: Headers) => Promise<{ url?: string | null }>,
-) {
-  try {
-    const { url } = await call(c.req.raw.headers);
-    if (!url) throw new HTTPException(502, { message: "Stripe gave no page to go to" });
-    return c.redirect(url as Href, 303);
-  } catch (err) {
-    if (err instanceof APIError)
-      throw new HTTPException(err.statusCode as 400, { message: err.message });
-    throw err;
-  }
 }
 
 /** `back`: the page's ?redirect=, where to go once signed in. */
@@ -116,14 +91,4 @@ export const actions = {
     ),
   ),
   signOut: defineHandler((c) => withAuth(c, "/", (headers) => getAuth(c).api.signOut({ headers }))),
-  // Pro on Stripe's Checkout; the partner the buyer came through goes with it (auth.ts).
-  subscribe: defineHandler((c) => {
-    const here = new URL("/", c.req.url).toString();
-    return toStripe(c, (headers) =>
-      getAuth(c).api.upgradeSubscription({
-        headers,
-        body: { plan: "pro", successUrl: here, cancelUrl: here, disableRedirect: true },
-      }),
-    );
-  }),
 };

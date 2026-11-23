@@ -169,12 +169,55 @@ export const DEMO_NOW = "2026-11-15T12:00:00.000Z";
 /** Days a sale waits before it's approved (the service's AFFILIATES_HOLD_DAYS in the demo). */
 export const HOLD_DAYS = 30;
 
-/** The demo's products: Stripe product ids, names and prices. */
-export const demoProducts = {
-  proMonthly: { productId: "prod_demo_pro", name: "Pro", variant: "Monthly", cents: 2900 },
-  proYearly: { productId: "prod_demo_pro", name: "Pro", variant: "Yearly", cents: 29000 },
-  teamMonthly: { productId: "prod_demo_team", name: "Team", variant: "Monthly", cents: 9900 },
+/**
+ * The shop's events: online, each with its ticket price. A ticket is a one-off Stripe payment for
+ * the event's Stripe product, whose id is made once from the event's label, so a commission rule
+ * can name it. When: in `startsInDays` days from the day they're shown (the demo stays upcoming),
+ * at `startsAt` UTC, for `hours` (eventTimes).
+ */
+export const demoEvents = {
+  workshop: {
+    productId: `prod_${fixtureId("event:workshop").replaceAll("-", "")}`,
+    name: "Getting started workshop",
+    description: "Two hours, hands on: set up your first project with the team, and ask anything.",
+    startsInDays: 10,
+    startsAt: "14:00",
+    hours: 2,
+    location: "Online, on Zoom. The link comes with your ticket.",
+    cents: 2900,
+  },
+  masterclass: {
+    productId: `prod_${fixtureId("event:masterclass").replaceAll("-", "")}`,
+    name: "Masterclass: the whole day",
+    description:
+      "A full day of talks and live building, start to finish, with the recordings after.",
+    startsInDays: 24,
+    startsAt: "09:00",
+    hours: 8,
+    location: "Online, on YouTube Live. The link comes with your ticket.",
+    cents: 29000,
+  },
+  teamSession: {
+    productId: `prod_${fixtureId("event:team-session").replaceAll("-", "")}`,
+    name: "Team session",
+    description: "An hour for your whole team: how to work together on one project.",
+    startsInDays: 38,
+    startsAt: "16:00",
+    hours: 1,
+    location: "Online, on Google Meet. The link comes with your ticket.",
+    cents: 9900,
+  },
 } as const;
+
+/** When an event starts and ends, for its days ahead of `now`. */
+export function eventTimes(
+  event: { startsInDays: number; startsAt: string; hours: number },
+  now = Date.now(),
+): { startsAt: Date; endsAt: Date } {
+  const day = new Date(now + event.startsInDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const startsAt = new Date(`${day}T${event.startsAt}:00.000Z`);
+  return { startsAt, endsAt: new Date(startsAt.getTime() + event.hours * 60 * 60 * 1000) };
+}
 
 interface DemoPayout {
   label: string;
@@ -198,9 +241,9 @@ export const demoPayouts: DemoPayout[] = [
 interface DemoSale {
   label: string;
   partner: string;
-  kind: "checkout" | "renewal" | "bonus" | "clawback";
-  /** For checkouts and renewals. */
-  product?: keyof typeof demoProducts;
+  kind: "checkout" | "bonus" | "clawback";
+  /** For a ticket: the event it's for. */
+  event?: keyof typeof demoEvents;
   daysAgo: number;
   /** What it earns now: after any refund taken off it before it was paid. */
   commissionCents: number;
@@ -211,23 +254,23 @@ interface DemoSale {
   payout?: string;
   refundedCents?: number;
   fraudReason?: "self_email" | "self_ip";
-  /** A renewal's first sale, or a clawback's refunded sale. */
+  /** A clawback's refunded sale. */
   of?: string;
   customerEmail?: string;
   bonusNote?: string;
 }
 
 /**
- * Every sale, renewal, bonus and clawback. Commission: the partner's % of the price, except Team
- * plans, which pay a fixed $25 (demoRules).
+ * Every ticket sale, bonus and clawback. Commission: the partner's % of the ticket, except the team
+ * session, which pays a fixed $25 (demoRules).
  */
 export const demoSales: DemoSale[] = [
-  // Maya, 25%. Her yearly sale 60 days ago was 10% refunded after it was paid: a clawback.
+  // Maya, 25%. Her masterclass ticket 60 days ago was 10% refunded after it was paid: a clawback.
   {
     label: "maya_1",
     partner: "maya",
     kind: "checkout",
-    product: "proYearly",
+    event: "masterclass",
     daysAgo: 110,
     commissionCents: 7250,
     status: "paid",
@@ -237,7 +280,7 @@ export const demoSales: DemoSale[] = [
     label: "maya_2",
     partner: "maya",
     kind: "checkout",
-    product: "proMonthly",
+    event: "workshop",
     daysAgo: 95,
     commissionCents: 725,
     status: "paid",
@@ -247,7 +290,7 @@ export const demoSales: DemoSale[] = [
     label: "maya_3",
     partner: "maya",
     kind: "checkout",
-    product: "teamMonthly",
+    event: "teamSession",
     daysAgo: 80,
     commissionCents: 2500,
     status: "paid",
@@ -264,11 +307,10 @@ export const demoSales: DemoSale[] = [
     bonusNote: "Launch video",
   },
   {
-    label: "maya_2_r1",
+    label: "maya_10",
     partner: "maya",
-    kind: "renewal",
-    product: "proMonthly",
-    of: "maya_2",
+    kind: "checkout",
+    event: "workshop",
     daysAgo: 65,
     commissionCents: 725,
     status: "paid",
@@ -278,7 +320,7 @@ export const demoSales: DemoSale[] = [
     label: "maya_4",
     partner: "maya",
     kind: "checkout",
-    product: "proYearly",
+    event: "masterclass",
     daysAgo: 60,
     commissionCents: 7250,
     status: "paid",
@@ -289,7 +331,7 @@ export const demoSales: DemoSale[] = [
     label: "maya_5",
     partner: "maya",
     kind: "checkout",
-    product: "proMonthly",
+    event: "workshop",
     daysAgo: 50,
     commissionCents: 725,
     status: "paid",
@@ -299,17 +341,16 @@ export const demoSales: DemoSale[] = [
     label: "maya_6",
     partner: "maya",
     kind: "checkout",
-    product: "proMonthly",
+    event: "workshop",
     daysAgo: 35,
     commissionCents: 725,
     status: "approved",
   },
   {
-    label: "maya_2_r2",
+    label: "maya_11",
     partner: "maya",
-    kind: "renewal",
-    product: "proMonthly",
-    of: "maya_2",
+    kind: "checkout",
+    event: "workshop",
     daysAgo: 35,
     commissionCents: 725,
     status: "approved",
@@ -327,7 +368,7 @@ export const demoSales: DemoSale[] = [
     label: "maya_7",
     partner: "maya",
     kind: "checkout",
-    product: "teamMonthly",
+    event: "teamSession",
     daysAgo: 20,
     commissionCents: 2500,
     status: "pending",
@@ -336,7 +377,7 @@ export const demoSales: DemoSale[] = [
     label: "maya_8",
     partner: "maya",
     kind: "checkout",
-    product: "proMonthly",
+    event: "workshop",
     daysAgo: 10,
     commissionCents: 725,
     status: "pending",
@@ -347,7 +388,7 @@ export const demoSales: DemoSale[] = [
     label: "maya_9",
     partner: "maya",
     kind: "checkout",
-    product: "proYearly",
+    event: "masterclass",
     daysAgo: 3,
     commissionCents: 7250,
     status: "pending",
@@ -357,7 +398,7 @@ export const demoSales: DemoSale[] = [
     label: "leo_1",
     partner: "leo",
     kind: "checkout",
-    product: "proYearly",
+    event: "masterclass",
     daysAgo: 90,
     commissionCents: 5800,
     status: "paid",
@@ -367,7 +408,7 @@ export const demoSales: DemoSale[] = [
     label: "leo_2",
     partner: "leo",
     kind: "checkout",
-    product: "teamMonthly",
+    event: "teamSession",
     daysAgo: 75,
     commissionCents: 2500,
     status: "paid",
@@ -377,7 +418,7 @@ export const demoSales: DemoSale[] = [
     label: "leo_3",
     partner: "leo",
     kind: "checkout",
-    product: "proMonthly",
+    event: "workshop",
     daysAgo: 55,
     commissionCents: 0,
     grossCommissionCents: 580,
@@ -388,7 +429,7 @@ export const demoSales: DemoSale[] = [
     label: "leo_4",
     partner: "leo",
     kind: "checkout",
-    product: "proMonthly",
+    event: "workshop",
     daysAgo: 45,
     commissionCents: 406,
     grossCommissionCents: 580,
@@ -400,7 +441,7 @@ export const demoSales: DemoSale[] = [
     label: "leo_5",
     partner: "leo",
     kind: "checkout",
-    product: "proYearly",
+    event: "masterclass",
     daysAgo: 33,
     commissionCents: 5800,
     status: "approved",
@@ -418,7 +459,7 @@ export const demoSales: DemoSale[] = [
     label: "leo_6",
     partner: "leo",
     kind: "checkout",
-    product: "proMonthly",
+    event: "workshop",
     daysAgo: 12,
     commissionCents: 580,
     status: "pending",
@@ -428,7 +469,7 @@ export const demoSales: DemoSale[] = [
     label: "priya_1",
     partner: "priya",
     kind: "checkout",
-    product: "teamMonthly",
+    event: "teamSession",
     daysAgo: 85,
     commissionCents: 2500,
     status: "paid",
@@ -438,7 +479,7 @@ export const demoSales: DemoSale[] = [
     label: "priya_2",
     partner: "priya",
     kind: "checkout",
-    product: "proMonthly",
+    event: "workshop",
     daysAgo: 60,
     commissionCents: 580,
     status: "paid",
@@ -448,7 +489,7 @@ export const demoSales: DemoSale[] = [
     label: "priya_3",
     partner: "priya",
     kind: "checkout",
-    product: "proYearly",
+    event: "masterclass",
     daysAgo: 25,
     commissionCents: 5800,
     status: "pending",
@@ -458,7 +499,7 @@ export const demoSales: DemoSale[] = [
     label: "tom_1",
     partner: "tom",
     kind: "checkout",
-    product: "proMonthly",
+    event: "workshop",
     daysAgo: 60,
     commissionCents: 580,
     status: "pending",
@@ -467,7 +508,7 @@ export const demoSales: DemoSale[] = [
     label: "tom_2",
     partner: "tom",
     kind: "checkout",
-    product: "proYearly",
+    event: "masterclass",
     daysAgo: 40,
     commissionCents: 5800,
     status: "pending",
@@ -476,7 +517,7 @@ export const demoSales: DemoSale[] = [
     label: "tom_3",
     partner: "tom",
     kind: "checkout",
-    product: "teamMonthly",
+    event: "teamSession",
     daysAgo: 8,
     commissionCents: 2500,
     status: "pending",
@@ -486,7 +527,7 @@ export const demoSales: DemoSale[] = [
     label: "ana_1",
     partner: "ana",
     kind: "checkout",
-    product: "proMonthly",
+    event: "workshop",
     daysAgo: 40,
     commissionCents: 435,
     status: "approved",
@@ -495,7 +536,7 @@ export const demoSales: DemoSale[] = [
     label: "ana_2",
     partner: "ana",
     kind: "checkout",
-    product: "proYearly",
+    event: "masterclass",
     daysAgo: 15,
     commissionCents: 4350,
     status: "pending",
@@ -505,7 +546,7 @@ export const demoSales: DemoSale[] = [
     label: "ken_1",
     partner: "ken",
     kind: "checkout",
-    product: "proMonthly",
+    event: "workshop",
     daysAgo: 70,
     commissionCents: 580,
     status: "paid",
@@ -515,7 +556,7 @@ export const demoSales: DemoSale[] = [
     label: "ken_2",
     partner: "ken",
     kind: "checkout",
-    product: "proMonthly",
+    event: "workshop",
     daysAgo: 50,
     commissionCents: 580,
     status: "pending",
@@ -525,7 +566,7 @@ export const demoSales: DemoSale[] = [
     label: "ken_3",
     partner: "ken",
     kind: "checkout",
-    product: "proYearly",
+    event: "masterclass",
     daysAgo: 30,
     commissionCents: 5800,
     status: "pending",
@@ -533,7 +574,7 @@ export const demoSales: DemoSale[] = [
   },
 ];
 
-/** Commission rules: Maya earns 30% in a month she makes 15 sales; Team plans pay $25 for everyone. */
+/** Commission rules: Maya earns 30% in a month she makes 15 sales; the team session pays $25. */
 export const demoRules = [
   {
     label: "maya_tier",
@@ -545,14 +586,14 @@ export const demoRules = [
   {
     label: "team_fixed",
     partner: null,
-    productId: "prod_demo_team",
+    productId: demoEvents.teamSession.productId,
     kind: "fixed" as const,
     fixedCents: 2500,
     currency: "usd",
   },
 ];
 
-/** A seeded sale's customer: a renewal's or clawback's is its first sale's; a bonus has none. */
+/** A seeded sale's customer: a clawback's is its refunded sale's; a bonus has none. */
 export function customerOf(sale: Pick<DemoSale, "label" | "kind" | "of" | "customerEmail">) {
   if (sale.kind === "bonus") return null;
   return sale.customerEmail ?? `${sale.of ?? sale.label}@customer.demo.test`;

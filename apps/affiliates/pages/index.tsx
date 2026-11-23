@@ -114,7 +114,7 @@ function NewLink() {
   );
 }
 
-function Dashboard({ partner, links, stats, earnings, program }: Props) {
+function Dashboard({ partner, links, stats, earnings, program, payoutCountries, country }: Props) {
   const { run, busy, feedback } = useAction();
   if (!partner || !stats) return null;
   const funnel = stats.funnel[0];
@@ -153,20 +153,8 @@ function Dashboard({ partner, links, stats, earnings, program }: Props) {
           }
         />
         <Stat title="Ready to pay" value={sum("readyCents")} note="Paid with the next payout">
-          {!partner.paidOut && (
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  // Its answer is a redirect to Stripe's onboarding.
-                  return action("/?connect");
-                })
-              }
-            >
-              Set up payouts
-            </Button>
+          {!partner.paidOut && payoutCountries.length > 0 && (
+            <SetUpPayouts countries={payoutCountries} country={country} busy={busy} run={run} />
           )}
         </Stat>
         <Stat title="Paid" value={sum("paidCents")} note="All time" />
@@ -246,6 +234,50 @@ function Dashboard({ partner, links, stats, earnings, program }: Props) {
         </CardContent>
       </Card>
     </>
+  );
+}
+
+/** Choose the country your Stripe account is in, then Stripe's own onboarding. */
+function SetUpPayouts({
+  countries,
+  country,
+  busy,
+  run,
+}: {
+  countries: string[];
+  country: string | null;
+  busy: boolean;
+  run: ReturnType<typeof useAction>["run"];
+}) {
+  const names = new Intl.DisplayNames(["en"], { type: "region" });
+  const sorted = [...countries].sort((a, b) => (names.of(a) ?? a).localeCompare(names.of(b) ?? b));
+  const [chosen, setChosen] = useState(
+    country && countries.includes(country) ? country : (sorted[0] ?? ""),
+  );
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <select
+        aria-label="Country your bank account is in"
+        className="h-8 rounded-md border bg-background px-2 text-sm"
+        value={chosen}
+        onChange={(e) => setChosen(e.target.value)}
+      >
+        {sorted.map((code) => (
+          <option key={code} value={code}>
+            {names.of(code) ?? code}
+          </option>
+        ))}
+      </select>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={busy || !chosen}
+        // Its answer is a redirect to Stripe's onboarding.
+        onClick={() => void run(async () => action("/?connect", { data: { country: chosen } }))}
+      >
+        Set up payouts
+      </Button>
+    </div>
   );
 }
 

@@ -13,9 +13,19 @@ export default defineEnv({
   // Salt for hashing visitor IPs (src/ip.ts). Any long random value; changing it resets the
   // one-click-per-visitor-per-day count.
   AFFILIATES_IP_SALT: string(),
-  // Stripe: the platform's secret key (line items, promotion codes, payouts). Stripe's events come
-  // through the host (its Better Auth Stripe plugin's onEvent: routes/api/host/stripe-event.ts).
-  STRIPE_SECRET_KEY: string().optional(),
+  // Stripe: two accounts of the one business, since Stripe won't let one account both use
+  // Managed Payments and pay partners through Connect (docs.stripe.com/payments/managed-payments/
+  // eligibility, read 2026-11-23). Without them: no discount codes, no settled exchange rates, and
+  // every payout is manual.
+  // The selling account (the host's): reading its sales, refunds and settled exchange rates, and
+  // making partners' discount codes. Its key needs read access, and write access to promotion codes.
+  STRIPE_SALES_KEY: string().optional(),
+  // The payouts account: a Connect platform holding no sales. Partners' Stripe accounts, the money
+  // added to it from the business's bank before each payout (top-ups), and the transfers.
+  STRIPE_PAYOUTS_KEY: string().optional(),
+  // The signing secret of the payouts account's webhook (/api/stripe/payouts), which says when
+  // money added to it has arrived (topup.succeeded).
+  STRIPE_PAYOUTS_WEBHOOK_SECRET: string().optional(),
   // Months after a subscription's first sale that its renewals earn commission, unless a partner
   // has their own (src/renewals.ts). Default 12; 0: the first payment only.
   AFFILIATES_RECURRING_MONTHS: number().optional(),
