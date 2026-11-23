@@ -13,7 +13,7 @@ import { selfReferralReason } from "./fraud.ts";
 import { activePartner, partnerForPromotion } from "./partners.ts";
 import { settleReferral } from "./referrals.ts";
 import { applyRefunds } from "./refunds.ts";
-import { hasStripe, idOf, stripe } from "./stripe.ts";
+import { hasStripe, idOf, invoicePaymentIntent, stripe } from "./stripe.ts";
 
 /** The checkout metadata keys this service sets (routes/api/host/checkout.ts) and reads back here. */
 export const META = {
@@ -81,7 +81,11 @@ export async function recordCheckoutSale(session: Stripe.Checkout.Session, event
   const currency = (session.currency ?? "usd").toLowerCase();
   const lines = await lineItems(session);
   const items = lines.map(itemOf);
-  const paymentIntent = idOf(session.payment_intent);
+  // A subscription's Checkout has no payment of its own: its first invoice's is the one a refund
+  // or dispute will name.
+  const paymentIntent =
+    idOf(session.payment_intent) ??
+    (session.invoice ? await invoicePaymentIntent(session.invoice) : null);
   const at = event.created * 1000;
   // Lowercase: one customer however they typed it (counted in src/stats.ts, capped in src/commission.ts).
   const customerEmail = session.customer_details?.email?.toLowerCase() ?? null;

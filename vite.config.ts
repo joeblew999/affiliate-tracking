@@ -44,8 +44,9 @@ export default defineConfig({
           output: [],
         },
       },
-      // Real Stripe test mode (e2e/stripe/): needs STRIPE_TEST_SECRET_KEY in the shell, and
-      // `vp run dev` stopped (it starts the apps itself, with the key). Run it on demand.
+      // Real Stripe test mode (e2e/stripe/): buyers pay on Stripe's Checkout, and Stripe's own
+      // webhooks reach the shop through the Stripe CLI. Needs STRIPE_TEST_SECRET_KEY in the shell.
+      // Run it on demand.
       "test:stripe": { command: "vp test run --project stripe", cache: false },
       // Screenshots of every page of both apps, desktop and phone, in .screens/, with demo data
       // made through the apps (scripts/screens.ts). Needs `vp run dev` running.

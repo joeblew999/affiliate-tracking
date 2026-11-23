@@ -10,7 +10,7 @@ import { and, asc, db, eq, or } from "void/db";
 import { env } from "void/env";
 import { computeCommission } from "./commission.ts";
 import { applyRefunds } from "./refunds.ts";
-import { hasStripe, idOf, stripe } from "./stripe.ts";
+import { idOf, invoicePaymentIntent } from "./stripe.ts";
 
 const DEFAULT_RECURRING_MONTHS = 12;
 
@@ -35,21 +35,6 @@ function subscriptionOf(invoice: Stripe.Invoice): string | null {
   const legacy: unknown = Reflect.get(invoice, "subscription");
   const fromLegacy = typeof legacy === "string" ? legacy : null;
   return fromLegacy ?? idOf(invoice.parent?.subscription_details?.subscription);
-}
-
-/** The payment intent that paid the invoice (the one a refund or dispute will name). */
-async function paymentIntentOf(invoice: Stripe.Invoice): Promise<string | null> {
-  for (const payment of invoice.payments?.data ?? []) {
-    const id = idOf(payment.payment.payment_intent);
-    if (id) return id;
-  }
-  if (!hasStripe()) return null;
-  const listed = await stripe().invoicePayments.list({ invoice: invoice.id ?? "", limit: 10 });
-  for (const payment of listed.data) {
-    const id = idOf(payment.payment.payment_intent);
-    if (id) return id;
-  }
-  return null;
 }
 
 export async function recordRenewal(invoice: Stripe.Invoice, event: Stripe.Event) {
@@ -108,7 +93,7 @@ export async function recordRenewal(invoice: Stripe.Invoice, event: Stripe.Event
       amountCents: line.amount,
     })),
   });
-  const paymentIntent = await paymentIntentOf(invoice);
+  const paymentIntent = await invoicePaymentIntent(invoice);
   const country = invoice.customer_address?.country ?? null;
   const [row] = await db
     .insert(sales)

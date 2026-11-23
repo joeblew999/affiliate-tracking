@@ -2,6 +2,9 @@ packages:
   - apps/*
 
 allowBuilds:
+  # The Stripe CLI's binary comes in its per-platform package; its install script only downloads
+  # it from GitHub when that package is missing.
+  "@stripe/cli": false
   better-sqlite3: false
   esbuild: true
   sharp: true

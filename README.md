@@ -44,8 +44,9 @@ can't drift from the code. Only the clicks behind the charts are generated, from
   `apps/affiliates/client.ts`. It calls at sign-up, at checkout, and for every Stripe event. Each
   call is defined once, in `apps/affiliates/src/host-contract.ts`. Calls carry a shared secret,
   `AFFILIATES_HOST_TOKEN`.
-- **Stripe stays with the host.** Its Better Auth Stripe plugin receives Stripe's webhook and
-  passes every event on. The service turns them into sales, renewals, refunds and disputes, and
+- **Stripe stays with the host.** The shop sells one plan, Pro, through its Better Auth Stripe
+  plugin: Stripe's Checkout and the subscription. The plugin receives
+  Stripe's webhook and passes every event on. The service turns them into sales, renewals, refunds and disputes, and
   pays partners with Stripe Connect.
 - **Slow work goes through queues.** Sign-ups reach the service through a queue. Payouts are queued
   one partner at a time. A daily job approves sales once their hold period is over, and queues any
@@ -63,7 +64,7 @@ can't drift from the code. Only the clicks behind the charts are generated, from
 | `apps/shop`              | The example host: sign-in, Stripe, and its calls to the service.                              |
 | `e2e`                    | The tests, run against both apps.                                                             |
 | `scripts`                | Local setup, putting the demo on the live site, and screenshots.                              |
-| `plans`                  | The plan this was built to: `2026-11-22-01-void-service.md`.                                  |
+| `plans`                  | The plans this was built to, by date.                                                         |
 
 Each app's settings, each with a line saying what it's for, are in its `env.ts`.
 
@@ -100,8 +101,10 @@ come from the database schema and the pages' loaders and actions.
   Void's own repo does.
 - `vp run test:dev` runs the tests in `e2e/dev`. The first time, run `vp run install:browser` to
   get Chromium.
-- `vp run test:stripe` runs the tests in `e2e/stripe` against Stripe's test mode. It needs a
-  test-mode key in `STRIPE_TEST_SECRET_KEY`. On GitHub, it runs from
+- `vp run test:stripe` runs the tests in `e2e/stripe` against Stripe's test mode. Buyers subscribe
+  on Stripe's own Checkout page with Stripe's test card. Renewals and refunds are real ones in
+  Stripe. Stripe's webhooks reach the shop through the Stripe CLI's `stripe listen` (the
+  `@stripe/cli` package). It needs a test-mode key in `STRIPE_TEST_SECRET_KEY`. On GitHub, it runs from
   Actions → **Stripe end-to-end** → Run workflow (`.github/workflows/stripe.yml`), with that key
   saved as a repository secret.
 
@@ -111,8 +114,10 @@ ports, so every file starts from exactly the fixtures and nothing it changes rea
 your local data or your `vp run dev`. The service's clock is pinned to the fixtures' instant
 (`DEMO_NOW`, by `AFFILIATES_NOW`; `apps/affiliates/src/clock.ts`), so "on hold", "ready to pay" and
 "the last 30 days" come out the same on every run, and the tests check exact amounts from
-`demo.ts`. People are real browsers on the real pages. The shop's calls to the service go through
-its own client, and Stripe's events through its webhook, signed. There are no fakes or mocks.
+`demo.ts`. People are real browsers on the real pages, and the demo's people are signed in with
+Better Auth's test utils (`e2e/shop-sessions.ts`). The shop's calls to the service go through its
+own client. Without Stripe, the dev tests send Stripe's events to the shop's webhook, signed as
+Stripe signs them. In the Stripe tests, Stripe sends them itself. There are no fakes or mocks.
 
 CI (`.github/workflows/ci.yml`) runs the first three on every push.
 
@@ -154,9 +159,13 @@ The example shop (`apps/shop`) does all of this:
      Stripe event on (`apps/shop/src/affiliates.ts`).
 4. **Point the service at your site:** set its `HOST_SITE_URL` to your site, and its
    `AFFILIATES_COOKIE_DOMAIN` to the parent domain.
-5. **In Stripe,** your webhook (`https://<your site>/api/auth/stripe/webhook`) also needs these
-   events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`,
-   `invoice.paid`, `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`.
+5. **In Stripe,** your webhook (`https://<your site>/api/auth/stripe/webhook`) needs these events:
+   - for Better Auth's Stripe plugin, which keeps each subscription's status:
+     `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`
+     and `customer.subscription.deleted`;
+   - for the affiliate service, which counts sales, renewals, refunds and disputes:
+     `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`,
+     `charge.refunded`, `charge.dispute.created` and `charge.dispute.closed`.
 
 ## License
 

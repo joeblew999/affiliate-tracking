@@ -416,7 +416,7 @@ export async function stripeEvent(
     created: Math.floor((now() - daysAgo * 24 * 60 * 60 * 1000) / 1000),
     data: { object },
     livemode: false,
-    api_version: "2026-10-28",
+    api_version: Stripe.API_VERSION, // what the installed Stripe SDK reads and Stripe sends
     pending_webhooks: 1,
     request: { id: null, idempotency_key: null },
   });

@@ -23,6 +23,13 @@ and the one change that fixes it.
    locally is the Stripe CLI: `stripe listen --forward-to <site>/api/auth/stripe/webhook`. It
    delivers Stripe's real events, signed by Stripe.
 
+5. **Found while building it: a subscription's sale had no payment.** A subscription's Checkout
+   Session has no `payment_intent`; its payment is its first invoice's. The service took a sale's
+   payment intent from the session only. So for the shop's real sales, all subscriptions, refunds,
+   disputes and other-currency payouts would never have found the sale. The service
+   (`src/sales.ts`) now takes it from the invoice too (`invoicePaymentIntent`, `src/stripe.ts`,
+   shared with renewals).
+
 ## The change
 
 ### Shop
@@ -31,9 +38,8 @@ and the one change that fixes it.
   `auth.api.upgradeSubscription` with the session's headers (`plan: "pro"`, success and cancel
   URLs, `disableRedirect: true`), then a redirect to Stripe Checkout. The partner a buyer came
   through rides along, as it already does, through `getCheckoutSessionParams`.
-- **The plan's status** from `auth.api.listActiveSubscriptions`, and **Manage subscription** via
-  `auth.api.createBillingPortal`. A user's own subscription needs no `authorizeReference`
-  (the source, `referenceMiddleware`).
+- **The plan's status** from `auth.api.listActiveSubscriptions`. No billing portal: managing a
+  subscription is the shop's business, not the affiliate program's.
 - **Without a Stripe key,** the button isn't shown, and the page says the shop has no payments.
   That's the dev tests' case.
 
@@ -50,16 +56,20 @@ and the one change that fixes it.
   - Setup makes a test-mode product and price for `STRIPE_PRO_PRICE_ID`.
   - The test file runs `stripe listen --api-key <test key> --forward-to <its shop>`. The webhook
     signing secret comes from `stripe listen --print-secret`.
-  - **A sale:** a buyer follows Maya's link, signs up, presses Subscribe, and pays on Stripe's
+  - **A sale:** a buyer follows Tom's link, signs up, presses Subscribe, and pays on Stripe's
     own Checkout page with card 4242. Stripe's real `checkout.session.completed` makes the sale
-    Maya's, with her commission from `demo.ts`.
+    Tom's, with his commission from `demo.ts`. Tom has nothing else ready to pay, so the payout
+    that follows is that one sale's.
   - **A promotion code:** approving Sam makes his code. A buyer through Sam's link gets his
     discount at Checkout.
-  - **A renewal:** the subscription goes on a Stripe test clock. Advancing the clock a month makes
-    Stripe send a real `invoice.paid`, and the renewal is Maya's.
-  - **A refund:** `refunds.create` on the payment. Stripe's real `charge.refunded` refunds the sale.
-  - **Another currency:** a price in a currency other than the account's, then a payout at the
-    rate Stripe settled it at.
+  - **A renewal:** the subscription's billing period is restarted from now
+    (`billing_cycle_anchor`), so Stripe invoices the next month and charges the card. That's a
+    real `invoice.paid`, and the renewal is the partner's. A Stripe test clock can't be used: it
+    must be on the customer from the start, and the Stripe plugin makes the customer at sign-up.
+  - **A refund:** `refunds.create` on the renewal's payment. Stripe's real `charge.refunded`
+    refunds that sale.
+  - **Another currency:** Pro's price is in a currency other than the account's, so the payout is
+    at the rate Stripe settled the sale at.
 - The dev tests keep sending signed events, because they run without Stripe, as now.
 
 ## Who can run what

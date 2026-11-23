@@ -19,6 +19,8 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
+      # The buyers are browsers, on the shop and on Stripe's Checkout.
+      - run: vp run install:browser
       - run: vp run test:stripe
         env:
           STRIPE_TEST_SECRET_KEY: ${{ secrets.STRIPE_TEST_SECRET_KEY }}
