@@ -21,6 +21,8 @@ export const Step = z.object({
   /** Why it failed, while it has. */
   error: z.string().nullable(),
   at: z.number(),
+  /** A request that set cookies: it changed who's signed in, so the page moves on by itself. */
+  setCookies: z.boolean().optional(),
 });
 export type Step = z.infer<typeof Step>;
 
@@ -33,6 +35,8 @@ export const Action = z.object({
   startedAt: z.number(),
   state: z.enum(["running", "done", "failed"]),
   steps: z.array(Step),
+  /** Whether it changed who's signed in (a step set cookies): pages don't reload for it. */
+  changesSession: z.boolean().default(false),
 });
 export type Action = z.infer<typeof Action>;
 
@@ -86,6 +90,7 @@ export function apply(actions: Map<string, Action>, event: ActivityEvent): Actio
     startedAt: event.type === "started" ? event.at : event.step.at,
     state: "running" as const,
     steps: [],
+    changesSession: false,
   };
   let next: Action;
   if (event.type === "started") {
@@ -97,7 +102,12 @@ export function apply(actions: Map<string, Action>, event: ActivityEvent): Actio
     if (before && before.status !== "queued" && event.step.status === "queued") steps.push(before);
     else steps.push(event.step);
     steps.sort((a, b) => a.at - b.at);
-    next = { ...current, steps, state: stateOf(steps) };
+    next = {
+      ...current,
+      steps,
+      state: stateOf(steps),
+      changesSession: current.changesSession || Boolean(event.step.setCookies),
+    };
   }
   actions.set(next.id, next);
   return next;

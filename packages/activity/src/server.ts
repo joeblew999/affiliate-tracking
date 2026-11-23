@@ -40,8 +40,15 @@ async function report(event: ActivityEvent, viewers: Viewers) {
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /** A step's event. */
-function step(trace: Trace, id: string, name: string, status: StepStatus, error: string | null) {
-  const s: Step = { id, name, app, status, error, at: Date.now() };
+function step(
+  trace: Trace,
+  id: string,
+  name: string,
+  status: StepStatus,
+  error: string | null,
+  setCookies = false,
+) {
+  const s: Step = { id, name, app, status, error, at: Date.now(), setCookies };
   return report({ type: "step", actionId: trace.actionId, step: s }, trace.viewers);
 }
 
@@ -145,7 +152,10 @@ export function activityMiddleware(
     // about (Cloudflare's waitUntil: work that finishes after the response).
     const failed = c.res.status >= 400;
     const reason = failed ? await reasonOf(c.res) : null;
-    c.executionCtx.waitUntil(step(trace, id, title, failed ? "failed" : "done", reason));
+    const setCookies = c.res.headers.getSetCookie().length > 0;
+    c.executionCtx.waitUntil(
+      step(trace, id, title, failed ? "failed" : "done", reason, setCookies),
+    );
   });
 }
 

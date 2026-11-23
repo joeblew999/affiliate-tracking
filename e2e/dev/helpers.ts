@@ -98,12 +98,13 @@ export async function newBrowser(options: Parameters<Browser["newContext"]>[0] =
 
 /**
  * Open a page and wait until React has taken it over: a click before that does nothing. Void marks
- * it (#app data-hydrated), and its own tests wait for that mark too. A page whose server failed
- * says so here. (A 4xx is the page saying no on purpose, as "Admins only" does: that one shows.)
+ * it (#app data-hydrated), and its own tests wait for that mark too. A page whose server failed,
+ * or that isn't there, says so here. (Another 4xx is the page saying no on purpose, as "Admins
+ * only" does: that one shows.)
  */
 export async function open(page: Page, url: string): Promise<void> {
   const response = await page.goto(url);
-  if (response && response.status() >= 500)
+  if (response && (response.status() >= 500 || response.status() === 404))
     throw new Error(`${response.status()} from ${url}: ${await errorOf(response)}`);
   await page.locator('#app[data-hydrated="true"]').waitFor();
 }

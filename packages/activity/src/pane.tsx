@@ -108,7 +108,9 @@ export function ActivityPane({ controlPlane, viewer }: Props) {
         (a, b) => b.startedAt - a.startedAt,
       );
       setActions(shown.current);
-      if (action.state !== "running" && before?.state !== action.state) void refresh();
+      // Not for an action that changed who's signed in: the app moves on from that page itself.
+      if (action.state !== "running" && before?.state !== action.state && !action.changesSession)
+        void refresh();
     });
     socket.on("close", () => setLive("reconnecting"));
     return () => socket.close();

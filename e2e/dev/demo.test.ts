@@ -3,7 +3,7 @@
 // tests start from it and check what the system does.
 import { expect, test } from "vite-plus/test";
 import { demoSales } from "../../apps/affiliates/demo.ts";
-import { admin, AFFILIATES, open, partnerPage, signInAs, signInOnForm } from "./helpers.ts";
+import { adminTab, AFFILIATES, partnerPage, signInAs, signInOnForm } from "./helpers.ts";
 
 /** The commission of Maya's fixture sales in this status. */
 const maya = (status: string) =>
@@ -24,8 +24,6 @@ test("the seeded demo: a partner's money, each other kind of person, and the adm
   expect((await partnerPage(await signInAs("sam@demo.test"))).status).toBe("pending");
   expect((await partnerPage(await signInAs("chris@demo.test"))).status).toBe("none");
 
-  const { page } = await admin();
-  await open(page, `${AFFILIATES}/admin`);
-  const tom = page.getByRole("row").filter({ hasText: "tom@demo.test" });
+  const tom = (await adminTab(/^Partners/)).getByRole("row").filter({ hasText: "tom@demo.test" });
   expect(await tom.getByText("every sale reviewed").count()).toBe(1);
 });

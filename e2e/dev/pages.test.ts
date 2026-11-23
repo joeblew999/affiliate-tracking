@@ -3,7 +3,16 @@
 import { devices } from "playwright";
 import { expect, test } from "vite-plus/test";
 import { demoEvents, demoVenues } from "../../apps/affiliates/demo.ts";
-import { admin, AFFILIATES, newBrowser, open, seededPartner, SHOP, signInAs } from "./helpers.ts";
+import {
+  admin,
+  AFFILIATES,
+  newBrowser,
+  open,
+  seededEventId,
+  seededPartner,
+  SHOP,
+  signInAs,
+} from "./helpers.ts";
 
 test("an admin lands on the admin page, views the program as a partner, and comes back", async () => {
   const pat = await seededPartner("maya");
@@ -11,6 +20,7 @@ test("an admin lands on the admin page, views the program as a partner, and come
   await open(page, `${AFFILIATES}/`);
   await page.waitForURL(`${AFFILIATES}/admin`);
 
+  await page.getByRole("tab", { name: /^Partners/ }).click();
   const row = page.getByRole("row").filter({ hasText: pat.email });
   await row.getByRole("button", { name: `More for ${pat.email}` }).click();
   await page.getByRole("menuitem", { name: `View as ${pat.name}` }).click();
@@ -39,7 +49,8 @@ test("the shop lists its events; without a Stripe key an event's page sells no t
 
 test("every page fits a phone's width, as a phone renders it", async () => {
   const { page } = await newBrowser(devices["iPhone 15"]);
-  for (const url of [SHOP, `${SHOP}/events/workshop`, `${AFFILIATES}/`, `${AFFILIATES}/admin`]) {
+  const workshop = `${SHOP}/events/${seededEventId("workshop")}`;
+  for (const url of [SHOP, workshop, `${AFFILIATES}/`, `${AFFILIATES}/admin`]) {
     await open(page, url);
     // Without the viewport tag a phone lays the page out 980 pixels wide and shrinks it.
     expect(await page.evaluate(() => document.documentElement.clientWidth)).toBe(

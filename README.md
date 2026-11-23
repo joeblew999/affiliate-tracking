@@ -73,24 +73,34 @@ can't drift from the code. Only the clicks behind the charts are generated, from
   one partner at a time. The on-sale emails go out in batches, each batch queuing the next. A daily
   job approves sales once their hold period is over, and queues any payout that didn't finish, so a
   crash can't leave one half done.
-- **Each app says what its slow work did, as it happens.** Every queue announces its outcome on a
-  topic, with Void's live events (`void/live`, in each app's `src/live.ts`): paid, sent, or failed
-  with the error. Admins can watch an app's events at its `/live`. That's how the tests know work is
-  done: they never wait and look again.
+- **The control plane: what the system is doing, on every page.** Every page of both apps has an
+  **Activity** pane. It shows the actions you started (a button pressed, a sign-up) and each step
+  they caused, in either app: the request, each queued message, each email. Each action is shown
+  running, done, or failed in red with the step and its error. Admins see everyone's actions,
+  Stripe's webhooks and the daily job too.
+  - The steps report themselves. Each app's code uses the wrappers in `packages/activity` (its
+    `queues`, `defineQueue`, `defineScheduled`, `sendEmail`, and one middleware) rather than
+    Void's own, so nothing in the apps announces anything by hand.
+  - The control plane itself is a Void WebSocket room per viewer, in the shop
+    (`apps/shop/routes/activity/[viewer].ws.ts`), where the users are. The service's work reaches
+    it over the binding, and its pages connect to it with the shop's sign-in.
+  - When an action finishes, the page reloads its data, so what it shows is what's saved.
+  - The plan, and what's still to do: `plans/2026-11-23-05-activity.md`.
 
 ## Where things are
 
-| Folder                   | What's in it                                                                                  |
-| ------------------------ | --------------------------------------------------------------------------------------------- |
-| `apps/affiliates`        | The service.                                                                                  |
-| `apps/affiliates/db`     | Its database: one file per table in `schema/`, the migrations, and the demo seed.             |
-| `apps/affiliates/pages`  | Its two pages: the partner page (`index`) and the admin page (`admin/`).                      |
-| `apps/affiliates/routes` | What the host calls (`api/host/`), the host's sign-in passed through (`api/auth/`), and `r/`. |
-| `apps/affiliates/src`    | The program's logic: commission, sales, refunds, payouts, stats.                              |
-| `apps/shop`              | The example host: sign-in, Stripe, and its calls to the service.                              |
-| `e2e`                    | The tests, run against both apps.                                                             |
-| `scripts`                | Local setup, putting the demo on the live site, and screenshots.                              |
-| `plans`                  | The plans this was built to, by date.                                                         |
+| Folder                   | What's in it                                                                                   |
+| ------------------------ | ---------------------------------------------------------------------------------------------- |
+| `apps/affiliates`        | The service.                                                                                   |
+| `apps/affiliates/db`     | Its database: one file per table in `schema/`, the migrations, and the demo seed.              |
+| `apps/affiliates/pages`  | Its two pages: the partner page (`index`) and the admin page (`admin/`).                       |
+| `apps/affiliates/routes` | What the host calls (`api/host/`), the host's sign-in passed through (`api/auth/`), and `r/`.  |
+| `apps/affiliates/src`    | The program's logic: commission, sales, refunds, payouts, stats.                               |
+| `apps/shop`              | The example host: sign-in, Stripe, and its calls to the service.                               |
+| `packages/activity`      | The control plane: the Activity pane, and the wrappers that make the apps' work report itself. |
+| `e2e`                    | The tests, run against both apps.                                                              |
+| `scripts`                | Local setup, putting the demo on the live site, and screenshots.                               |
+| `plans`                  | The plans this was built to, by date.                                                          |
 
 Each app's settings, each with a line saying what it's for, are in its `env.ts`.
 
@@ -146,10 +156,11 @@ shop's Better Auth with the demo password. The shop's calls to the service go th
 own client. Without Stripe, the dev tests send Stripe's events to the shop's webhook, signed as
 Stripe signs them. In the Stripe tests, Stripe sends them itself. There are no fakes or mocks.
 
-Nothing in the tests waits and looks again. Each step waits for the app's own answer: a form
-waits for its action's response, and work done through a queue is waited for by watching the app's
-live events (`watch()` in `e2e/dev/helpers.ts`). A failure ends the test at once, with the app's own
-error: a "failed" event, a server error on any page, or a failed job in either app's log.
+Nothing in the tests waits and looks again. A test watches the Activity pane, as a person would:
+it presses the button, then waits for that action to read done (`activity()` in
+`e2e/dev/helpers.ts`), and then checks the page. An action that fails ends the test at once, with
+its steps and the error, and so does a server error on any page. A failed test also shows what both
+apps printed.
 
 CI (`.github/workflows/ci.yml`) runs the first three on every push.
 
@@ -190,13 +201,19 @@ The example shop (`apps/shop`) does all of this:
    - set your sign-in cookie for the parent domain (`AUTH_COOKIE_DOMAIN`);
    - when a user is created, queue their sign-up for the service with the referral cookie
      (`apps/shop/queues/affiliate-signups.ts`);
-   - in Better Auth's Stripe plugin, pass every Stripe event on (`apps/shop/src/affiliates.ts`).
+   - in Better Auth's Stripe plugin, queue every Stripe event for the service
+     (`apps/shop/queues/stripe-events.ts`), so Stripe gets its answer at once.
    - At your checkout, ask the service what to add to it (`checkout()` in
      `apps/affiliates/client.ts`), as the shop's event page does.
-4. **Point the service at your site:** set its `HOST_SITE_URL` to your site, and its
+4. **Give your app the control plane** (see `apps/shop`): add `activity` (`packages/activity`) as
+   a dependency; the room (`routes/activity/[viewer].ws.ts`); its setup and wrappers
+   (`src/activity.ts`) used in place of Void's `queues`, `defineQueue` and `sendEmail`; its
+   middleware (`middleware/00.activity.ts`); where the service's events arrive
+   (`routes/api/affiliates/activity.ts`); and the `ActivityPane` in your layout.
+5. **Point the service at your site:** set its `HOST_SITE_URL` to your site, and its
    `AFFILIATES_COOKIE_DOMAIN` to the parent domain. Give it the two Stripe accounts' keys:
    `STRIPE_SALES_KEY` (selling) and `STRIPE_PAYOUTS_KEY` (payouts).
-5. **In Stripe:**
+6. **In Stripe:**
    - the selling account's webhook (`https://<your site>/api/auth/stripe/webhook`), for the
      service to count sales, refunds and disputes: `checkout.session.completed`,
      `checkout.session.async_payment_succeeded`, `charge.refunded`, `charge.dispute.created` and

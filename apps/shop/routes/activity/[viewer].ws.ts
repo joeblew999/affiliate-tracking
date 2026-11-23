@@ -6,10 +6,13 @@
 import { defineRoom } from "void/ws";
 import { ActivityEvent, apply, ClientMessage, kept, ServerMessage, type Action } from "activity";
 
-/** Everyone may watch their own room; admins also the one with everyone's actions. */
+/**
+ * Everyone may watch their own room. An admin may watch any: the one with everyone's actions, and
+ * a person's own (as while viewing the program as them, when the session switches between the two).
+ */
 function mayWatch(viewer: string, user: { id: string; role?: string | null } | null) {
   if (!user) return false;
-  return viewer === user.id || (viewer === "admins" && user.role === "admin");
+  return viewer === user.id || user.role === "admin";
 }
 
 async function load(storage: DurableObjectStorage): Promise<Map<string, Action>> {
