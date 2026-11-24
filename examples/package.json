@@ -1,0 +1,26 @@
+{
+  "name": "examples",
+  "private": true,
+  "description": "The example: a shop and an affiliate service, choreographed over the hub, with their tests and scripts.",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc -p e2e && tsc -p .",
+    "install:browser": "PLAYWRIGHT_BROWSERS_PATH=0 playwright install --with-deps chromium"
+  },
+  "devDependencies": {
+    "@durable-streams/client": "0.2.7",
+    "@durable-streams/state": "0.3.2",
+    "@stripe/cli": "1.55.14",
+    "@types/node": "26.6.6",
+    "@void/edge": "catalog:",
+    "better-auth": "catalog:",
+    "devalue": "catalog:",
+    "playwright": "1.65.0",
+    "stripe": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "vitest": "catalog:",
+    "void": "catalog:"
+  }
+}

@@ -1,0 +1,758 @@
+// The demo, written out: its people, and the program they're in. The fixtures both apps' seeds load
+// (examples/shop/db/seed.ts makes the people shop accounts that sign in with DEMO_PASSWORD; db/seed.ts
+// here makes the program) and the tests check against, so the demo, the seeds and the tests can't
+// drift apart. Every value is literal; only the clicks behind the charts are generated (db/seed.ts,
+// from a fixed seed), and nothing checks those exactly.
+//
+// Times are days before one instant: DEMO_NOW in tests and wherever the service's clock is pinned
+// to it (src/clock.ts, AFFILIATES_NOW), else the moment the seed runs. The sales follow the
+// program's own rules: approved HOLD_DAYS after they're made (unless flagged, or the partner's
+// every sale is reviewed), and each payout paid what was approved by then.
+//
+// These logins are public: they're for showing the program, locally and on the demo deployment
+// (README, "Demo data"). Nothing here is a real person.
+
+export const DEMO_PASSWORD = "demo-password-2026";
+
+interface DemoPerson {
+  /** The shop user's id, which is also the partner's userId. */
+  userId: string;
+  name: string;
+  email: string;
+  role: "admin" | "user";
+  partner?: {
+    /** Default affiliate. An organiser runs events; a venue's contact is paid for its venue. */
+    role?: "organiser" | "venue";
+    status: "active" | "pending" | "suspended";
+    code: string;
+    commissionPct: number;
+    /** How much traffic they bring, relative to the others. */
+    reach: number;
+    /** Where their visitors come from. */
+    sites: (string | null)[];
+    reviewRequired?: boolean;
+    promoCode?: string;
+    application: string;
+    joinedDaysAgo: number;
+  };
+}
+
+/** An organiser or a venue's contact: active, with no traffic or links of their own. */
+function payee(
+  userId: string,
+  name: string,
+  code: string,
+  role: "organiser" | "venue",
+): DemoPerson {
+  return {
+    userId,
+    name,
+    email: `${code}@demo.test`,
+    role: "user",
+    partner: {
+      role,
+      status: "active",
+      code,
+      commissionPct: 0,
+      reach: 0,
+      sites: [],
+      application: "",
+      joinedDaysAgo: 150,
+    },
+  };
+}
+
+export const demoPeople: DemoPerson[] = [
+  { userId: "demo-admin", name: "Dana Reyes", email: "admin@demo.test", role: "admin" },
+  {
+    userId: "demo-maya",
+    name: "Maya Chen",
+    email: "maya@demo.test",
+    role: "user",
+    partner: {
+      status: "active",
+      code: "maya",
+      commissionPct: 25,
+      reach: 10,
+      sites: ["www.youtube.com", "www.youtube.com", "x.com", null],
+      promoCode: "MAYA10",
+      application: "I review tools for small studios on YouTube (38k subscribers).",
+      joinedDaysAgo: 120,
+    },
+  },
+  {
+    userId: "demo-leo",
+    name: "Leo Martins",
+    email: "leo@demo.test",
+    role: "user",
+    partner: {
+      status: "active",
+      code: "leo",
+      commissionPct: 20,
+      reach: 6,
+      sites: ["newsletter.leomartins.test", "newsletter.leomartins.test", null],
+      application: "A weekly newsletter on running a freelance business, about 9,000 readers.",
+      joinedDaysAgo: 100,
+    },
+  },
+  {
+    userId: "demo-priya",
+    name: "Priya Nair",
+    email: "priya@demo.test",
+    role: "user",
+    partner: {
+      status: "active",
+      code: "priya",
+      commissionPct: 20,
+      reach: 4,
+      sites: ["www.google.com", "priyanair.test", "www.linkedin.com", null],
+      application: "I write tutorials on my blog and get most traffic from search.",
+      joinedDaysAgo: 95,
+    },
+  },
+  {
+    userId: "demo-tom",
+    name: "Tom Becker",
+    email: "tom@demo.test",
+    role: "user",
+    partner: {
+      status: "active",
+      code: "tom",
+      commissionPct: 20,
+      reach: 3,
+      sites: ["www.reddit.com", "news.ycombinator.com", null],
+      reviewRequired: true,
+      application: "I post in a few communities about developer tools.",
+      joinedDaysAgo: 70,
+    },
+  },
+  {
+    userId: "demo-ana",
+    name: "Ana Souza",
+    email: "ana@demo.test",
+    role: "user",
+    partner: {
+      status: "active",
+      code: "ana",
+      commissionPct: 15,
+      reach: 2,
+      sites: ["www.instagram.com", "www.tiktok.com", null],
+      application: "Short videos about my studio setup on Instagram and TikTok.",
+      joinedDaysAgo: 45,
+    },
+  },
+  {
+    userId: "demo-ken",
+    name: "Ken Ito",
+    email: "ken@demo.test",
+    role: "user",
+    partner: {
+      status: "suspended",
+      code: "ken",
+      commissionPct: 20,
+      reach: 2,
+      sites: ["coupons.example.test", null],
+      application: "Deals site.",
+      joinedDaysAgo: 80,
+    },
+  },
+  {
+    userId: "demo-sam",
+    name: "Sam Okafor",
+    email: "sam@demo.test",
+    role: "user",
+    partner: {
+      status: "pending",
+      code: "sam",
+      commissionPct: 20,
+      reach: 0,
+      sites: [],
+      application: "I review productivity tools on YouTube, about 12k subscribers.",
+      joinedDaysAgo: 2,
+    },
+  },
+  {
+    userId: "demo-lena",
+    name: "Lena Vogel",
+    email: "lena@demo.test",
+    role: "user",
+    partner: {
+      status: "pending",
+      code: "lena",
+      commissionPct: 20,
+      reach: 0,
+      sites: [],
+      application: "Podcast about design businesses; I'd mention the shop in episodes.",
+      joinedDaysAgo: 1,
+    },
+  },
+  // Organisers: they run the events, and are paid a share of every ticket.
+  payee("demo-olivia", "Olivia Grant", "olivia", "organiser"),
+  payee("demo-raj", "Raj Patel", "raj", "organiser"),
+  // The venues' contacts: each is paid for their venue, and sets up its payouts.
+  payee("demo-nina", "Nina Okoro", "nina", "venue"),
+  payee("demo-hugo", "Hugo Lind", "hugo", "venue"),
+  payee("demo-mei", "Mei Tanaka", "mei", "venue"),
+  // A shop customer who isn't a partner, to show the partner page's "apply" form.
+  { userId: "demo-chris", name: "Chris Park", email: "chris@demo.test", role: "user" },
+];
+
+/** The instant the demo is dated from in tests (and wherever the clock is pinned): mid-month, noon UTC. */
+export const DEMO_NOW = "2026-11-15T12:00:00.000Z";
+
+/** Days a sale waits before it's approved (the service's AFFILIATES_HOLD_DAYS in the demo). */
+export const HOLD_DAYS = 30;
+
+/**
+ * Where the online events are hosted: each with what it costs to book for an event (paid when the
+ * event is booked) and the attendees it takes to fill it. Each is paid through its contact.
+ */
+export const demoVenues = {
+  zoomRoom: {
+    name: "The Zoom room",
+    location: "Online, on Zoom. The link comes with your ticket.",
+    capacity: 200,
+    priceCents: 150000,
+    contact: "nina",
+  },
+  liveStage: {
+    name: "The live stage",
+    location: "Online, on YouTube Live. The link comes with your ticket.",
+    capacity: 100,
+    priceCents: 600000,
+    contact: "hugo",
+  },
+  meetRoom: {
+    name: "The meeting room",
+    location: "Online, on Google Meet. The link comes with your ticket.",
+    capacity: 40,
+    priceCents: 80000,
+    contact: "mei",
+  },
+} as const;
+
+/**
+ * The events: each at a venue, run by an organiser who's paid organiserPct of every ticket. A
+ * ticket is a one-off Stripe payment for the event's Stripe product, whose id is made once from the
+ * event's label, so a commission rule can name it. Booked `bookedDaysAgo` days ago, when its venue
+ * was paid and it went on sale. When: in `startsInDays` days from the day it's shown (the demo stays
+ * upcoming), at `startsAt` UTC, for `hours` (eventTimes). Besides the tickets affiliates brought
+ * (demoSales), `directTickets` were bought by people no affiliate brought.
+ */
+export const demoEvents = {
+  workshop: {
+    productId: `prod_${fixtureId("event:workshop").replaceAll("-", "")}`,
+    name: "Getting started workshop",
+    description: "Two hours, hands on: set up your first project with the team, and ask anything.",
+    venue: "zoomRoom",
+    organiser: "olivia",
+    organiserPct: 15,
+    bookedDaysAgo: 120,
+    startsInDays: 10,
+    startsAt: "14:00",
+    hours: 2,
+    cents: 2900,
+    directTickets: 60,
+  },
+  masterclass: {
+    productId: `prod_${fixtureId("event:masterclass").replaceAll("-", "")}`,
+    name: "Masterclass: the whole day",
+    description:
+      "A full day of talks and live building, start to finish, with the recordings after.",
+    venue: "liveStage",
+    organiser: "raj",
+    organiserPct: 20,
+    bookedDaysAgo: 115,
+    startsInDays: 24,
+    startsAt: "09:00",
+    hours: 8,
+    cents: 29000,
+    directTickets: 14,
+  },
+  teamSession: {
+    productId: `prod_${fixtureId("event:team-session").replaceAll("-", "")}`,
+    name: "Team session",
+    description: "An hour for your whole team: how to work together on one project.",
+    venue: "meetRoom",
+    organiser: "olivia",
+    organiserPct: 10,
+    bookedDaysAgo: 100,
+    startsInDays: 38,
+    startsAt: "16:00",
+    hours: 1,
+    cents: 9900,
+    directTickets: 6,
+  },
+} as const satisfies Record<
+  string,
+  { venue: keyof typeof demoVenues; organiser: string; [key: string]: unknown }
+>;
+
+/** When an event starts and ends, for its days ahead of `now`. */
+export function eventTimes(
+  event: { startsInDays: number; startsAt: string; hours: number },
+  now = Date.now(),
+): { startsAt: Date; endsAt: Date } {
+  const day = new Date(now + event.startsInDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const startsAt = new Date(`${day}T${event.startsAt}:00.000Z`);
+  return { startsAt, endsAt: new Date(startsAt.getTime() + event.hours * 60 * 60 * 1000) };
+}
+
+interface DemoPayout {
+  label: string;
+  partner: string;
+  daysAgo: number;
+  amountCents: number;
+}
+
+/** The monthly payout runs, 72, 42 and 12 days ago: manual (no Stripe Connect in the demo). */
+export const demoPayouts: DemoPayout[] = [
+  { label: "maya_p72", partner: "maya", daysAgo: 72, amountCents: 7250 },
+  { label: "maya_p42", partner: "maya", daysAgo: 42, amountCents: 8225 },
+  { label: "maya_p12", partner: "maya", daysAgo: 12, amountCents: 8700 },
+  { label: "leo_p42", partner: "leo", daysAgo: 42, amountCents: 8300 },
+  { label: "leo_p12", partner: "leo", daysAgo: 12, amountCents: 406 },
+  { label: "priya_p42", partner: "priya", daysAgo: 42, amountCents: 2500 },
+  { label: "priya_p12", partner: "priya", daysAgo: 12, amountCents: 580 },
+  { label: "ken_p12", partner: "ken", daysAgo: 12, amountCents: 580 },
+  // Each event's venue, paid when the event was booked (demoVenueSales).
+  ...Object.entries(demoEvents).map(([key, event]) => ({
+    label: `venue_${key}`,
+    partner: demoVenues[event.venue].contact,
+    daysAgo: event.bookedDaysAgo,
+    amountCents: demoVenues[event.venue].priceCents,
+  })),
+];
+
+interface DemoSale {
+  label: string;
+  partner: string;
+  kind: "checkout" | "organiser" | "venue" | "bonus" | "clawback";
+  /** For a ticket, an organiser's share of one, or a venue's payment: the event it's for. */
+  event?: keyof typeof demoEvents;
+  daysAgo: number;
+  /** What it earns now: after any refund taken off it before it was paid. */
+  commissionCents: number;
+  /** What it earned before that refund, when one changed it. */
+  grossCommissionCents?: number;
+  status: "pending" | "approved" | "paid" | "refunded";
+  /** The payout that paid it. */
+  payout?: string;
+  refundedCents?: number;
+  fraudReason?: "self_email" | "self_ip";
+  /** A clawback's refunded sale. */
+  of?: string;
+  customerEmail?: string;
+  bonusNote?: string;
+}
+
+/**
+ * Every ticket sale, bonus and clawback. Commission: the partner's % of the ticket, except the team
+ * session, which pays a fixed $25 (demoRules).
+ */
+export const demoSales: DemoSale[] = [
+  // Maya, 25%. Her masterclass ticket 60 days ago was 10% refunded after it was paid: a clawback.
+  {
+    label: "maya_1",
+    partner: "maya",
+    kind: "checkout",
+    event: "masterclass",
+    daysAgo: 110,
+    commissionCents: 7250,
+    status: "paid",
+    payout: "maya_p72",
+  },
+  {
+    label: "maya_2",
+    partner: "maya",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 95,
+    commissionCents: 725,
+    status: "paid",
+    payout: "maya_p42",
+  },
+  {
+    label: "maya_3",
+    partner: "maya",
+    kind: "checkout",
+    event: "teamSession",
+    daysAgo: 80,
+    commissionCents: 2500,
+    status: "paid",
+    payout: "maya_p42",
+  },
+  {
+    label: "maya_launch",
+    partner: "maya",
+    kind: "bonus",
+    daysAgo: 70,
+    commissionCents: 5000,
+    status: "paid",
+    payout: "maya_p42",
+    bonusNote: "Launch video",
+  },
+  {
+    label: "maya_10",
+    partner: "maya",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 65,
+    commissionCents: 725,
+    status: "paid",
+    payout: "maya_p12",
+  },
+  {
+    label: "maya_4",
+    partner: "maya",
+    kind: "checkout",
+    event: "masterclass",
+    daysAgo: 60,
+    commissionCents: 7250,
+    status: "paid",
+    payout: "maya_p12",
+    refundedCents: 2900,
+  },
+  {
+    label: "maya_5",
+    partner: "maya",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 50,
+    commissionCents: 725,
+    status: "paid",
+    payout: "maya_p12",
+  },
+  {
+    label: "maya_6",
+    partner: "maya",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 35,
+    commissionCents: 725,
+    status: "approved",
+  },
+  {
+    label: "maya_11",
+    partner: "maya",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 35,
+    commissionCents: 725,
+    status: "approved",
+  },
+  {
+    label: "maya_4_clawback",
+    partner: "maya",
+    kind: "clawback",
+    of: "maya_4",
+    daysAgo: 5,
+    commissionCents: -725,
+    status: "approved",
+  },
+  {
+    label: "maya_7",
+    partner: "maya",
+    kind: "checkout",
+    event: "teamSession",
+    daysAgo: 20,
+    commissionCents: 2500,
+    status: "pending",
+  },
+  {
+    label: "maya_8",
+    partner: "maya",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 10,
+    commissionCents: 725,
+    status: "pending",
+    fraudReason: "self_email",
+    customerEmail: "maya@demo.test",
+  },
+  {
+    label: "maya_9",
+    partner: "maya",
+    kind: "checkout",
+    event: "masterclass",
+    daysAgo: 3,
+    commissionCents: 7250,
+    status: "pending",
+  },
+  // Leo, 20%. One sale refunded in full, one 30% refunded before it was paid.
+  {
+    label: "leo_1",
+    partner: "leo",
+    kind: "checkout",
+    event: "masterclass",
+    daysAgo: 90,
+    commissionCents: 5800,
+    status: "paid",
+    payout: "leo_p42",
+  },
+  {
+    label: "leo_2",
+    partner: "leo",
+    kind: "checkout",
+    event: "teamSession",
+    daysAgo: 75,
+    commissionCents: 2500,
+    status: "paid",
+    payout: "leo_p42",
+  },
+  {
+    label: "leo_3",
+    partner: "leo",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 55,
+    commissionCents: 0,
+    grossCommissionCents: 580,
+    status: "refunded",
+    refundedCents: 2900,
+  },
+  {
+    label: "leo_4",
+    partner: "leo",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 45,
+    commissionCents: 406,
+    grossCommissionCents: 580,
+    status: "paid",
+    payout: "leo_p12",
+    refundedCents: 870,
+  },
+  {
+    label: "leo_5",
+    partner: "leo",
+    kind: "checkout",
+    event: "masterclass",
+    daysAgo: 33,
+    commissionCents: 5800,
+    status: "approved",
+  },
+  {
+    label: "leo_newsletter",
+    partner: "leo",
+    kind: "bonus",
+    daysAgo: 10,
+    commissionCents: 2500,
+    status: "approved",
+    bonusNote: "Newsletter feature",
+  },
+  {
+    label: "leo_6",
+    partner: "leo",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 12,
+    commissionCents: 580,
+    status: "pending",
+  },
+  // Priya, 20%.
+  {
+    label: "priya_1",
+    partner: "priya",
+    kind: "checkout",
+    event: "teamSession",
+    daysAgo: 85,
+    commissionCents: 2500,
+    status: "paid",
+    payout: "priya_p42",
+  },
+  {
+    label: "priya_2",
+    partner: "priya",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 60,
+    commissionCents: 580,
+    status: "paid",
+    payout: "priya_p12",
+  },
+  {
+    label: "priya_3",
+    partner: "priya",
+    kind: "checkout",
+    event: "masterclass",
+    daysAgo: 25,
+    commissionCents: 5800,
+    status: "pending",
+  },
+  // Tom, 20%: every sale of his waits for an admin.
+  {
+    label: "tom_1",
+    partner: "tom",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 60,
+    commissionCents: 580,
+    status: "pending",
+  },
+  {
+    label: "tom_2",
+    partner: "tom",
+    kind: "checkout",
+    event: "masterclass",
+    daysAgo: 40,
+    commissionCents: 5800,
+    status: "pending",
+  },
+  {
+    label: "tom_3",
+    partner: "tom",
+    kind: "checkout",
+    event: "teamSession",
+    daysAgo: 8,
+    commissionCents: 2500,
+    status: "pending",
+  },
+  // Ana, 15%.
+  {
+    label: "ana_1",
+    partner: "ana",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 40,
+    commissionCents: 435,
+    status: "approved",
+  },
+  {
+    label: "ana_2",
+    partner: "ana",
+    kind: "checkout",
+    event: "masterclass",
+    daysAgo: 15,
+    commissionCents: 4350,
+    status: "pending",
+  },
+  // Ken, 20%, suspended 20 days ago: two of his sales came from his own IP.
+  {
+    label: "ken_1",
+    partner: "ken",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 70,
+    commissionCents: 580,
+    status: "paid",
+    payout: "ken_p12",
+  },
+  {
+    label: "ken_2",
+    partner: "ken",
+    kind: "checkout",
+    event: "workshop",
+    daysAgo: 50,
+    commissionCents: 580,
+    status: "pending",
+    fraudReason: "self_ip",
+  },
+  {
+    label: "ken_3",
+    partner: "ken",
+    kind: "checkout",
+    event: "masterclass",
+    daysAgo: 30,
+    commissionCents: 5800,
+    status: "pending",
+    fraudReason: "self_ip",
+  },
+];
+
+/** Each event's venue payment, made and paid when the event was booked. */
+export const demoVenueSales: DemoSale[] = Object.entries(demoEvents).map(([key, event]) => ({
+  label: `venue_${key}`,
+  partner: demoVenues[event.venue].contact,
+  kind: "venue",
+  event: key as keyof typeof demoEvents,
+  daysAgo: event.bookedDaysAgo,
+  commissionCents: demoVenues[event.venue].priceCents,
+  status: "paid",
+  payout: `venue_${key}`,
+}));
+
+/**
+ * Every ticket sold, each with its organiser's share: the tickets affiliates brought (demoSales,
+ * refunds and all), and the event's direct tickets, bought every few days since it went on sale.
+ * The share is organiserPct of the price; a refund takes its part, and a refund in full all of it.
+ * Shares wait the hold period, then are approved.
+ */
+export const demoOrganiserShares: DemoSale[] = Object.entries(demoEvents).flatMap(
+  ([key, event]) => {
+    const eventKey = key as keyof typeof demoEvents;
+    const share = (refundedCents = 0) =>
+      Math.round((event.cents * event.organiserPct * (1 - refundedCents / event.cents)) / 100);
+    const status = (daysAgo: number, refundedCents = 0): DemoSale["status"] =>
+      refundedCents >= event.cents ? "refunded" : daysAgo > HOLD_DAYS ? "approved" : "pending";
+    const viaAffiliates = demoSales
+      .filter((sale) => sale.kind === "checkout" && sale.event === eventKey)
+      .map((sale): DemoSale => ({
+        label: `share_${sale.label}`,
+        partner: event.organiser,
+        kind: "organiser",
+        event: eventKey,
+        of: sale.label,
+        daysAgo: sale.daysAgo,
+        commissionCents: share(sale.refundedCents),
+        grossCommissionCents: share(),
+        status: status(sale.daysAgo, sale.refundedCents),
+        refundedCents: sale.refundedCents,
+        customerEmail: customerOf(sale) ?? undefined,
+      }));
+    const direct = Array.from({ length: event.directTickets }, (_, n): DemoSale => {
+      const daysAgo = event.bookedDaysAgo - 1 - ((n * 7) % (event.bookedDaysAgo - 1));
+      return {
+        label: `direct_${key}_${n + 1}`,
+        partner: event.organiser,
+        kind: "organiser",
+        event: eventKey,
+        daysAgo,
+        commissionCents: share(),
+        status: status(daysAgo),
+        customerEmail: `direct-${key}-${n + 1}@customer.demo.test`,
+      };
+    });
+    return [...viaAffiliates, ...direct];
+  },
+);
+
+/** Commission rules: Maya earns 30% in a month she makes 15 sales; the team session pays $25. */
+export const demoRules = [
+  {
+    label: "maya_tier",
+    partner: "maya",
+    kind: "percent" as const,
+    percent: 30,
+    minMonthlySales: 15,
+  },
+  {
+    label: "team_fixed",
+    partner: null,
+    productId: demoEvents.teamSession.productId,
+    kind: "fixed" as const,
+    fixedCents: 2500,
+    currency: "usd",
+  },
+];
+
+/** A seeded sale's customer: a clawback's is its refunded sale's; a bonus or venue payment has none. */
+export function customerOf(sale: Pick<DemoSale, "label" | "kind" | "of" | "customerEmail">) {
+  if (sale.kind === "bonus" || sale.kind === "venue") return null;
+  return sale.customerEmail ?? `${sale.of ?? sale.label}@customer.demo.test`;
+}
+
+/** A seeded sale's Stripe payment, by its label. */
+export const paymentIntentOf = (label: string) => `pi_demo_${label}`;
+
+/** A fixture's id, made from its label: the same on every load, as Rails' fixtures do it. */
+export function fixtureId(label: string): string {
+  // FNV-1a, four ways, for 32 hex digits, in a UUID's shape.
+  let hex = "";
+  for (let round = 0; round < 4; round++) {
+    let h = 0x811c9dc5 ^ round;
+    for (const ch of `${round}:${label}`) h = Math.imul(h ^ ch.charCodeAt(0), 0x01000193);
+    hex += (h >>> 0).toString(16).padStart(8, "0");
+  }
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}

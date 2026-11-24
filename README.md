@@ -1,283 +1,231 @@
-# Affiliates
+# cloudflare-durable-streams
 
-An affiliate program you can add to any app on Cloudflare. Partners share links. When a link brings a
-sale, the partner earns commission, and they're paid through Stripe.
+**[Durable Streams](https://github.com/durable-streams/durable-streams) for Cloudflare: the full
+protocol, with subscriptions, on D1 read replicas.** One Worker that any of your Workers, local or
+deployed, writes to and follows. Built with [Void](https://void.cloud) and
+[Vite+](https://viteplus.dev).
 
-It's an app of its own (the **service**). Your app (the **host**) keeps its users, sign-in and
-Stripe, and calls the service. This repo has both: the service, and an example shop as the host.
-A third worker, the **hub**, holds the streams they both write to and follow.
+[![CI](https://github.com/joeblew999/cloudflare-durable-streams/actions/workflows/ci.yml/badge.svg)](https://github.com/joeblew999/cloudflare-durable-streams/actions/workflows/ci.yml)
+![Protocol conformance: 344 of 344](https://img.shields.io/badge/conformance-344%2F344-brightgreen)
+![Void 1.11](https://img.shields.io/badge/Void-1.11-black)
+![Vite+ 1.6](https://img.shields.io/badge/Vite%2B-1.6-646cff)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-Live demo: **https://shop.ubuntusoftware.net** (the shop) and
-**https://affiliates.shop.ubuntusoftware.net** (the service).
+- **The whole protocol.** Make, append to, read, tail and delete streams; JSON and binary;
+  long-poll and SSE; idempotent producers; closing; forks; TTLs. Plus the protocol's
+  subscriptions (§6): webhooks with signed wakes, and pull-wake for workers with no public address.
+- **Checked by the protocol's own conformance suite:** its authors' 338 tests, and 6 more of this
+  repo's for subscriptions, run against the hub itself (`vp run test:conformance`).
+- **Global by default.** Every stream is in the hub's D1, with read replication on. A stream is
+  read from the replica nearest the Worker reading it, and writes go to the primary. D1
+  bookmarks travel with every request, so no client ever reads older than what it has already
+  seen or written.
+- **For any Worker.** On the same Cloudflare account, through a service binding; from anywhere
+  else (local `wrangler dev` or `vp dev`, another account), over HTTPS with a token.
 
-Built with [Void](https://void.cloud) and [Vite+](https://viteplus.dev): Cloudflare Workers, D1,
-Drizzle and Better Auth, with React and [shadcn](https://ui.shadcn.com) for the pages. Rebuilt
-from [HolotypePteLtd/affiliate-tracking](https://github.com/HolotypePteLtd/affiliate-tracking).
+## Choreography, not orchestration
 
-## Try the demo
+Most workflow engines have a conductor: one place that knows the steps and tells each service
+what to do next. This has none. Each Worker says what happened, as an event on a stream ("signed
+up", "paid", "on sale"), and any Worker that cares follows that stream, with a subscription it
+makes itself, at runtime. The hub wakes it when there's something new; it reads on from where it
+had got to, does its part, maybe publishes what that caused, and acknowledges.
 
-The shop sells tickets to 3 online events. Open it and press **Sign in as the admin**. You land
-on the service's admin page.
+So the workflow is never written down in one place. It's the sum of who follows what, and it
+changes when a Worker starts or stops following a stream, with no change to anyone else. Each step
+is an activity that a Worker took on for itself. The hub knows no Worker, no stream name and no
+step.
 
-- **Events tab:** each event's tickets sold, the money in, what the venue, the organiser and the
-  affiliates were paid, the profit, and how many more tickets it takes to break even. Book a new
-  event here, and add organisers and venues.
-- **Partners tab:** approve, suspend and set commission. To see the program as a partner, open a
-  partner's menu and choose **View as**. Press **Back to admin** in the bar at the top to return.
-- **Who's who:** Maya is the busiest partner, then Leo, Priya, Tom (every sale of his is reviewed)
-  and Ana. Ken is suspended. Sam and Lena are waiting for approval. Olivia and Raj are organisers.
-  Nina, Hugo and Mei are the contacts the 3 venues are paid through.
-- **Signing in as anyone:** every demo account uses the password `demo-password-2026` (public, for
-  the demo only): `admin@demo.test`, `maya@demo.test` and so on, and `chris@demo.test` for a
-  customer who never applied.
-
-The demo is written out in one file, `apps/affiliates/demo.ts`: its people, its 3 venues and 3 events, and
-every ticket sale, refund, bonus, payout and rule of the program, with exact amounts. Times are days before
-one instant. Both apps' seeds load it (`vp run demo`) and the tests check against it, so the demo
-can't drift from the code. Only the clicks behind the charts are generated, from a fixed seed.
-
-## How it works
-
-- **Sign-in is the host's.** The service has no users or passwords. On each request it asks the
-  host's Better Auth who is signed in. Admins are the host's admins. A partner is a host user who
-  applied.
-- **One domain, two addresses.** The shop is `shop.ubuntusoftware.net` and the service is
-  `affiliates.shop.ubuntusoftware.net`. Both set their cookies for the shop's domain, so each app
-  sees the other's: the service sees who is signed in, and the shop sees the referral cookie.
-- **Referral links belong to the service.** `/r/<partner code or short link>` counts the click,
-  sets the referral cookie, and sends the visitor on to the shop.
-- **The host calls the service through a Cloudflare service binding,** using the client in
-  `apps/affiliates/client.ts`. It calls at sign-up, at checkout, and for every Stripe event. Each
-  call is defined once, in `apps/affiliates/src/host-contract.ts`. Calls carry a shared secret,
-  `AFFILIATES_HOST_TOKEN`.
-- **A ticket is a Stripe Checkout, made by the host.** A signed-in user presses **Buy ticket** on
-  an event's page (`apps/shop/pages/events/[id].server.ts`). The shop asks the service what to add
-  to the checkout: the partner who brought the buyer, and their discount. It then makes a one-off
-  Stripe Checkout with it. The shop's Better Auth Stripe plugin makes each user's Stripe customer
-  at sign-up, receives Stripe's webhook, and passes every event on. The service turns them into
-  sales, refunds and disputes (and renewals, for a host that sells subscriptions).
-- **Stripe handles all the tax, on two Stripe accounts of one business.** Stripe won't allow
-  Managed Payments (Stripe as the seller, handling the tax) on an account that pays partners
-  through Stripe Connect. So:
-  - the **selling account** (the host's) has Managed Payments on, and takes the ticket money;
-  - the **payouts account** is the Connect platform. It holds no sales. Before each payout, the
-    service adds the money for it from the business's bank (a Stripe top-up), then transfers it
-    to the partner's Stripe account.
-    Commission is on the price, not the tax Stripe adds. A partner without a Stripe account gets a
-    manual payout, for the admin to pay by hand.
-- **Events, venues and organisers.** An admin books an event at a venue, with an organiser. The
-  venue is paid its price at once, through Stripe like any payout. Once it's paid, the event goes on
-  sale, and the shop emails every user who hasn't unsubscribed. Each ticket pays the event's
-  organiser their percent of the price, and the affiliate who brought the buyer (if any) their
-  commission. An organiser or a venue's contact can't also be an affiliate.
-- **Slow work goes through queues.** Payouts are queued one partner at a time. The on-sale emails go out in batches, each batch queuing the next. A daily
-  job approves sales once their hold period is over, and queues any payout that didn't finish, so a
-  crash can't leave one half done.
-- **The control plane: what the system is doing, on every page.** Every page of both apps has an
-  **Activity** pane. It shows the actions you started (a button pressed, a sign-up) and each step
-  they caused, in either app: the request, each queued message, each email. Each action is shown
-  running, done, or failed in red with the step and its error. Admins see everyone's actions,
-  Stripe's webhooks and the daily job too.
-  - The steps report themselves. Each app's code uses the wrappers in `packages/activity` (its
-    `queues`, `defineQueue`, `defineScheduled`, `sendEmail`, and one middleware) rather than
-    Void's own, so nothing in the apps announces anything by hand.
-  - The control plane itself is a stream of events per viewer, in the hub (below). A page starts
-    with its viewer's actions so far, then stays connected for each new event, at its own app's
-    `/streams/<viewer>`. That app knows who is signed in, decides who may read which
-    (`mayRead` in `packages/activity`), and passes the read on to the hub.
-  - When an action finishes, the page reloads its data, so what it shows is what's saved.
-- **The hub: the streams, as a worker of their own** (`apps/hub`). It serves the
-  [Durable Streams](https://github.com/durable-streams/durable-streams) protocol at `/streams`,
-  and nothing else: a worker makes a stream, writes to it, reads it and follows it with the
-  protocol's own requests. It knows nothing about the other workers: no users, no stream names,
-  no bindings to anyone. A worker reaches it through a service binding, with `HUB_TOKEN`, using
-  `hub/client` (`apps/hub/client.ts`, which reads with the official `@durable-streams/client`).
-  It has no public address.
-  - **The streams are in the hub's D1, with read replicas** (`packages/streams/src/d1`): any of
-    its Workers, anywhere, reads a stream from the nearest replica, and writes go to the primary.
-    Every answer carries a D1 bookmark, which the hub's client sends back, so no worker reads
-    older than what it has seen (Void's read replication and bookmarks). Live readers wait on a
-    small notifier per stream. The protocol's own conformance suite checks it.
-- **Subscriptions: a worker told when a stream has something new.** `packages/streams` puts the
-  protocol's subscriptions in front of the Durable Streams server, which doesn't have them on
-  Cloudflare. A subscription follows streams by name or by a pattern, and keeps how far each
-  has been acknowledged. A worker subscribes itself, giving its own address. When a followed
-  stream is written to, the hub sends a signed wake to that address; the worker checks the
-  signature, reads on from where it had got to, and acknowledges. Publishing and following are
-  `hub/bus` (`apps/hub/bus.ts`). A write's answer also names the subscriptions it woke (the
-  `Stream-Subscriptions` header, the one thing the hub adds to the protocol), so the control plane
-  shows each follower's part as a step of the action that published. Unacknowledged, the wake is
-  sent again when its lease runs out; a delivery that fails is tried again; and what's due
-  survives a restart. Once a day the hub checks no subscriber has been left behind
-  (`apps/hub/crons/daily.ts`).
-- **A new user is the first thing done this way.** The shop doesn't call the service at sign-up.
-  It publishes "signed-up" to a stream (`apps/shop/src/published.ts`). The service follows that
-  stream (`apps/affiliates/src/followed.ts`), is woken (`apps/affiliates/routes/api/hub/wake.ts`),
-  reads on, records the referral, and acknowledges (`apps/affiliates/queues/wakes.ts`). In the
-  Activity pane it's still one action, "Sign up", with the service's part as a step of it.
-  - The plan, and what's still to do: `plans/2026-11-24-02-hub.md`.
-
-## Where things are
-
-| Folder                   | What's in it                                                                                   |
-| ------------------------ | ---------------------------------------------------------------------------------------------- |
-| `apps/affiliates`        | The service.                                                                                   |
-| `apps/affiliates/db`     | Its database: one file per table in `schema/`, the migrations, and the demo seed.              |
-| `apps/affiliates/pages`  | Its two pages: the partner page (`index`) and the admin page (`admin/`).                       |
-| `apps/affiliates/routes` | What the host calls (`api/host/`), the host's sign-in passed through (`api/auth/`), and `r/`.  |
-| `apps/affiliates/src`    | The program's logic: commission, sales, refunds, payouts, stats.                               |
-| `apps/shop`              | The example host: sign-in, Stripe, and its calls to the service.                               |
-| `apps/hub`               | The hub: the streams, and nothing else.                                                        |
-| `packages/activity`      | The control plane: the Activity pane, and the wrappers that make the apps' work report itself. |
-| `packages/streams`       | Durable Streams on D1 for a Void app, with subscriptions, and the Void app its tests run in.   |
-| `e2e`                    | The tests, run against the three apps.                                                         |
-| `scripts`                | Local setup, putting the demo on the live site, and screenshots.                               |
-| `plans`                  | The plans this was built to, by date.                                                          |
-
-Each app's settings, each with a line saying what it's for, are in its `env.ts`.
-
-## Develop
-
-Once per machine, install Vite+ (`vp`):
-
-```sh
-curl -fsSL https://vite.plus | bash
+```mermaid
+sequenceDiagram
+    participant Shop as Shop (a Worker)
+    participant Hub as durable-streams
+    participant Service as Affiliates (a Worker)
+    Service->>Hub: PUT /v1/stream/__ds/subscriptions/affiliates-signups (follow "signups")
+    Shop->>Hub: POST /v1/stream/signups {"type":"signed-up", ...}
+    Hub-->>Shop: 204, Stream-Subscriptions: affiliates-signups
+    Hub->>Service: wake (signed): "signups" has news past your offset
+    Service->>Hub: GET /v1/stream/signups?offset=… (from the nearest replica)
+    Service->>Service: record the referral
+    Service->>Hub: POST …/affiliates-signups/callback (acknowledge up to here)
 ```
 
-Then, in the repo:
+Since the events carry what they're part of, the activities can be put back together as they
+happen. The example (below) shows each person's actions in an Activity pane: every step, in
+whichever Worker it ran, live.
+
+## Deploy it
 
 ```sh
-vp env on          # use the Node version in .node-version
-vp install
-vp run setup       # each app's local settings and database
-vp run dev         # the shop on http://localhost:5173, the service on http://localhost:5174
-                   # (and the hub on 5175, which nobody opens)
-```
-
-`vp run demo` loads the demo into the local databases, replacing what's there. Or sign up on the
-local shop: `admin@example.test` becomes an admin, and anyone else can apply as a partner.
-
-All the repo's tasks are in `vite.config.ts`, each with a line saying what it does. Run one with
-`vp run <task>`.
-
-Code follows Void's own examples: imports are relative and include the file extension, and types
-come from the database schema and the pages' loaders and actions.
-
-## Check and test
-
-- `vp check` formats, lints and type-checks.
-- `vp run check:types` type-checks each project as a whole (both apps, the tests, the scripts), as
-  Void's own repo does.
-- `vp run test:streams` runs the Durable Streams protocol's own conformance tests (338 of them,
-  its authors') and this repo's subscription tests against `packages/streams`, in its own small
-  Void app.
-- `vp run test:dev` runs the tests in `e2e/dev`. The first time, run `vp run install:browser` to
-  get Chromium.
-- `vp run test:stripe` runs the tests in `e2e/stripe` against Stripe's test mode. Buyers buy
-  tickets on Stripe's own Checkout page with Stripe's test card, and refunds are real ones in
-  Stripe. Stripe's webhooks reach the shop through the Stripe CLI's `stripe listen` (the
-  `@stripe/cli` package). It needs the test-mode keys of two Stripe test accounts:
-  `STRIPE_TEST_SECRET_KEY` (selling, with Managed Payments turned on) and
-  `STRIPE_TEST_PAYOUTS_KEY` (payouts). On GitHub, it runs from Actions → **Stripe end-to-end** →
-  Run workflow (`.github/workflows/stripe.yml`), with those keys saved as repository secrets.
-
-The tests run against the three apps, started once for the whole run (`e2e/apps.ts`), from a copy of
-them with the demo fixtures, on free ports, so nothing reaches your local data or your
-`vp run dev`. The copy is kept in `.e2e/` between runs and brought up to date with your source
-at the start of each, so only the first run pays for copying, migrating and seeding. Before each
-test file the demo is put back as it was, by the admin pressing
-**Reset demo** (a demo site's button: `apps/affiliates/src/demo-reset.ts`), so every file starts
-from exactly the fixtures without the apps starting again. The service's clock is pinned to the
-fixtures' instant (`DEMO_NOW`, by `AFFILIATES_NOW`; `apps/affiliates/src/clock.ts`), so "on
-hold", "ready to pay" and "the last 30 days" come out the same on every run, and the tests check
-exact amounts from `demo.ts`. The demo's people sign in through the shop's Better Auth with the
-demo password. The shop's calls to the service go through its own client. Without Stripe, the dev
-tests send Stripe's events to the shop's webhook, signed as Stripe signs them. In the Stripe
-tests, Stripe sends them itself. There are no fakes or mocks.
-
-Most tests use no browser. A test is one more reader of the streams (`e2e/dev/bus.ts`): it sends
-what a page's button sends, or a Stripe event, waits on the stream in the hub for that action to
-read done, and reads what the action did from the state stream (Durable State: the sale, the
-payout, the partner, as saved; `apps/affiliates/src/outcomes.ts`). A seeded row nothing wrote
-is as the fixtures have it. Nothing waits and looks again, and an action that fails ends the test
-at once, with its steps and the error.
-
-A browser is for what a page shows: `pages`, `activity`, `streams` and `demo` in `e2e/dev`, and
-the Stripe tests, which buy on Stripe's own page. There a test watches the Activity pane, as a
-person would: it presses the button, waits for that action to read done and the page to have
-reloaded its data (`activity()` in `e2e/dev/helpers.ts`), and reads the page it's already on. A
-server error on any page ends the test. A failed test also shows what the apps printed.
-
-Files run one after another, not side by side: the program is one program, and a payout run or
-the daily job touches everyone in it. A deployment is one program, so that's how it stays.
-
-CI (`.github/workflows/ci.yml`) runs the first four on every push.
-
-## Deploy
-
-The apps run on Cloudflare account `7384af54e33b8a54ff240371ea368440`. Their addresses are set in
-each app's `void.config.ts` (the hub has none).
-
-To deploy an app, in its folder (`apps/hub` first, then `apps/affiliates` or `apps/shop`):
-
-```sh
-void cloudflare login                # once per machine
-void secret sync <file>              # its production settings
+git clone https://github.com/joeblew999/cloudflare-durable-streams
+cd cloudflare-durable-streams
+vp install                    # Vite+ (https://viteplus.dev): curl -fsSL https://vite.plus | bash
+void cloudflare login         # once per machine
+void secret put HUB_TOKEN     # the token every caller sends (any long random value)
 void deploy --platform cloudflare
 ```
 
-Commit each app's `void.lock.json` after deploying: it records the app's database and other
-Cloudflare resources.
+Void creates what the hub uses (its D1 database with read replication, and its Durable
+Objects), applies the database's migrations, and deploys it at
+`https://durable-streams.<your-account>.workers.dev`. Commit the `void.lock.json` it writes.
 
-`vp run demo:production` replaces the live databases with the demo. Use it only on the demo site.
-On a demo site, set the service's `AFFILIATES_DEMO` (to anything): its admins then get a **Reset
-demo** button that does the same from the admin page.
+**A Deploy to Cloudflare button is the goal:** one click, and the hub is in your account.
+Cloudflare's button deploys from a Wrangler config in the repo, and a Void app writes its own when
+it builds, so the button isn't here yet (see Status).
 
-The shop's emails are from the address in its `void.config.ts` (`email.from`). Deploying sets up
-sending from that domain on the Cloudflare account.
+## Use it from your Workers
 
-Not set up yet: Stripe on the live site (the `STRIPE_*` settings, and both webhooks in Stripe).
+The hub speaks the protocol at `/v1/stream`, so any Durable Streams client works with it, in any
+language. Every request carries `Authorization: Bearer <HUB_TOKEN>`.
 
-## Add it to your app
+From a Worker, `cloudflare-durable-streams/client` adds what the hub has beyond the protocol: it
+keeps the newest D1 bookmark and sends it back, and makes a stream on its first write.
 
-The example shop (`apps/shop`) does all of this:
+```ts
+import { hub } from "cloudflare-durable-streams/client";
 
-1. **Bind the service** in your `void.config.ts`:
-   `cloudflare.services: [{ binding: "AFFILIATES", service: "affiliates" }]`.
-2. **Share a secret:** set the same `AFFILIATES_HOST_TOKEN` in both apps
-   (`void secret put AFFILIATES_HOST_TOKEN`).
-3. **In your `auth.ts`** (see `apps/shop/auth.ts`):
-   - add Better Auth's `admin` plugin;
-   - add the service's address to `trustedOrigins`;
-   - set your sign-in cookie for the parent domain (`AUTH_COOKIE_DOMAIN`);
-   - when a user is created, publish it with the referral cookie (`apps/shop/src/published.ts`);
-     the service follows new users and is woken for each;
-   - in Better Auth's Stripe plugin, publish every Stripe event (`apps/shop/src/published.ts`);
-     the service follows them. It goes through a queue, so Stripe gets its answer at once.
-   - At your checkout, ask the service what to add to it (`checkout()` in
-     `apps/affiliates/client.ts`), as the shop's event page does.
-4. **Give your app the control plane** (see `apps/shop`): deploy the hub (`apps/hub`) and bind
-   it (`{ binding: "HUB", service: "hub" }`), with the same `HUB_TOKEN` in the hub, the service
-   and your app. Add `activity` (`packages/activity`) and `hub` as dependencies; the hub's client
-   and what you publish (`src/hub.ts`); what you follow (`src/followed.ts`), woken at
-   `routes/api/hub/wake.ts` and dealt with in `queues/wakes.ts`; the control plane's setup and wrappers (`src/activity.ts`), used in place of
-   Void's `queues`, `defineQueue` and `sendEmail`; its middleware (`middleware/00.activity.ts`);
-   where your pages read their stream (`routes/streams/[...path].ts`); and the `ActivityPane` in
-   your layout.
-5. **Point the service at your site:** set its `HOST_SITE_URL` to your site, its
-   `AFFILIATES_SITE_URL` to its own address (where the hub wakes it), and its
-   `AFFILIATES_COOKIE_DOMAIN` to the parent domain. Give it the two Stripe accounts' keys:
-   `STRIPE_SALES_KEY` (selling) and `STRIPE_PAYOUTS_KEY` (payouts).
-6. **In Stripe:**
-   - the selling account's webhook (`https://<your site>/api/auth/stripe/webhook`), for the
-     service to count sales, refunds and disputes: `checkout.session.completed`,
-     `checkout.session.async_payment_succeeded`, `charge.refunded`, `charge.dispute.created` and
-     `charge.dispute.closed`. If you sell subscriptions, add `invoice.paid` for renewals, and
-     Better Auth's plugin needs `customer.subscription.created`, `.updated` and `.deleted`.
-   - the payouts account's webhook (`https://<the service>/api/stripe/payouts`), for when money
-     added for a payout has arrived: `topup.succeeded`. Its signing secret is the service's
-     `STRIPE_PAYOUTS_WEBHOOK_SECRET`.
+// On the same account: a service binding, `{ binding: "HUB", service: "durable-streams" }`.
+const streams = hub(env.HUB, env.HUB_TOKEN);
+// Anywhere else, local Workers included: its address.
+const remote = hub("https://durable-streams.<your-account>.workers.dev", env.HUB_TOKEN);
+
+await streams.append("orders/paid", [{ orderId: "o_1", amount: 1200 }]);
+const { events, offset } = await streams.read("orders/paid"); // from the start: "-1"
+```
+
+Publishing and following, with `cloudflare-durable-streams/bus`:
+
+```ts
+import { follower, follows, publisher } from "cloudflare-durable-streams/bus";
+import { z } from "zod";
+
+// The shop: what happened.
+const publish = publisher(streams);
+await publish("orders/paid", "paid", { orderId: "o_1" });
+
+// Another Worker: what it does about it. It subscribes itself, once per run of the Worker,
+// giving the address the hub wakes it at.
+export const followed = follower({
+  hub: streams,
+  wakeUrl: "https://emails.example.com/api/hub/wake",
+  subscriptions: {
+    "emails-orders": follows({
+      stream: "orders/paid",
+      data: z.object({ orderId: z.string() }),
+      title: "Receipt sent",
+      description: "Emails a receipt for each paid order",
+      work: async ({ orderId }) => sendReceipt(orderId),
+    }),
+  },
+});
+// At its wake route: `const wake = await followed.wakeFrom(request)`, then (best from a queue)
+// `await followed.deal(wake)`: reads on, does the work for each event, acknowledges.
+```
+
+A Worker the hub can't reach (local, behind a firewall) follows with a **pull-wake** subscription
+instead, or reads live (`?live=sse` or `long-poll`): it makes the connection, so it needs no
+address of its own.
+
+Until the client is on npm, take it from this repo (`client.ts` and `bus.ts`, with
+`@durable-streams/client` and `zod`).
+
+## The protocol, at `/v1/stream`
+
+| Request                                                         | What it does                                                      |
+| --------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `PUT /v1/stream/<path>`                                         | Make a stream (content type, `Stream-TTL`, a fork).               |
+| `POST /v1/stream/<path>`                                        | Append (JSON arrays as that many events; producers).              |
+| `GET /v1/stream/<path>?offset=-1`                               | Read from an offset, caught up.                                   |
+| `GET …?offset=<o>&live=long-poll` / `live=sse`                  | Read live.                                                        |
+| `HEAD` / `DELETE /v1/stream/<path>`                             | Where it ends; delete it.                                         |
+| `PUT/GET/DELETE /v1/stream/__ds/subscriptions/<id>`             | A subscription: streams by name or pattern, webhook or pull-wake. |
+| `POST …/subscriptions/<id>/callback`, `claim`, `ack`, `release` | Acknowledge a wake; a pull-wake worker's lease.                   |
+| `GET /v1/stream/__ds/jwks.json`                                 | The keys wakes are signed with.                                   |
+
+Two headers beyond the protocol, which any other client ignores:
+
+- `X-DB-Bookmark`: the newest D1 bookmark, sent and answered (Void's header for it). A request
+  that sends one reads from a replica at least that new.
+- `Stream-Subscriptions`, on a write's answer: the subscriptions it woke. The example's control
+  plane uses it to show each follower's part as a step of the action that published.
+
+## How it works
+
+The hub is a [Void](https://void.cloud) app at this repo's root:
+
+| Where                           | What                                                                                     |
+| ------------------------------- | ---------------------------------------------------------------------------------------- |
+| `routes/v1/stream/[...path].ts` | The protocol: every request under `/v1/stream`.                                          |
+| `src/server/d1/`                | Durable Streams on D1: the server, its store, the live-read notifier.                    |
+| `src/server/`                   | The protocol's subscriptions: wakes, leases, the directory of who follows what, signing. |
+| `durable-objects/`              | The subscriptions, the directory, the signing key, and a notifier per stream.            |
+| `db/`                           | The streams' tables and their migration.                                                 |
+| `middleware/01.workers.ts`      | Who may call: `HUB_TOKEN` (a wake's answer carries the wake's own token).                |
+| `crons/daily.ts`                | Wakes any subscriber left behind; removes expired streams.                               |
+| `client.ts`, `bus.ts`           | For your Workers: the client, and publishing and following.                              |
+| `test/`                         | The protocol's conformance suite, and the subscription tests, against the hub.           |
+| `examples/`                     | The example: a shop and an affiliate service, choreographed over the hub.                |
+| `plans/`                        | The plans it was built to, by date.                                                      |
+
+- **Reads** go through a D1 session (Void's `createDb` with a session): the nearest replica that
+  has caught up to the request's bookmark. A read for an offset its replica hasn't reached yet
+  (one a newer write gave out) is read again from the primary.
+- **Writes** go to the primary, each as one D1 batch, applied whole and only if the stream is
+  still as the writer read it. A write overtaken by another reads again and tries again. There's
+  no lock, and no Durable Object in the write path, so any of the hub's Workers takes any write.
+- **Live reads** wait on a notifier, one small Durable Object per stream that holds no data. A
+  write tells it where the stream now ends, with the write's bookmark; a waiting reader then reads
+  from its own replica from that bookmark. A notice lost to a restart only delays a reader, which
+  looks again when its wait runs out.
+- **Subscriptions** are Durable Objects of their own: what each follows, how far it has
+  acknowledged, and its wake (a lease, sent again if it runs out; a failed delivery tried again
+  with backoff). Wakes are signed (Ed25519, the protocol's webhooks); a subscriber checks them
+  against `/__ds/jwks.json`.
+- **The cost of global reads:** every stream's writes go to one D1 primary. For event traffic
+  between Workers that's plenty; where one stream takes thousands of writes a second, it isn't.
+
+The protocol logic is ported from
+[`@durable-streams/server-cloudflare`](https://github.com/durable-streams/durable-streams/tree/main/packages/server-cloudflare),
+which keeps each stream in a Durable Object of its own (Apache-2.0: `NOTICE`).
+
+## Develop
+
+```sh
+curl -fsSL https://vite.plus | bash   # Vite+ (vp), once per machine
+vp env on                             # the Node in .node-version
+vp install
+vp run setup                          # the hub's .env (HUB_TOKEN) and database, and the example's
+vp dev                                # the hub on http://localhost:5175/v1/stream
+```
+
+- `vp check` formats, lints and type-checks; `vp run check:types` type-checks every project.
+- `vp run test:conformance` runs the protocol's conformance suite and the subscription tests
+  against the hub under `vp dev` (about a minute).
+- Every task is in `vite.config.ts`, each with a line saying what it does.
+
+**Measuring it around the world:**
+[cloudflare-ping](https://github.com/joeblew999/cloudflare-ping) runs probes from Cloudflare's
+own data centres. It's how the hub's reads from the nearest replica, and its wakes, will be timed
+from everywhere.
+
+## The example
+
+[`examples/`](examples/README.md): an affiliate program for a shop. A shop and an affiliate service
+(two Void apps) never call each other for what happens: sign-ups, Stripe's payments, events going
+on sale. They publish it to the hub and follow it there, and an Activity pane on every page shows
+each action's steps across both, live. It's a work in progress, with its own tests (`vp run
+test:dev`); the hub's correctness is the conformance suite's, not the example's.
+
+## Status
+
+- The hub, its protocol and its subscriptions: done, and all 344 conformance tests pass (locally).
+- Not deployed yet. The **Deploy to Cloudflare** button: to come.
+- The client on npm: to come; until then it's `client.ts` and `bus.ts` here.
+- Timing it from around the world with cloudflare-ping: to come.
+- A stream only grows. For long-lived ones (a control plane's), streams by day, each with a
+  `Stream-TTL`, are the plan.
 
 ## License
 
-MIT, as the project it was rebuilt from (`LICENSE`).
+MIT (`LICENSE`). The protocol logic ported from `@durable-streams/server-cloudflare` stays under
+its Apache-2.0 licence (`NOTICE`, `LICENSE-durable-streams-server-cloudflare`).

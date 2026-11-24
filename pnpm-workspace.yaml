@@ -1,8 +1,8 @@
+# The repo's root is the hub (the Void app this project is). The example around it: its tests
+# and scripts (examples/), the shop, the affiliate service, and the control plane they share.
 packages:
-  - apps/*
-  - packages/*
-  # A package's own Void app, which its tests run it in (packages/streams/app).
-  - packages/*/app
+  - examples
+  - examples/*
 
 allowBuilds:
   # The Stripe CLI's binary comes in its per-platform package; its install script only downloads

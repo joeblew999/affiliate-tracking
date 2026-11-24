@@ -1,21 +1,35 @@
 {
-  "name": "affiliates-repo",
+  "name": "cloudflare-durable-streams",
+  "version": "0.1.0",
   "private": true,
+  "description": "Durable Streams for Cloudflare: the full protocol, with subscriptions, on D1 read replicas. A Void app that any Worker, local or deployed, writes to and follows.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joeblew999/cloudflare-durable-streams.git"
+  },
   "type": "module",
+  "exports": {
+    "./client": "./client.ts",
+    "./bus": "./bus.ts"
+  },
   "scripts": {
+    "dev": "vp dev",
+    "postinstall": "void prepare",
+    "typecheck": "tsc && tsc -p test",
     "check:types": "vp run --filter './**' --parallel typecheck",
-    "typecheck": "tsc -p e2e && tsc -p ."
+    "db:migrate": "void db migrate",
+    "db:generate": "void db generate"
+  },
+  "dependencies": {
+    "@durable-streams/client": "0.2.7",
+    "hono": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
-    "@durable-streams/client": "0.2.7",
-    "@durable-streams/state": "0.3.2",
-    "@stripe/cli": "1.55.14",
+    "@cloudflare/workers-types": "catalog:",
+    "@durable-streams/server-conformance-tests": "0.3.7",
     "@types/node": "26.6.6",
-    "@void/edge": "catalog:",
-    "better-auth": "catalog:",
-    "devalue": "catalog:",
-    "playwright": "1.65.0",
-    "stripe": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",
