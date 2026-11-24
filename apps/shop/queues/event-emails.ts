@@ -1,4 +1,4 @@
-// The emails saying an event is on sale (routes/api/affiliates/on-sale.ts): a batch of users per
+// The emails saying an event is on sale (src/hub.ts: the affiliate service publishes it, the shop follows): a batch of users per
 // message, in user id order, each batch queuing the next from where it stopped, so a big list
 // never stops halfway and a crash starts again from the last batch. Users who unsubscribed are
 // left out. Each batch, and each email, is a step in the control plane

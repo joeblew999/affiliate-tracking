@@ -1,4 +1,4 @@
-// Commission on subscription renewals: Stripe's invoice.paid (routes/api/host/stripe-event.ts, from the host's Stripe webhook). A
+// Commission on subscription renewals: Stripe's invoice.paid (src/stripe-events.ts, from the host's Stripe webhook). A
 // renewal pays the partner who got the subscription's first sale, under the same commission rules,
 // for the partner's recurringMonths (else AFFILIATES_RECURRING_MONTHS, default 12) after the first
 // sale. The first invoice of a new subscription is skipped: its Checkout sale is that payment. A

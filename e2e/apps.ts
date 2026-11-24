@@ -240,7 +240,15 @@ function serve(
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       detached: true,
-      env: { ...process.env, VOID_INSPECTOR_PORT: "false", ...env },
+      env: {
+        ...process.env,
+        VOID_INSPECTOR_PORT: "false",
+        // Three dev servers side by side: each tidies its memory up before it has taken a
+        // gigabyte. Left to itself Node lets one grow past two (seen 2026-11-24: 2.7 GB in the
+        // service's), and the machine kills it for it.
+        NODE_OPTIONS: "--max-old-space-size=1024",
+        ...env,
+      },
     },
   );
   running.add(child);
@@ -360,6 +368,8 @@ export async function startSystem(
     envFile({
       AFFILIATES_HOST_TOKEN: hostToken,
       HUB_TOKEN: hubToken,
+      // Where the hub wakes the shop.
+      SHOP_SITE_URL: shop,
       AFFILIATES_SITE_URL: affiliates,
       STRIPE_WEBHOOK_SECRET: webhookSecret,
       EMAIL_LINK_SECRET: secret, // any long random value for the run

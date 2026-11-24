@@ -3,25 +3,33 @@
 // service's routes also validate against, so nothing is written twice and the host's type check never
 // pulls in the service's code.
 import { parse } from "hono/utils/cookie";
-import type Stripe from "stripe";
 import type { z } from "zod";
 import { activityHeaders } from "activity/trace";
 import {
   CheckoutInput,
   CheckoutOutput,
+  DEMO_RESET_STREAM,
+  DemoReset,
   EventsInput,
   EventsOutput,
-  OnSaleInput,
-  OnSaleOutput,
+  ON_SALE_STREAM,
+  OnSale,
   REF_COOKIE,
-  SignedUp,
   SIGNUPS_STREAM,
   SignupInput,
-  StripeEventInput,
-  StripeEventOutput,
+  STRIPE_STREAM,
 } from "./src/host-contract.ts";
 
-export { REF_COOKIE, OnSaleInput, OnSaleOutput, SignedUp, SIGNUPS_STREAM };
+// What the host and the service tell each other over the hub: the streams, and what's on them.
+export {
+  DEMO_RESET_STREAM,
+  DemoReset,
+  ON_SALE_STREAM,
+  OnSale,
+  REF_COOKIE,
+  SIGNUPS_STREAM,
+  STRIPE_STREAM,
+};
 export type { Event } from "./src/host-contract.ts";
 
 /** What the host says of a user who signed up (the data of its "signed-up" event). */
@@ -61,8 +69,5 @@ export function affiliates(binding: Pick<Fetcher, "fetch">, token: string) {
       call("/api/host/checkout", CheckoutInput, CheckoutOutput, body),
     /** The events on sale, soonest first. */
     events: () => call("/api/host/events", EventsInput, EventsOutput, {}),
-    /** Every Stripe event the host's Better Auth Stripe plugin receives (its onEvent). */
-    stripeEvent: (event: Stripe.Event) =>
-      call("/api/host/stripe-event", StripeEventInput, StripeEventOutput, event),
   };
 }

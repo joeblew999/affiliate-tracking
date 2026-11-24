@@ -1,20 +1,15 @@
-// Stripe events, passed on by the host's Better Auth Stripe plugin (onEvent in its auth.ts), which
-// has already checked Stripe's signature. Sales (checkout.session.completed and
-// async_payment_succeeded), renewals (invoice.paid), refunds and disputes (charge.refunded,
-// charge.dispute.created and closed: src/refunds.ts). Others are ignored. A failure is an error, so
-// the host's queue for Stripe's events tries it again.
-import { defineHandler } from "void";
-import { StripeEventInput, type StripeEventOutput } from "../../../src/host-contract.ts";
-import { noteDispute, noteRefund } from "../../../src/refunds.ts";
-import { recordRenewal } from "../../../src/renewals.ts";
-import { disputedPaymentIntent, recordCheckoutSale } from "../../../src/sales.ts";
-import { idOf } from "../../../src/stripe.ts";
+// Stripe's events, which the host publishes as its Better Auth Stripe plugin receives them (it has
+// already checked Stripe's signature), and this service follows (src/hub.ts). Sales
+// (checkout.session.completed and async_payment_succeeded), renewals (invoice.paid), refunds and
+// disputes (charge.refunded, charge.dispute.created and closed: src/refunds.ts). Others are
+// ignored. Each Stripe event is recorded once, so one read again changes nothing.
+import type Stripe from "stripe";
+import { noteDispute, noteRefund } from "./refunds.ts";
+import { recordRenewal } from "./renewals.ts";
+import { disputedPaymentIntent, recordCheckoutSale } from "./sales.ts";
+import { idOf } from "./stripe.ts";
 
-export const POST = defineHandler.withValidator({ body: StripeEventInput })(async (
-  _c,
-  { body },
-) => {
-  const event = body;
+export async function stripeEvent(event: Stripe.Event): Promise<void> {
   switch (event.type) {
     case "checkout.session.completed":
     case "checkout.session.async_payment_succeeded":
@@ -44,5 +39,4 @@ export const POST = defineHandler.withValidator({ body: StripeEventInput })(asyn
       break;
     }
   }
-  return { received: true } satisfies StripeEventOutput;
-});
+}

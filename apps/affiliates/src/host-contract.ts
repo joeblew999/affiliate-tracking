@@ -22,17 +22,17 @@ export const SignupInput = z.object({ userId, ref });
  * says how far it has got.
  */
 export const SIGNUPS_STREAM = "events/signups";
-export const SIGNUPS_SUBSCRIPTION = "affiliates-signups";
-export const SignedUp = z.object({
-  /** The event's own id. */
-  id: z.string(),
-  type: z.literal("signed-up"),
-  /** With the referral cookie's value if the browser had one (client.ts: referralFrom). */
-  data: SignupInput,
-  /** The action the sign-up is part of, for the control plane (packages/activity). */
-  activity: z.object({ actionId: z.string(), viewers: z.array(z.string()) }).nullable(),
-});
-export type SignedUp = z.output<typeof SignedUp>;
+
+/** Every Stripe event the host's Better Auth Stripe plugin receives: StripeEventInput. */
+export const STRIPE_STREAM = "events/stripe";
+
+/** An event went on sale (its venue is paid), from this service: the host tells its users. */
+export const ON_SALE_STREAM = "events/on-sale";
+
+/** On a demo site, the demo was put back here: the host puts its own back. */
+export const DEMO_RESET_STREAM = "events/demo-reset";
+export const DemoReset = z.object({});
+export type DemoReset = z.output<typeof DemoReset>;
 
 export const CheckoutInput = z.object({
   userId: userId.nullable(),
@@ -64,7 +64,6 @@ export const StripeEventInput = z.custom<Stripe.Event>(
     typeof Reflect.get(value, "data") === "object",
   "a Stripe event",
 );
-export const StripeEventOutput = z.object({ received: z.literal(true) });
 
 /** The events on sale (their venue paid), soonest first, for the host's pages. */
 export const EventsInput = z.object({});
@@ -85,15 +84,10 @@ export const Event = z.object({
 });
 export const EventsOutput = z.object({ events: z.array(Event) });
 
-/**
- * The service to the host: an event's venue is paid and it's on sale, so the host tells its users.
- * Through the host's binding, with the same AFFILIATES_HOST_TOKEN.
- */
-export const OnSaleInput = z.object({ event: Event });
-export const OnSaleOutput = z.object({ queued: z.literal(true) });
+/** An event's venue is paid and it's on sale (ON_SALE_STREAM). */
+export const OnSale = z.object({ event: Event });
+export type OnSale = z.output<typeof OnSale>;
 
 export type Event = z.output<typeof Event>;
 export type EventsOutput = z.output<typeof EventsOutput>;
-export type OnSaleOutput = z.output<typeof OnSaleOutput>;
-export type StripeEventOutput = z.output<typeof StripeEventOutput>;
 export type CheckoutOutput = z.output<typeof CheckoutOutput>;

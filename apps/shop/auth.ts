@@ -13,7 +13,7 @@
 import { stripe } from "@better-auth/stripe";
 import { admin } from "better-auth/plugins";
 import { defineAuth } from "void/auth";
-import { referralFrom, SIGNUPS_STREAM } from "affiliates/client";
+import { referralFrom, SIGNUPS_STREAM, STRIPE_STREAM } from "affiliates/client";
 import { stripeClient } from "./src/stripe.ts";
 
 const text = (value: unknown) => (typeof value === "string" ? value : "");
@@ -49,11 +49,12 @@ export default defineAuth(({ defaults, env }) => {
         stripeWebhookSecret: text(env.STRIPE_WEBHOOK_SECRET),
         createCustomerOnSignUp: Boolean(text(env.STRIPE_SECRET_KEY)),
         // Sales, renewals, refunds and disputes are the affiliate service's to count: each event
-        // is queued for it (queues/stripe-events.ts), so Stripe has its answer at once.
+        // is published (src/published.ts, through its queue, so Stripe has its answer at once),
+        // and the service follows them.
         // (Worker code, imported when it runs: Void's prepare reads this file outside the Worker.)
         onEvent: async (event) => {
-          const { queues } = await import("./src/activity.ts");
-          await queues["stripe-events"].send(event);
+          const { publish } = await import("./src/published.ts");
+          await publish({ stream: STRIPE_STREAM, type: "stripe-event", data: event });
         },
       }),
     ],

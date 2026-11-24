@@ -15,5 +15,9 @@ export default defineQueue<Published>(
       msg.ack();
     }
   },
-  { step: (event) => `publish: ${event.type}` },
+  // A Stripe event's step says which: "Stripe charge.refunded".
+  {
+    step: (event) =>
+      event.type === "stripe-event" ? `Stripe ${event.data.type}` : `publish: ${event.type}`,
+  },
 );

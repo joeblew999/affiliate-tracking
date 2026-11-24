@@ -6,23 +6,20 @@
 // publish() from anywhere: the event goes onto the shop's queue (queues/published.ts) first, so
 // what's publishing never waits on the hub or fails because of it, and a failed write is tried
 // again.
-import { SIGNUPS_STREAM, type Signup } from "affiliates/client";
-import { currentTrace, waiting } from "activity/server";
+import { publishNow } from "activity/bus";
+import { SIGNUPS_STREAM, STRIPE_STREAM, type Signup } from "affiliates/client";
+import type Stripe from "stripe";
 import { queues } from "./activity.ts";
 import { hub } from "./hub.ts";
 
-/** What can be published: the stream it goes to, what it's called, and what it says. */
-export type Published = { stream: typeof SIGNUPS_STREAM; type: "signed-up"; data: Signup };
+/** What the shop publishes: the stream it goes to, what it's called, and what it says. */
+export type Published =
+  // A new user, with the referral cookie's value if their browser had one.
+  | { stream: typeof SIGNUPS_STREAM; type: "signed-up"; data: Signup }
+  // An event from Stripe's webhook (Better Auth's Stripe plugin has checked its signature).
+  | { stream: typeof STRIPE_STREAM; type: "stripe-event"; data: Stripe.Event };
 
 export const publish = (event: Published) => queues.published.send(event);
 
 /** Write an event to its stream now (the queue's consumer). */
-export async function write({ stream, type, data }: Published) {
-  const trace = currentTrace();
-  const id = crypto.randomUUID();
-  const { subscribers } = await hub.publish(stream, { id, type, data, activity: trace });
-  // In the control plane, each subscriber's part is a step of the same action: waiting now, and
-  // run by the subscriber when it gets to the event (it names the step the same way).
-  for (const subscription of subscribers)
-    await waiting(`${id}:${subscription}`, `${type}: ${subscription}`);
-}
+export const write = ({ stream, type, data }: Published) => publishNow(hub, stream, type, data);

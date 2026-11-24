@@ -242,8 +242,8 @@ The example shop (`apps/shop`) does all of this:
    - set your sign-in cookie for the parent domain (`AUTH_COOKIE_DOMAIN`);
    - when a user is created, publish it with the referral cookie (`apps/shop/src/published.ts`);
      the service follows new users and is woken for each;
-   - in Better Auth's Stripe plugin, queue every Stripe event for the service
-     (`apps/shop/queues/stripe-events.ts`), so Stripe gets its answer at once.
+   - in Better Auth's Stripe plugin, publish every Stripe event (`apps/shop/src/published.ts`);
+     the service follows them. It goes through a queue, so Stripe gets its answer at once.
    - At your checkout, ask the service what to add to it (`checkout()` in
      `apps/affiliates/client.ts`), as the shop's event page does.
 4. **Give your app the control plane** (see `apps/shop`): deploy the hub (`apps/hub`) and bind

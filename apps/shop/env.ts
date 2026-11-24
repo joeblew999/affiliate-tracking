@@ -7,6 +7,9 @@ export default defineEnv({
   // Sent with every call to the hub (apps/hub: its middleware/01.workers.ts checks it). The same
   // value is in the hub's env and every other worker's.
   HUB_TOKEN: string(),
+  // The shop's own address: where the hub wakes it when a stream it follows has something new
+  // (src/hub.ts), and what the links in its emails start with.
+  SHOP_SITE_URL: url().default("http://localhost:5173"),
   // Comma-separated emails that get the admin role when they sign up (auth.ts). Admins run the
   // affiliate program.
   ADMIN_EMAILS: string().default(""),

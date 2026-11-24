@@ -6,6 +6,7 @@ import { activityMiddleware } from "activity/server";
 import { defineMiddleware } from "void";
 import { getUser } from "void/auth";
 import "../src/activity.ts";
+import { followed } from "../src/followed.ts";
 import { hub } from "../src/hub.ts";
 
 declare module "void" {
@@ -31,6 +32,8 @@ const track = activityMiddleware(() => {
 });
 
 export default defineMiddleware(async (c, next) => {
+  // The hub is told what the shop follows (src/followed.ts), once in each run of the Worker.
+  await followed.following();
   const user = getUser();
   const viewer = user ? (user.role === "admin" ? "admins" : user.id) : null;
   // Only for a page itself, not its later data or anything else asked of the app.

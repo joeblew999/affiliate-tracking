@@ -1,17 +1,10 @@
-// One message per event that's gone on sale (src/events.ts venuePaid): the host is told, through
-// its binding, so it can tell its users. Its step in the control plane (src/activity.ts) shows it
-// done, or failed with the error (the host down), which Void then tries again.
-import { env } from "void/env";
-import { env as bindings } from "cloudflare:workers";
-import { OnSaleInput, OnSaleOutput } from "../src/host-contract.ts";
+// One message per event that's gone on sale (src/events.ts venuePaid): published for the host
+// (src/hub.ts), which follows it and tells its users. Its step in the control plane
+// (src/activity.ts) shows it done, or failed with the error (the hub down), which Void then tries
+// again.
 import { eventOnSale } from "../src/events.ts";
-import { activityHeaders, defineQueue } from "../src/activity.ts";
-
-declare global {
-  namespace Cloudflare {
-    interface Env extends VoidGeneratedEnvBindings {}
-  }
-}
+import { defineQueue } from "../src/activity.ts";
+import { publishOnSale } from "../src/hub.ts";
 
 /** One event gone on sale. */
 type Message = { eventId: string };
@@ -24,21 +17,7 @@ export default defineQueue<Message>(async (batch) => {
   for (const msg of batch.messages) {
     const event = await eventOnSale(msg.body.eventId);
     // Already over, or never on sale: nothing to tell.
-    if (event) {
-      const res = await bindings.HOST.fetch(
-        new Request(new URL("/api/affiliates/on-sale", env.HOST_SITE_URL), {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: `Bearer ${env.AFFILIATES_HOST_TOKEN}`,
-            ...activityHeaders(),
-          },
-          body: JSON.stringify(OnSaleInput.parse({ event })),
-        }),
-      );
-      if (!res.ok) throw new Error(`host on-sale: ${res.status} ${await res.text()}`);
-      OnSaleOutput.parse(await res.json());
-    }
+    if (event) await publishOnSale({ event });
     msg.ack();
   }
 });
