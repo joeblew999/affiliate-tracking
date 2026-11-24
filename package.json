@@ -22,7 +22,9 @@
     "db:generate": "void db generate"
   },
   "dependencies": {
+    "@better-auth/api-key": "1.7.27",
     "@durable-streams/client": "0.2.7",
+    "better-auth": "catalog:",
     "hono": "catalog:",
     "zod": "catalog:"
   },

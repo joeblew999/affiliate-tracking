@@ -34,6 +34,8 @@ export default defineConfig({
           "vp run cloudflare-durable-streams#db:migrate",
           "vp run affiliates#db:migrate",
           "vp run shop#db:migrate",
+          // Each example app's key for the hub, made by the hub (examples/scripts/keys.ts).
+          "vpx examples/scripts/keys.ts",
         ],
         cache: false,
       },
@@ -43,6 +45,9 @@ export default defineConfig({
       // Everything this repo deploys, removed from Cloudflare: Workers, queues, databases
       // (scripts/destroy.ts). Lists what it would remove; `vp run destroy -- --yes` removes it.
       destroy: { command: "vpx scripts/destroy.ts", cache: false },
+      // A key for a Worker, from a running hub, made by one of its admins (scripts/key.ts):
+      // `vp run key -- <hub's address> <admin email> <password> [name] [organization]`.
+      key: { command: "vpx scripts/key.ts", cache: false },
       // The example's demo data in its two apps' local databases (it resets them): the people in
       // examples/affiliates/demo.ts as shop accounts, and 90 days of the program.
       demo: {

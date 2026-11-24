@@ -11,7 +11,7 @@ export default defineConfig({
   cloudflare: {
     name: "durable-streams",
     // Its own address (https://durable-streams.<account>.workers.dev), for any worker: local ones,
-    // and ones on other accounts. Every call needs HUB_TOKEN (middleware/01.workers.ts). A worker
+    // and ones on other accounts. Every call needs an API key the hub made (auth.ts, middleware/01.callers.ts). A worker
     // on the same account can use a service binding to it instead.
     workers_dev: true,
     preview_urls: false,

@@ -924,7 +924,9 @@ export function createD1Streams<Env>(options: D1StreamsOptions<Env>) {
       .finally(() => writer.close().catch(() => undefined));
     const headers: Record<string, string> = {
       "content-type": "text/event-stream",
-      "cache-control": "no-cache",
+      // Never cached. With `private`, so Void keeps it as it is for a signed-in caller (it makes
+      // such answers `no-store` otherwise: its guide/auth.md).
+      "cache-control": "private, no-cache",
       connection: "keep-alive",
       // Compression would hold events back until a block fills.
       "content-encoding": "identity",

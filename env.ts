@@ -1,7 +1,7 @@
 import { defineEnv, string } from "void/env";
 
 export default defineEnv({
-  // Sent by every worker that calls the hub (middleware/01.workers.ts checks it). The same value
-  // is in each of those workers' env.
-  HUB_TOKEN: string(),
+  // Who runs this hub: their emails, comma-separated. Only they can make an account on it
+  // (auth.ts); they make its organizations and its keys.
+  ADMIN_EMAILS: string(),
 });

@@ -4,9 +4,9 @@ export default defineEnv({
   // Sent with every call to the affiliate service (its middleware/01.host-api.ts checks it). The
   // same value is in that app's env.
   AFFILIATES_HOST_TOKEN: string(),
-  // Sent with every call to the hub (the hub (the repo's root): its middleware/01.workers.ts checks it). The same
-  // value is in the hub's env and every other worker's.
-  HUB_TOKEN: string(),
+  // This app's key for the hub, sent with every call to it: made by the hub (its Better Auth's API
+  // keys), for this app alone. Locally, `vp run setup` gets it.
+  HUB_KEY: string(),
   // The shop's own address: where the hub wakes it when a stream it follows has something new
   // (src/hub.ts), and what the links in its emails start with.
   SHOP_SITE_URL: url().default("http://localhost:5173"),

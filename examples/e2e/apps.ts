@@ -33,6 +33,7 @@ import {
 import { createServer, type AddressInfo } from "node:net";
 import { basename, join, relative } from "node:path";
 import { stripVTControlCharacters } from "node:util";
+import { hubKey } from "../../scripts/key.ts";
 import { DEMO_NOW, HOLD_DAYS } from "../affiliates/demo.ts";
 
 /** The repo: the hub is its root, and the example's apps and packages are in examples/. */
@@ -44,6 +45,7 @@ const WITH_DATABASE = new Set<(typeof APPS)[number]>(["affiliates", "shop"]);
 
 /** The hub's own files, at the repo's root: all of it that a copy of the hub is made from. */
 const HUB_FILES = new Set([
+  "auth.ts",
   "bus.ts",
   "client.ts",
   "crons",
@@ -352,7 +354,6 @@ export async function startSystem(
   const clockFrom = Date.now();
   // The service's clock settings (src/clock.ts) for this run.
   const clock = { AFFILIATES_NOW: DEMO_NOW, AFFILIATES_NOW_FROM: String(clockFrom) };
-  const hubToken = randomBytes(32).toString("hex");
   const [shopPort, affiliatesPort, hubPort] = [
     await freePort(),
     await freePort(),
@@ -382,12 +383,19 @@ export async function startSystem(
   // The hub's streams' tables, in its emptied D1 (Void applies migrations by hand in development).
   await run(roots.hub, ["run", "db:migrate"]);
   writeFileSync(stamp, packages);
-  writeFileSync(join(roots.hub, ".env"), envFile({ HUB_TOKEN: hubToken }));
+  // The hub first: it makes each app's key (its Better Auth's API keys, the hub's scripts/key.ts),
+  // by its admin for this run, before the apps that send them start.
+  const admin = { email: "admin@example.test", password: randomBytes(16).toString("hex") };
+  writeFileSync(join(roots.hub, ".env"), envFile({ ADMIN_EMAILS: admin.email }));
+  const hubServer = await serve(roots.hub, hubPort, {}, log);
+  const hub = `http://127.0.0.1:${hubPort}`;
+  const keyFor = (name: string) => hubKey({ url: hub, ...admin, name, organization: "example" });
+  const keys = { affiliates: await keyFor("affiliates"), shop: await keyFor("shop") };
   writeFileSync(
     join(roots.affiliates, ".env"),
     envFile({
       AFFILIATES_HOST_TOKEN: hostToken,
-      HUB_TOKEN: hubToken,
+      HUB_KEY: keys.affiliates,
       HOST_SITE_URL: shop,
       // Where the hub wakes the service.
       AFFILIATES_SITE_URL: affiliates,
@@ -402,7 +410,7 @@ export async function startSystem(
     join(roots.shop, ".env"),
     envFile({
       AFFILIATES_HOST_TOKEN: hostToken,
-      HUB_TOKEN: hubToken,
+      HUB_KEY: keys.shop,
       // Where the hub wakes the shop.
       SHOP_SITE_URL: shop,
       AFFILIATES_SITE_URL: affiliates,
@@ -410,11 +418,13 @@ export async function startSystem(
       EMAIL_LINK_SECRET: secret, // any long random value for the run
     }),
   );
-  const servers = await Promise.all([
-    serve(roots.hub, hubPort, {}, log),
-    serve(roots.affiliates, affiliatesPort, env, log),
-    serve(roots.shop, shopPort, env, log),
-  ]);
+  const servers = [
+    hubServer,
+    ...(await Promise.all([
+      serve(roots.affiliates, affiliatesPort, env, log),
+      serve(roots.shop, shopPort, env, log),
+    ])),
+  ];
   await untilReady(affiliates);
   return {
     system: {

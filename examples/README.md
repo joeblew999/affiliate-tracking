@@ -238,7 +238,7 @@ The example shop (`examples/shop`) does all of this:
    - At your checkout, ask the service what to add to it (`checkout()` in
      `examples/affiliates/client.ts`), as the shop's event page does.
 4. **Give your app the control plane** (see `examples/shop`): deploy the hub (the repo's root) and bind
-   it (`{ binding: "HUB", service: "hub" }`), with the same `HUB_TOKEN` in the hub, the service
+   it (`{ binding: "HUB", service: "hub" }`), with a key of its own from the hub (`HUB_KEY`) in the service
    and your app. Add `activity` (`examples/activity`) and `cloudflare-durable-streams` as dependencies; the hub's client
    and what you publish (`src/hub.ts`); what you follow (`src/followed.ts`), woken at
    `routes/api/hub/wake.ts` and dealt with in `queues/wakes.ts`; the control plane's setup and wrappers (`src/activity.ts`), used in place of

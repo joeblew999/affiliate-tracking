@@ -1,5 +1,5 @@
 // The hub's client, for the program's other workers: Durable Streams' own protocol, through a
-// Cloudflare service binding, with HUB_TOKEN. A stream is reached by its name ("signups",
+// Cloudflare service binding or its address, with the Worker's API key. A stream is reached by its name ("signups",
 // "admins"): its path under the hub's /v1/stream. Reads are the official client's
 // (@durable-streams/client); a write is the protocol's POST, made by a PUT first if the stream
 // isn't there yet, and read for the subscriptions it woke (src/server/subscriber.ts's toldOf).
@@ -28,9 +28,9 @@ const JSON_TYPE = { "content-type": "application/json" };
 /**
  * `target`: how this worker reaches the hub. A service binding to it, for a worker deployed on the
  * same Cloudflare account; or its address (`https://durable-streams.<account>.workers.dev`), for
- * any other worker, local ones included. `token`: the hub's HUB_TOKEN.
+ * any other worker, local ones included. `key`: this Worker's API key, made by the hub (its Better Auth).
  */
-export function hub(target: Pick<Fetcher, "fetch"> | string, token: string) {
+export function hub(target: Pick<Fetcher, "fetch"> | string, key: string) {
   const origin = new URL(typeof target === "string" ? target : STREAMS).origin;
   const reach = (request: Request, init: RequestInit) =>
     typeof target === "string" ? fetch(request, init) : target.fetch(request, init);
@@ -40,14 +40,14 @@ export function hub(target: Pick<Fetcher, "fetch"> | string, token: string) {
 
   /**
    * A protocol request to the hub, as `fetch` takes one: only the path and query of its URL are
-   * used. It carries the workers' token, unless it has its own (a subscriber's answer to a wake
+   * used. It carries the Worker's key, unless it has its own (a subscriber's answer to a wake
    * carries the wake's), and the newest bookmark.
    */
   const send: typeof fetch = async (input, init) => {
     const request = new Request(input, init);
     const { pathname, search } = new URL(request.url);
     const headers = new Headers(request.headers);
-    if (!headers.has("authorization")) headers.set("authorization", `Bearer ${token}`);
+    if (!headers.has("authorization")) headers.set("authorization", `Bearer ${key}`);
     if (newest !== null && !headers.has(BOOKMARK)) headers.set(BOOKMARK, newest);
     const response = await reach(new Request(new URL(pathname + search, origin), request), {
       headers,

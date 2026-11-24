@@ -21,7 +21,7 @@ deployed, writes to and follows. Built with [Void](https://void.cloud) and
   bookmarks travel with every request, so no client ever reads older than what it has already
   seen or written.
 - **For any Worker.** On the same Cloudflare account, through a service binding; from anywhere
-  else (local `wrangler dev` or `vp dev`, another account), over HTTPS with a token.
+  else (local `wrangler dev` or `vp dev`, another account), over HTTPS. Each Worker has an API key of its own.
 
 ## Choreography, not orchestration
 
@@ -61,7 +61,7 @@ git clone https://github.com/joeblew999/cloudflare-durable-streams
 cd cloudflare-durable-streams
 vp install                                            # Vite+: curl -fsSL https://vite.plus | bash
 void cloudflare login                                 # once per machine
-echo "HUB_TOKEN=$(openssl rand -hex 32)" > production.env   # the token every caller sends; never committed
+echo "ADMIN_EMAILS=you@example.com" > production.env    # who runs this hub; never committed
 vp run deploy -- .                                    # the hub
 ```
 
@@ -69,6 +69,19 @@ vp run deploy -- .                                    # the hub
 secrets, and runs `void deploy`. Void creates what the hub uses (its D1 database with read
 replication, and its Durable Objects), applies the database's migrations, and deploys it at
 `https://durable-streams.<your-account>.workers.dev`.
+
+**Who may call it is all [Better Auth](https://better-auth.com)** (Void's auth, `auth.ts`):
+
+- the emails in `ADMIN_EMAILS` are the hub's admins, and nobody else can make an account on it;
+- streams belong to an **organization**: one hub serves one project, or several kept apart;
+- each Worker calls with an **API key** of its own, made in an organization, which can be
+  limited, expired and revoked.
+
+A first key, made by an admin (the first call sets that admin's password):
+
+```sh
+vp run key -- https://durable-streams.<your-account>.workers.dev you@example.com '<a password>' my-worker
+```
 
 Removing it is one command too:
 
@@ -92,7 +105,7 @@ it builds, so the button isn't here yet (see Status).
 ## Use it from your Workers
 
 The hub speaks the protocol at `/v1/stream`, so any Durable Streams client works with it, in any
-language. Every request carries `Authorization: Bearer <HUB_TOKEN>`.
+language. Every request carries a key: `Authorization: Bearer <key>` (or `x-api-key`).
 
 From a Worker, `cloudflare-durable-streams/client` adds what the hub has beyond the protocol: it
 keeps the newest D1 bookmark and sends it back, and makes a stream on its first write.
@@ -101,9 +114,9 @@ keeps the newest D1 bookmark and sends it back, and makes a stream on its first 
 import { hub } from "cloudflare-durable-streams/client";
 
 // On the same account: a service binding, `{ binding: "HUB", service: "durable-streams" }`.
-const streams = hub(env.HUB, env.HUB_TOKEN);
+const streams = hub(env.HUB, env.HUB_KEY);
 // Anywhere else, local Workers included: its address.
-const remote = hub("https://durable-streams.<your-account>.workers.dev", env.HUB_TOKEN);
+const remote = hub("https://durable-streams.<your-account>.workers.dev", env.HUB_KEY);
 
 await streams.append("orders/paid", [{ orderId: "o_1", amount: 1200 }]);
 const { events, offset } = await streams.read("orders/paid"); // from the start: "-1"
@@ -169,19 +182,19 @@ Two headers beyond the protocol, which any other client ignores:
 
 The hub is a [Void](https://void.cloud) app at this repo's root:
 
-| Where                           | What                                                                                     |
-| ------------------------------- | ---------------------------------------------------------------------------------------- |
-| `routes/v1/stream/[...path].ts` | The protocol: every request under `/v1/stream`.                                          |
-| `src/server/d1/`                | Durable Streams on D1: the server, its store, the live-read notifier.                    |
-| `src/server/`                   | The protocol's subscriptions: wakes, leases, the directory of who follows what, signing. |
-| `durable-objects/`              | The subscriptions, the directory, the signing key, and a notifier per stream.            |
-| `db/`                           | The streams' tables and their migration.                                                 |
-| `middleware/01.workers.ts`      | Who may call: `HUB_TOKEN` (a wake's answer carries the wake's own token).                |
-| `crons/daily.ts`                | Wakes any subscriber left behind; removes expired streams.                               |
-| `client.ts`, `bus.ts`           | For your Workers: the client, and publishing and following.                              |
-| `test/`                         | The protocol's conformance suite, and the subscription tests, against the hub.           |
-| `examples/`                     | The example: a shop and an affiliate service, choreographed over the hub.                |
-| `plans/`                        | The plans it was built to, by date.                                                      |
+| Where                                 | What                                                                                     |
+| ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `routes/v1/stream/[...path].ts`       | The protocol: every request under `/v1/stream`.                                          |
+| `src/server/d1/`                      | Durable Streams on D1: the server, its store, the live-read notifier.                    |
+| `src/server/`                         | The protocol's subscriptions: wakes, leases, the directory of who follows what, signing. |
+| `durable-objects/`                    | The subscriptions, the directory, the signing key, and a notifier per stream.            |
+| `db/`                                 | The streams' tables and their migration.                                                 |
+| `auth.ts`, `middleware/01.callers.ts` | Who may call, all Better Auth's: admins, organizations, an API key per Worker.           |
+| `crons/daily.ts`                      | Wakes any subscriber left behind; removes expired streams.                               |
+| `client.ts`, `bus.ts`                 | For your Workers: the client, and publishing and following.                              |
+| `test/`                               | The protocol's conformance suite, and the subscription tests, against the hub.           |
+| `examples/`                           | The example: a shop and an affiliate service, choreographed over the hub.                |
+| `plans/`                              | The plans it was built to, by date.                                                      |
 
 - **Reads** go through a D1 session (Void's `createDb` with a session): the nearest replica that
   has caught up to the request's bookmark. A read for an offset its replica hasn't reached yet
@@ -210,7 +223,7 @@ which keeps each stream in a Durable Object of its own (Apache-2.0: `NOTICE`).
 curl -fsSL https://vite.plus | bash   # Vite+ (vp), once per machine
 vp env on                             # the Node in .node-version
 vp install
-vp run setup                          # the hub's .env (HUB_TOKEN) and database, and the example's
+vp run setup                          # the hub's admin and database, and the example's, with its keys
 vp dev                                # the hub on http://localhost:5175/v1/stream
 ```
 

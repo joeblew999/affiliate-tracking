@@ -1,6 +1,7 @@
 // `vp run setup`: each app's local .env, once per clone and safe to rerun. Values already there are
 // kept; missing ones are added. The shared ones are the same wherever they're set:
-// AFFILIATES_HOST_TOKEN in the shop and the service, HUB_TOKEN in all three.
+// AFFILIATES_HOST_TOKEN in the shop and the service. Each of them also needs a key for the hub
+// (HUB_KEY), which the hub itself makes: examples/scripts/keys.ts, after the databases are there.
 import { randomBytes } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
@@ -21,16 +22,15 @@ const sharedValue = (key: string) =>
 
 const SHARED = {
   AFFILIATES_HOST_TOKEN: sharedValue("AFFILIATES_HOST_TOKEN"),
-  HUB_TOKEN: sharedValue("HUB_TOKEN"),
 };
-const { AFFILIATES_HOST_TOKEN, HUB_TOKEN } = SHARED;
+const { AFFILIATES_HOST_TOKEN } = SHARED;
 const sharedOf = (key: string): string | undefined => (SHARED as Record<string, string>)[key];
 
 const wanted: Record<string, Record<string, string>> = {
-  ".": { HUB_TOKEN },
+  // The hub's local admin (its Better Auth, auth.ts), who makes its keys (examples/scripts/keys.ts).
+  ".": { ADMIN_EMAILS: "admin@example.test", HUB_ADMIN_PASSWORD: random() },
   "examples/affiliates": {
     AFFILIATES_HOST_TOKEN,
-    HUB_TOKEN,
     HOST_SITE_URL: "http://localhost:5173",
     AFFILIATES_IP_SALT: random(),
     // Sales wait 30 days before they're approved.
@@ -38,7 +38,6 @@ const wanted: Record<string, Record<string, string>> = {
   },
   "examples/shop": {
     AFFILIATES_HOST_TOKEN,
-    HUB_TOKEN,
     ADMIN_EMAILS: "admin@example.test",
     // A local signing secret for the shop's Stripe webhook (Better Auth's Stripe plugin).
     STRIPE_WEBHOOK_SECRET: `whsec_${random()}`,
