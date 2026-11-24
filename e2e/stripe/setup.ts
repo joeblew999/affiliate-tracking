@@ -69,6 +69,7 @@ export default async function setup(project: TestProject) {
       AFFILIATES_PAYOUT_CURRENCY: payoutCurrency,
     },
     stripeCli(salesKey, ["listen", "--print-secret"]),
+    "stripe",
   );
   project.provide("system", system);
   project.provide("stripeSkip", "");

@@ -1,24 +1,28 @@
 // Both apps for the tests, from the demo fixtures (apps/affiliates/demo.ts): started once for the
 // whole run.
 //
-// startSystem(), once per run: both apps copied (nothing generated), migrated and seeded with the
-// fixtures, dated from DEMO_NOW, given their own worker names (so their service bindings reach
-// each other and never your `vp run dev`), free ports and the debugger off, and started. Every
-// test file uses that one running pair. What a file changed is put back before the next by the
-// apps themselves: the service's "Reset demo" (apps/affiliates/src/demo-reset.ts), pressed by the
-// admin like anything else (dev/each-file.ts). So no file pays for the apps starting again.
+// The tests' copy of the apps is kept between runs, in .e2e/<suite>/ (ignored; inside the repo so
+// Vite serves the linked packages): its database, and what Vite and Void worked out the first
+// time. startSystem(), once per run, brings the copy up to date with the source as it is now,
+// then starts both apps from it and stops them at the end. So a run tests the code as it is, and
+// only the first run (and CI, which has no copy) pays for copying, migrating and seeding.
+// The copy is made again when the installed packages change. To start over by hand, delete .e2e/.
+//
+// In the copy the apps have their own worker names (so their service bindings reach each other
+// and never your `vp run dev`), free ports and the debugger off. Every test file uses that one
+// running pair. What a file changed, and what an earlier run left, is put back before each file
+// by the apps themselves: the service's "Reset demo" (apps/affiliates/src/demo-reset.ts), pressed
+// by the admin like anything else (dev/each-file.ts).
 //
 // The service's clock is pinned (src/clock.ts): it reads DEMO_NOW when the run starts and runs on
 // from there, so "on hold", "ready" and "the last 30 days" are the same on every run.
-// The copy goes in .e2e/ (ignored), inside the repo so Vite serves the linked packages; removed after.
 import { spawn, type ChildProcess } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import {
   appendFileSync,
   cpSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   realpathSync,
@@ -149,6 +153,48 @@ function copyApp(app: (typeof APPS)[number], dir: string, id: string): string {
   return root;
 }
 
+/** The installed packages, as one value: the lockfile and every package.json of the repo's own. */
+function installed(): string {
+  const hash = createHash("sha256").update(readFileSync(join(ROOT, "pnpm-lock.yaml")));
+  for (const group of ["apps", "packages"])
+    for (const name of readdirSync(join(ROOT, group)).sort()) {
+      const manifest = join(ROOT, group, name, "package.json");
+      if (existsSync(manifest)) hash.update(readFileSync(manifest));
+    }
+  return hash.digest("hex");
+}
+
+/**
+ * A kept copy's source brought up to date: everything in it but what running made (GENERATED)
+ * removed and copied again from the repo, so a file deleted from the source is gone from the copy
+ * too. Whether its migrations changed.
+ */
+function refresh(dir: string): { migrated: boolean } {
+  const migrations = (root: string) => {
+    const folder = join(root, "db", "migrations");
+    return existsSync(folder) ? readdirSync(folder).sort().join() : "";
+  };
+  let migrated = false;
+  // The apps, and the repo's packages copied beside them (copyTree).
+  const copies = [
+    ...APPS.map((app) => [join(ROOT, "apps", app), join(dir, app)] as const),
+    ...(existsSync(join(dir, "packages")) ? readdirSync(join(dir, "packages")) : []).map(
+      (name) => [join(ROOT, "packages", name), join(dir, "packages", name)] as const,
+    ),
+  ];
+  for (const [source, root] of copies) {
+    const before = migrations(root);
+    for (const entry of readdirSync(root))
+      if (!GENERATED.has(entry)) rmSync(join(root, entry), { recursive: true, force: true });
+    cpSync(source, root, {
+      recursive: true,
+      filter: (path) => !GENERATED.has(relative(source, path).split("/")[0] ?? ""),
+    });
+    migrated ||= migrations(root) !== before;
+  }
+  return { migrated };
+}
+
 function run(cwd: string, args: string[], env: Record<string, string> = {}): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn("vp", args, {
@@ -233,13 +279,21 @@ const envFile = (values: Record<string, string>) =>
 /**
  * Once per run: both apps, seeded and running. `env`: more settings for both (the Stripe tests'
  * keys). `webhookSecret`: the shop's Stripe webhook secret, when Stripe itself signs the events.
+ * `suite`: whose kept copy (each suite has its own, with its own database).
  */
 export async function startSystem(
   env: Record<string, string> = {},
   webhookSecret = `whsec_${randomBytes(32).toString("hex")}`,
+  suite = "dev",
 ): Promise<{ system: System; stop: () => Promise<void> }> {
-  mkdirSync(join(ROOT, ".e2e"), { recursive: true });
-  const dir = mkdtempSync(join(ROOT, ".e2e", "run-"));
+  const dir = join(ROOT, ".e2e", suite);
+  const stamp = join(dir, "installed");
+  const packages = installed();
+  // A copy made with other packages installed is no use: its links are to the old ones.
+  if (existsSync(dir) && (!existsSync(stamp) || readFileSync(stamp, "utf8") !== packages))
+    rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
+  const kept = existsSync(dir);
+  mkdirSync(dir, { recursive: true });
   const log = join(dir, "apps.log");
   writeFileSync(log, "");
   const hostToken = randomBytes(32).toString("hex");
@@ -250,19 +304,23 @@ export async function startSystem(
   const [shopPort, affiliatesPort] = [await freePort(), await freePort()];
   const shop = `http://127.0.0.1:${shopPort}`;
   const affiliates = `http://127.0.0.1:${affiliatesPort}`;
+  const { migrated } = kept ? refresh(dir) : { migrated: false };
   const roots = Object.fromEntries(
     await Promise.all(
       APPS.map(async (app) => {
         const root = copyApp(app, dir, "e2e");
-        // Void's generated types and config (the shop's seed reads its Better Auth schema), as
-        // after a fresh clone.
-        await run(root, ["exec", "void", "prepare"]);
-        await run(root, ["run", "db:migrate"]);
-        await run(root, ["run", "db:seed"], clock);
+        if (!kept) {
+          // Void's generated types and config (the shop's seed reads its Better Auth schema), as
+          // after a fresh clone.
+          await run(root, ["exec", "void", "prepare"]);
+          await run(root, ["run", "db:migrate"]);
+          await run(root, ["run", "db:seed"], clock);
+        } else if (migrated) await run(root, ["run", "db:migrate"]);
         return [app, root] as const;
       }),
     ),
   ) as Record<(typeof APPS)[number], string>;
+  writeFileSync(stamp, packages);
   writeFileSync(
     join(roots.affiliates, ".env"),
     envFile({
@@ -300,7 +358,7 @@ export async function startSystem(
       clockFrom,
       log,
     },
-    // Each app stopped (its process group), then the run's copy removed.
+    // Each app stopped (its process group). The copy stays for the next run.
     async stop() {
       await Promise.all(
         servers.map(
@@ -312,7 +370,6 @@ export async function startSystem(
             }),
         ),
       );
-      rmSync(dir, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 });
     },
   };
 }

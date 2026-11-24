@@ -70,33 +70,23 @@
     "migrations": [
       {
         "tag": "void-durable-streams-v1",
-        "new_sqlite_classes": [
-          "StreamsDurableObject"
-        ]
+        "new_sqlite_classes": ["StreamsDurableObject"]
       },
       {
         "tag": "void-durable-stream-directory-v1",
-        "new_sqlite_classes": [
-          "StreamDirectoryDurableObject"
-        ]
+        "new_sqlite_classes": ["StreamDirectoryDurableObject"]
       },
       {
         "tag": "void-durable-stream-signing-v1",
-        "new_sqlite_classes": [
-          "StreamSigningDurableObject"
-        ]
+        "new_sqlite_classes": ["StreamSigningDurableObject"]
       },
       {
         "tag": "void-durable-stream-subscriptions-v1",
-        "new_sqlite_classes": [
-          "StreamSubscriptionsDurableObject"
-        ]
+        "new_sqlite_classes": ["StreamSubscriptionsDurableObject"]
       },
       {
         "tag": "void-durable-recent-actions-v1",
-        "new_sqlite_classes": [
-          "RecentActionsDurableObject"
-        ]
+        "new_sqlite_classes": ["RecentActionsDurableObject"]
       }
     ],
     "send_email": [

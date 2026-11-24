@@ -166,9 +166,10 @@ come from the database schema and the pages' loaders and actions.
   `STRIPE_TEST_PAYOUTS_KEY` (payouts). On GitHub, it runs from Actions → **Stripe end-to-end** →
   Run workflow (`.github/workflows/stripe.yml`), with those keys saved as repository secrets.
 
-The tests run against both apps, started once for the whole run (`e2e/apps.ts`): copied,
-migrated and seeded with the demo fixtures, on free ports, so nothing reaches your local data or
-your `vp run dev`. Before each test file the demo is put back as it was, by the admin pressing
+The tests run against both apps, started once for the whole run (`e2e/apps.ts`), from a copy of
+them with the demo fixtures, on free ports, so nothing reaches your local data or your
+`vp run dev`. The copy is kept in `.e2e/` between runs and brought up to date with your source
+at the start of each, so only the first run pays for copying, migrating and seeding. Before each test file the demo is put back as it was, by the admin pressing
 **Reset demo** (a demo site's button: `apps/affiliates/src/demo-reset.ts`), so every file starts
 from exactly the fixtures without the apps starting again. The service's clock is pinned to the
 fixtures' instant (`DEMO_NOW`, by `AFFILIATES_NOW`; `apps/affiliates/src/clock.ts`), so "on
