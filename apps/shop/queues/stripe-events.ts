@@ -6,6 +6,10 @@ import type Stripe from "stripe";
 import { affiliatesService } from "../src/affiliates.ts";
 import { defineQueue } from "../src/activity.ts";
 
+// Handed over as soon as it's sent. Unset, a queue waits up to 5 seconds for more messages to
+// make a batch (Void's default, guide/queues.md), and every step through it is that much later.
+export const maxBatchTimeout = 0;
+
 export default defineQueue<Stripe.Event>(
   async (batch) => {
     for (const msg of batch.messages) {

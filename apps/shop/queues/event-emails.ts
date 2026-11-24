@@ -22,6 +22,10 @@ type Message = {
 
 const BATCH = 50;
 
+// Handed over as soon as it's sent. Unset, a queue waits up to 5 seconds for more messages to
+// make a batch (Void's default, guide/queues.md), and every step through it is that much later.
+export const maxBatchTimeout = 0;
+
 export default defineQueue<Message>(async (batch) => {
   for (const msg of batch.messages) {
     const { event, siteUrl, after } = msg.body;

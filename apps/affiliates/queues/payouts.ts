@@ -8,6 +8,10 @@ import { payPartner } from "../src/payouts.ts";
 /** One partner to pay. */
 type Message = Pick<typeof payouts.$inferSelect, "partnerId">;
 
+// Handed over as soon as it's sent. Unset, a queue waits up to 5 seconds for more messages to
+// make a batch (Void's default, guide/queues.md), and every step through it is that much later.
+export const maxBatchTimeout = 0;
+
 export default defineQueue<Message>(async (batch) => {
   for (const msg of batch.messages) {
     const outcome = await payPartner(msg.body.partnerId);

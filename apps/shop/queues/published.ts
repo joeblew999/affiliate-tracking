@@ -4,6 +4,10 @@
 import { defineQueue } from "../src/activity.ts";
 import { write, type Published } from "../src/published.ts";
 
+// Handed over as soon as it's sent. Unset, a queue waits up to 5 seconds for more messages to
+// make a batch (Void's default, guide/queues.md), and every step through it is that much later.
+export const maxBatchTimeout = 0;
+
 export default defineQueue<Published>(
   async (batch) => {
     for (const msg of batch.messages) {

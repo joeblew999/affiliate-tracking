@@ -49,6 +49,10 @@ async function deal(wake: Wake) {
     );
 }
 
+// Handed over as soon as it's sent. Unset, a queue waits up to 5 seconds for more messages to
+// make a batch (Void's default, guide/queues.md), and every step through it is that much later.
+export const maxBatchTimeout = 0;
+
 export default defineQueue<Wake>(
   async (batch) => {
     for (const msg of batch.messages) {
