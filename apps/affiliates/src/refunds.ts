@@ -13,6 +13,7 @@
 import { refundedPayments, sales } from "@schema";
 import { and, db, eq, inArray, isNull, lt, notExists, or } from "void/db";
 import { alias } from "void/schema-d1";
+import { salesOfPaymentWritten } from "./outcomes.ts";
 import { now as clock } from "./clock.ts";
 
 type Sale = typeof sales.$inferSelect;
@@ -84,7 +85,10 @@ export async function applyRefunds(paymentIntent: string): Promise<number> {
       if (outcome === "changed") changed++;
       if (outcome === "raced") retry = true;
     }
-    if (!retry) return changed;
+    if (!retry) {
+      if (changed) await salesOfPaymentWritten(paymentIntent);
+      return changed;
+    }
   }
 }
 

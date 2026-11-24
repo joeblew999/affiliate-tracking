@@ -11,12 +11,12 @@ const Stream = z
   .refine((path) => !path.startsWith("__ds"), "__ds is the streams' own");
 
 /**
- * Add one event to the end of each of these streams, made if they aren't there. Nobody is told:
- * for streams that are read, not followed. `mark`: note the place, for Recent.
+ * Add these events, in order, to the end of each of these streams, made if they aren't there.
+ * Nobody is told: for streams that are read, not followed. `mark`: note the place, for Recent.
  */
 export const AppendInput = z.object({
   streams: z.array(Stream).min(1),
-  event: z.unknown(),
+  events: z.array(z.unknown()).min(1),
   mark: z.boolean().default(false),
 });
 export const AppendOutput = z.object({ appended: z.literal(true) });

@@ -180,18 +180,23 @@ test file the demo is put back as it was, by the admin pressing
 from exactly the fixtures without the apps starting again. The service's clock is pinned to the
 fixtures' instant (`DEMO_NOW`, by `AFFILIATES_NOW`; `apps/affiliates/src/clock.ts`), so "on
 hold", "ready to pay" and "the last 30 days" come out the same on every run, and the tests check
-exact amounts from `demo.ts`. People are real browsers on the real pages, and the demo's people
-sign in through the shop's Better Auth with the demo password. The shop's calls to the service go
-through its own client. Without Stripe, the dev tests send Stripe's events to the shop's webhook,
-signed as Stripe signs them. In the Stripe tests, Stripe sends them itself. There are no fakes or
-mocks.
+exact amounts from `demo.ts`. The demo's people sign in through the shop's Better Auth with the
+demo password. The shop's calls to the service go through its own client. Without Stripe, the dev
+tests send Stripe's events to the shop's webhook, signed as Stripe signs them. In the Stripe
+tests, Stripe sends them itself. There are no fakes or mocks.
 
-Nothing in the tests waits and looks again. A test watches the Activity pane, as a person would:
-it presses the button, then waits for that action to read done and the page to have reloaded its
-data (`activity()` in `e2e/dev/helpers.ts`), and then reads the page it's already on. A page is
-never opened again just to look. An action that fails ends the test at once, with
-its steps and the error, and so does a server error on any page. A failed test also shows what both
-apps printed.
+Most tests use no browser. A test is one more reader of the streams (`e2e/dev/bus.ts`): it sends
+what a page's button sends, or a Stripe event, waits on the stream in the hub for that action to
+read done, and reads what the action did from the state stream (Durable State: the sale, the
+payout, the partner, as saved; `apps/affiliates/src/outcomes.ts`). A seeded row nothing wrote
+is as the fixtures have it. Nothing waits and looks again, and an action that fails ends the test
+at once, with its steps and the error.
+
+A browser is for what a page shows: `pages`, `activity`, `streams` and `demo` in `e2e/dev`, and
+the Stripe tests, which buy on Stripe's own page. There a test watches the Activity pane, as a
+person would: it presses the button, waits for that action to read done and the page to have
+reloaded its data (`activity()` in `e2e/dev/helpers.ts`), and reads the page it's already on. A
+server error on any page ends the test. A failed test also shows what the apps printed.
 
 Files run one after another, not side by side: the program is one program, and a payout run or
 the daily job touches everyone in it. A deployment is one program, so that's how it stays.

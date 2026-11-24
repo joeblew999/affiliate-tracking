@@ -63,8 +63,9 @@ function streamOf(name: string) {
         method: "PUT",
         headers: { ...JSON_TYPE, "stream-ttl": String(UNUSED_SECONDS) },
       }),
-    add: (event: unknown) =>
-      object.fetch(url, { method: "POST", headers: JSON_TYPE, body: JSON.stringify(event) }),
+    /** Several at once: a JSON stream takes an array as that many events, in order. */
+    add: (events: unknown[]) =>
+      object.fetch(url, { method: "POST", headers: JSON_TYPE, body: JSON.stringify(events) }),
     /** Where it ends now; "-1" (its start) if it isn't there. */
     async end(): Promise<string> {
       const head = await object.fetch(url, { method: "HEAD" });
@@ -89,17 +90,17 @@ function streamOf(name: string) {
 export const create = (name: string) => streamOf(name).create();
 
 /**
- * One event added to the end of a read stream; the stream is made by its first event. Straight to
+ * Events added to the end of a read stream; the stream is made by its first event. Straight to
  * the stream's own object, without looking for subscribers, since these are written to the most.
  * `mark`: the place is noted (durable-objects/marks.ts), for recent() below.
  */
-export async function append(name: string, event: unknown, mark: boolean) {
+export async function append(name: string, events: unknown[], mark: boolean) {
   const stream = streamOf(name);
   if (mark) await Marks.get(name).mark(await stream.end());
-  let added = await stream.add(event);
+  let added = await stream.add(events);
   if (added.status === 404) {
     await stream.create();
-    added = await stream.add(event);
+    added = await stream.add(events);
   }
   if (!added.ok) throw new Error(`Stream ${name}: ${added.status} ${await added.text()}`);
 }

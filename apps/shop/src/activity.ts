@@ -8,7 +8,7 @@ import { hub } from "./hub.ts";
 setupActivity({
   app: "shop",
   sink: async (event, viewers) => {
-    await hub.append(viewers, event, event.type === "started");
+    await hub.append(viewers, [event], event.type === "started");
   },
 });
 

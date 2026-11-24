@@ -7,6 +7,7 @@ import { HTTPException } from "hono/http-exception";
 import { db, eq } from "void/db";
 import type { z } from "zod";
 import { codeFor } from "./partners.ts";
+import { partnersWritten } from "./outcomes.ts";
 
 type ShopUser = { id: string; email: string; name: string | null };
 
@@ -34,6 +35,7 @@ async function payeeFor(user: ShopUser, role: "organiser" | "venue"): Promise<st
     })
     .returning({ id: partners.id });
   if (!row) throw new Error("no payee made");
+  await partnersWritten([row.id]);
   return row.id;
 }
 

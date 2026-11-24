@@ -17,10 +17,29 @@ import {
   stateStreamOf,
   type Action,
 } from "../../packages/activity/src/model.ts";
-import { AFFILIATES, SHOP } from "./helpers.ts";
+import {
+  AFFILIATES,
+  checkoutVia,
+  now,
+  paidSession,
+  sendStripeEvent,
+  SHOP,
+  type Partner,
+} from "./helpers.ts";
 
-/** A sale as the service writes it to the stream: its table's row. */
-export type Sale = NonNullable<Parameters<(typeof outcomes)["sales"]["upsert"]>[0]["value"]>;
+/** A thing as the service writes it to the stream: its table's row (apps/affiliates/src/outcomes.ts). */
+type Written<K extends keyof typeof outcomes> = NonNullable<
+  Parameters<(typeof outcomes)[K]["upsert"]>[0]["value"]
+>;
+export type Sale = Written<"sales">;
+export type Payout = Written<"payouts">;
+export type PartnerRow = Written<"partners">;
+export type Link = Written<"links">;
+export type Referral = Written<"referrals">;
+export type Event = Written<"events">;
+
+const cookieOf = (setCookies: string[]) =>
+  setCookies.map((cookie) => cookie.split(";")[0]).join("; ");
 
 /** One of the demo's people signed in on the shop: the cookie their requests carry, and who they are. */
 async function signIn(email: string) {
@@ -38,10 +57,26 @@ async function signIn(email: string) {
   });
   if (error) throw new Error(`${email} can't sign in: ${error.message}`);
   return {
-    cookie: cookies.map((cookie) => cookie.split(";")[0]).join("; "),
+    cookie: cookieOf(cookies),
     // Whose stream they read: an admin, everyone's; anyone else, their own.
     viewer: person.role === "admin" ? "admins" : data.user.id,
   };
+}
+
+/**
+ * A new shop account, made through the shop's Better Auth as its form makes one. `cookie`: what
+ * the browser would send with it (the referral cookie of a link they followed). Their user id.
+ * Made isn't dealt with: the shop publishes the sign-up; wait on its action (Watcher.during).
+ */
+export async function createAccount(name: string, cookie: string | null): Promise<string> {
+  const { data, error } = await createAuthClient({ baseURL: SHOP }).signUp.email({
+    name,
+    email: `${crypto.randomUUID()}@example.test`,
+    password: "example-password-123",
+    fetchOptions: { headers: { origin: SHOP, ...(cookie ? { cookie } : {}) } },
+  });
+  if (error) throw new Error(`can't sign up: ${error.message}`);
+  return data.user.id;
 }
 
 const text = (action: Action) =>
@@ -108,8 +143,14 @@ export async function watch(email: string) {
       }
     },
 
-    /** One of a page's actions, as its button sends it: done once the action it starts is. */
-    act(page: string, action: string, title: string, body: Record<string, unknown> = {}) {
+    /**
+     * One of a page's actions ("/admin" and "runPayouts"), as its button sends it: done once the
+     * action it starts is. Refused, it's the error, with the app's reason.
+     */
+    act(page: string, action: string, body: Record<string, unknown> = {}) {
+      // What the control plane calls it: "runPayouts" is "Run payouts".
+      const spaced = action.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
+      const title = spaced.charAt(0).toUpperCase() + spaced.slice(1);
       return this.during(title, async () => {
         const res = await fetch(`${AFFILIATES}${page}?${action}`, {
           method: "POST",
@@ -120,14 +161,26 @@ export async function watch(email: string) {
       });
     },
 
+    /** A page asked for as this person, without following where it sends them: its status. */
+    async get(page: string) {
+      const res = await fetch(`${AFFILIATES}${page}`, { headers, redirect: "manual" });
+      return { status: res.status, location: res.headers.get("location") };
+    },
+
     /** What the actions since watch() left behind, as written to the state stream up to now. */
     async state() {
       const read = await readState(stateOffset);
       stateOffset = read.offset;
       for (const event of read.events) if (isChangeEvent(event)) state.apply(event);
+      const all = <T>(type: string) => [...state.getType(type).values()] as T[];
+      // Each kind written, as it now stands.
       return {
-        /** The sales written, each as it now stands. */
-        sales: () => [...state.getType("sale").values()] as Sale[],
+        sales: () => all<Sale>("sale"),
+        payouts: () => all<Payout>("payout"),
+        partners: () => all<PartnerRow>("partner"),
+        links: () => all<Link>("link"),
+        referrals: () => all<Referral>("referral"),
+        events: () => all<Event>("event"),
       };
     },
 
@@ -156,5 +209,52 @@ export async function closeBus(): Promise<void> {
  * once that action is. Before each test file (each-file.ts).
  */
 export async function resetDemo(): Promise<void> {
-  await (await adminBus()).act("/admin", "resetDemo", "Reset demo");
+  await (await adminBus()).act("/admin", "resetDemo");
+}
+
+/** What the admin has seen written since the file began. */
+export const written = async () => (await adminBus()).state();
+
+/** A Stripe event sent (helpers.ts) and dealt with: done once that webhook's action is. */
+export async function stripeEvent(
+  type: string,
+  object: Record<string, unknown>,
+  options: { daysAgo?: number } = {},
+): Promise<void> {
+  await (
+    await adminBus()
+  ).during("Stripe webhook", () => sendStripeEvent(type, object, options), {
+    step: `Stripe ${type}`,
+  });
+}
+
+/** A sale through this partner's link (or nobody's), as Stripe reports it; the customer's email. */
+export async function sell(
+  partner: Pick<Partner, "code"> | null,
+  overrides: Record<string, unknown> = {},
+  checkout: { eventId?: string | null } = {},
+) {
+  const session = paidSession((await checkoutVia(partner, checkout)).metadata, overrides);
+  await stripeEvent("checkout.session.completed", session);
+  return { session, customer: (session.customer_details as { email: string }).email };
+}
+
+/**
+ * Run one of the service's crons, through Void's dev endpoint (guide/jobs.md): as of now, or as of
+ * `daysLater` days on, so the seeded sales have aged that much for it. Done once its action is.
+ */
+export async function runCron(cron: string, { daysLater = 0 } = {}): Promise<void> {
+  await (
+    await adminBus()
+  ).during("Daily job", async () => {
+    const res = await fetch(`${AFFILIATES}/__void/scheduled`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-void-dev-trigger": globalThis.apps.cronToken,
+      },
+      body: JSON.stringify({ cron, scheduledTime: now() + daysLater * 24 * 60 * 60 * 1000 }),
+    });
+    if (!res.ok) throw new Error(`cron ${cron}: ${res.status} ${await res.text()}`);
+  });
 }

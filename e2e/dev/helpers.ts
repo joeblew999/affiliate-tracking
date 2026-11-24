@@ -1,7 +1,9 @@
-// The tests' people and what they do, as Void's own tests drive apps: in a real browser, on the
-// real pages (voidzero-dev/void, packages/*/test/integration). Each person is a browser of their own,
-// signed in on the shop. What they see is read off the pages. The shop's own calls to the service
-// and Stripe's webhook aren't pages: those go through the shop's client and Stripe's signing.
+// The tests' people in a browser, as Void's own tests drive apps (voidzero-dev/void,
+// packages/*/test/integration): for what a page shows. Each person is a browser of their own,
+// signed in on the shop, and what they see is read off the pages. Also what the tests share that
+// needs no browser: the fixtures' people and sales, the shop's own calls to the service, and
+// Stripe's events signed as Stripe signs them. What the program does is tested over the streams,
+// without a browser: bus.ts.
 import { createAuthClient } from "better-auth/client";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
 import Stripe from "stripe";
@@ -9,7 +11,6 @@ import { affiliates } from "../../apps/affiliates/client.ts";
 import {
   customerOf,
   DEMO_PASSWORD,
-  demoPayouts,
   demoPeople,
   demoEvents,
   demoSales,
@@ -141,14 +142,6 @@ export async function signUp(name = "Test User", { via }: { via?: string } = {})
 /** The shop's Better Auth, typed from Better Auth itself. */
 const shopAuth = createAuthClient({ baseURL: SHOP });
 
-/** A person's shop user id, from the shop's Better Auth, as the shop passes it at checkout. */
-export async function userIdOf(person: Person): Promise<string> {
-  const cookie = (await person.context.cookies(SHOP)).map((c) => `${c.name}=${c.value}`).join("; ");
-  const { data } = await shopAuth.getSession({ fetchOptions: { headers: { cookie } } });
-  if (!data) throw new Error(`${person.name} isn't signed in`);
-  return data.user.id;
-}
-
 /**
  * One of the demo's people (apps/affiliates/demo.ts, seeded in every run), signed in on the shop
  * through its Better Auth sign-in, with the seeded password; the session's cookies go in a browser
@@ -197,14 +190,6 @@ export async function admin(): Promise<Person> {
   // A new browser if an earlier test's failure closed it.
   if (theAdmin && (await theAdmin).page.isClosed()) theAdmin = undefined;
   return (theAdmin ??= signInAs(email));
-}
-
-/** Apply on the partner page. */
-export async function apply(person: Person): Promise<void> {
-  await open(person.page, `${AFFILIATES}/`);
-  await person.page.getByLabel("Name").fill(person.name);
-  await person.page.getByRole("checkbox").click();
-  await press(person.page, person.page.getByRole("button", { name: "Apply" }));
 }
 
 /** The admin page's row for this partner, on its Partners tab. */
@@ -262,10 +247,6 @@ export const seededReadyCents = (code: string) =>
     .filter((s) => s.partner === code && s.status === "approved")
     .reduce((sum, s) => sum + s.commissionCents, 0);
 
-/** How many payouts the fixtures have for a partner. */
-export const seededPayoutCount = (code: string) =>
-  demoPayouts.filter((p) => p.partner === code).length;
-
 /** A seeded sale (apps/affiliates/demo.ts), with its customer and Stripe payment as seeded. */
 export function seededSale(label: string) {
   const sale = demoSales.find((s) => s.label === label);
@@ -321,24 +302,6 @@ export async function partnerMe(person: Person) {
   const me = await partnerPage(person);
   if (me.status !== "active") throw new Error(`${person.name} is ${me.status}`);
   return me;
-}
-
-/** A partner's short links, as their page lists them. */
-export async function linksOf(person: Person) {
-  await open(person.page, `${AFFILIATES}/`);
-  const card = person.page.locator('[data-slot="card"]').filter({ hasText: "Short links" });
-  const rows = card.getByRole("row");
-  const out = [];
-  for (let i = 1; i < (await rows.count()); i++) {
-    const cells = await rows.nth(i).getByRole("cell").allInnerTexts();
-    out.push({
-      url: cells[0]?.split("\n")[0] ?? "",
-      campaign: cells[1] ?? "",
-      clicks: Number(cells[2]),
-      sales: Number(cells[3]),
-    });
-  }
-  return out;
 }
 
 /** Open a tab of the admin page. */
@@ -537,22 +500,6 @@ export async function sendStripeEvent(
   return res;
 }
 
-/**
- * A Stripe event sent (sendStripeEvent) and dealt with: done once that webhook's action is, in the
- * admin's control plane, as their page shows it.
- */
-export async function stripeEvent(
-  type: string,
-  object: Record<string, unknown>,
-  options: { daysAgo?: number } = {},
-): Promise<Response> {
-  const pane = await activity(await adminPage());
-  const before = await pane.seen();
-  const res = await sendStripeEvent(type, object, options);
-  await pane.finished("Stripe webhook", { step: `Stripe ${type}`, after: before });
-  return res;
-}
-
 /** A paid Checkout Session as Stripe sends it, with the metadata the shop's checkout added. */
 export function paidSession(
   metadata: Record<string, string>,
@@ -575,26 +522,6 @@ export function paidSession(
     metadata,
     ...overrides,
   };
-}
-
-/**
- * Run one of the service's crons, through Void's dev endpoint (guide/jobs.md): as of now, or as of
- * `daysLater` days on, so the seeded sales have aged that much for it.
- */
-export async function runCron(cron: string, { daysLater = 0 } = {}): Promise<void> {
-  // The run is an action of its own in the admin's control plane: done once that is.
-  const pane = await activity(await adminPage());
-  const before = await pane.seen();
-  const res = await fetch(`${AFFILIATES}/__void/scheduled`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-void-dev-trigger": globalThis.apps.cronToken,
-    },
-    body: JSON.stringify({ cron, scheduledTime: now() + daysLater * 24 * 60 * 60 * 1000 }),
-  });
-  if (!res.ok) throw new Error(`cron ${cron}: ${res.status} ${await res.text()}`);
-  await pane.finished("Daily job", { after: before });
 }
 
 /** Close every browser: after each test file (each-file.ts). */

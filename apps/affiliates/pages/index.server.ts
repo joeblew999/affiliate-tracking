@@ -14,6 +14,7 @@ import { hasPayoutsStripe, payoutsStripe } from "../src/stripe.ts";
 import { earnings, stats } from "../src/stats.ts";
 import { requestIpHash } from "../src/visitor.ts";
 import { now as clock } from "../src/clock.ts";
+import { partnersWritten } from "../src/outcomes.ts";
 
 // The partner's page: their partner record, and for an active partner their links and the last 30
 // days. (Who's signed in is in the layout's shared data: middleware/01.user.ts.)
@@ -91,15 +92,19 @@ export const actions = {
             ? "Already applied"
             : "An organiser or a venue's contact can't also be an affiliate",
       });
-    await db.insert(partners).values({
-      userId: user.id,
-      email: user.email,
-      name: body.name,
-      code: codeFor(body.name),
-      application: body.application ?? null,
-      termsVersion: TERMS_VERSION,
-      termsAcceptedAt: clock(),
-    });
+    const [row] = await db
+      .insert(partners)
+      .values({
+        userId: user.id,
+        email: user.email,
+        name: body.name,
+        code: codeFor(body.name),
+        application: body.application ?? null,
+        termsVersion: TERMS_VERSION,
+        termsAcceptedAt: clock(),
+      })
+      .returning({ id: partners.id });
+    await partnersWritten([row?.id]);
   }),
 
   // A new short link.

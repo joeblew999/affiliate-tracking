@@ -3,6 +3,7 @@
 // partner's promotion code can take a user over only before their first paid sale.
 import { partners, referrals } from "@schema";
 import { and, db, eq, isNull } from "void/db";
+import { referralWritten } from "./outcomes.ts";
 import { activePartner, type Partner } from "./partners.ts";
 import { parseReferral } from "./referral-cookie.ts";
 
@@ -15,6 +16,7 @@ export async function recordSignupReferral(userId: string, ref: string | null): 
     .values({ userId, partnerId: partner.id, source: "signup" })
     .onConflictDoNothing({ target: referrals.userId })
     .returning({ id: referrals.id });
+  if (inserted.length > 0) await referralWritten(userId);
   return inserted.length > 0;
 }
 
@@ -77,4 +79,5 @@ export async function settleReferral(sale: {
       : []),
     db.update(referrals).set({ convertedAt: sale.at }).where(notConverted),
   ]);
+  await referralWritten(sale.userId);
 }

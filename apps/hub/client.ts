@@ -65,9 +65,9 @@ export function hub(binding: Pick<Fetcher, "fetch">, token: string) {
       });
     },
 
-    /** One event added to streams that are read, not followed. `mark`: note the place, for recent(). */
-    append: (streams: string[], event: unknown, mark = false) =>
-      call("/api/append", AppendInput, AppendOutput, { streams, event, mark }),
+    /** Events added to streams that are read, not followed. `mark`: note the place, for recent(). */
+    append: (streams: string[], events: unknown[], mark = false) =>
+      call("/api/append", AppendInput, AppendOutput, { streams, events, mark }),
 
     /** A read stream's latest events (from its oldest mark kept), and the offset they go up to. */
     recent: (stream: string) => call("/api/recent", RecentInput, RecentOutput, { stream }),

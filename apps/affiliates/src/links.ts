@@ -5,6 +5,7 @@ import { clicks, links, newLink, sales } from "@schema";
 import { HTTPException } from "hono/http-exception";
 import { and, count, db, desc, eq, isNotNull, ne, sql, sum } from "void/db";
 import { z } from "zod";
+import { linksWritten } from "./outcomes.ts";
 
 const MAX_ACTIVE_LINKS = 100;
 
@@ -83,6 +84,7 @@ export async function createLink(
     })
     .returning();
   if (!row) throw new Error("link not created");
+  await linksWritten([row.id]);
   return row;
 }
 
@@ -93,4 +95,5 @@ export async function archiveLink(partnerId: string, id: string): Promise<void> 
     .where(and(eq(links.id, id), eq(links.partnerId, partnerId), ne(links.status, "archived")))
     .returning({ id: links.id });
   if (!row) throw new HTTPException(404, { message: "No such active link" });
+  await linksWritten([row.id]);
 }

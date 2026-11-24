@@ -3,6 +3,7 @@
 // src/payouts.ts picks up where the last attempt was.
 import type { payouts } from "@schema";
 import { defineQueue } from "../src/activity.ts";
+import { payoutWritten } from "../src/outcomes.ts";
 import { payPartner } from "../src/payouts.ts";
 
 /** One partner to pay. */
@@ -15,6 +16,8 @@ export const maxBatchTimeout = 0;
 export default defineQueue<Message>(async (batch) => {
   for (const msg of batch.messages) {
     const outcome = await payPartner(msg.body.partnerId);
+    // The payout and its sales as they now stand, for whoever watches the run (src/outcomes.ts).
+    await payoutWritten(msg.body.partnerId, "payoutId" in outcome ? outcome.payoutId : undefined);
     // Refunded before paying: the payout is released, and this step fails with why.
     if (outcome.status === "failed") throw new Error(outcome.reason);
     msg.ack();

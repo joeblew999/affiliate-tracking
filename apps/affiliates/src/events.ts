@@ -9,6 +9,7 @@ import { events, partners, sales, venues, type eventBooking } from "@schema";
 import { HTTPException } from "hono/http-exception";
 import { and, asc, db, eq, gt, inArray, isNotNull, isNull, ne, sql } from "void/db";
 import { queues } from "./activity.ts";
+import { eventsWritten } from "./outcomes.ts";
 import { queuePayouts } from "./payouts.ts";
 import type { z } from "zod";
 import type { Event } from "./host-contract.ts";
@@ -113,6 +114,7 @@ export async function bookEvent(booking: z.output<typeof eventBooking>) {
       approvedAt: now,
     }),
   ]);
+  await eventsWritten([id]);
   await queuePayouts([venue.payeeId]);
   return id;
 }
@@ -137,6 +139,7 @@ export async function venuePaid(payoutId?: string): Promise<number> {
     .set({ onSaleAt: clock() })
     .where(and(isNull(events.onSaleAt), inArray(events.id, paidVenueSales)))
     .returning({ id: events.id });
+  await eventsWritten(ready.map((event) => event.id));
   for (const { id } of ready) {
     await queues["on-sale"].send({ eventId: id });
   }

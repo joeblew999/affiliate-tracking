@@ -27,7 +27,7 @@ import { addOrganiser, addVenue } from "../../src/payees.ts";
 import { shopUserByEmail } from "../../src/user.ts";
 import { now as clock } from "../../src/clock.ts";
 import { isDemo, resetDemo } from "../../src/demo-reset.ts";
-import { salesWritten } from "../../src/outcomes.ts";
+import { partnersWritten, salesWritten } from "../../src/outcomes.ts";
 
 // The admin page: everything, for the host's admins only. ?partner=<id>: only that partner's sales
 // and payouts. ?links=<partner id>: that partner's short links too, for the dialog that shows them.
@@ -132,6 +132,7 @@ export const actions = {
     const [row] = await db.update(partners).set(change).where(eq(partners.id, id)).returning();
     if (!row) throw new HTTPException(404, { message: "No such partner" });
     if (change.status === "active") await ensurePromotionCode(row);
+    await partnersWritten([row.id]);
   }),
 
   // A decision on a sale not yet paid: approve it, reject it (never approved automatically), or put

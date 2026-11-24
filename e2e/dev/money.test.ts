@@ -3,24 +3,8 @@
 // events, and what each did is read from the admin's state stream (bus.ts). Each test touches its
 // own partner, so none depends on another.
 import { expect, test } from "vite-plus/test";
-import { adminBus, type Sale } from "./bus.ts";
-import { checkoutVia, now, paidSession, seededPartnerId, sendStripeEvent } from "./helpers.ts";
-
-/** A Stripe event sent and dealt with: done once that webhook's action is. */
-async function stripeEvent(type: string, object: Record<string, unknown>, options = {}) {
-  await (
-    await adminBus()
-  ).during("Stripe webhook", () => sendStripeEvent(type, object, options), {
-    step: `Stripe ${type}`,
-  });
-}
-
-/** A sale through this partner's link, as Stripe reports it; the customer's email. */
-async function sell(code: string, overrides: Record<string, unknown> = {}) {
-  const session = paidSession((await checkoutVia({ code })).metadata, overrides);
-  await stripeEvent("checkout.session.completed", session);
-  return (session.customer_details as { email: string }).email;
-}
+import { adminBus, sell, stripeEvent, written, type Sale } from "./bus.ts";
+import { checkoutVia, now, paidSession, seededPartnerId } from "./helpers.ts";
 
 /** A commission rule for one partner, as the admin's Rules tab adds it. */
 async function addRule(
@@ -29,21 +13,19 @@ async function addRule(
 ) {
   await (
     await adminBus()
-  ).act("/admin", "addRule", "Add rule", {
-    partnerId: seededPartnerId(code),
-    kind: "percent",
-    ...rule,
-  });
+  ).act("/admin", "addRule", { partnerId: seededPartnerId(code), kind: "percent", ...rule });
 }
 
 /** The sales written since the file began, of this partner. */
-async function salesOf(code: string): Promise<Sale[]> {
-  const state = await (await adminBus()).state();
-  return state.sales().filter((sale) => sale.partnerId === seededPartnerId(code));
-}
+const salesOf = async (code: string): Promise<Sale[]> =>
+  (await written()).sales().filter((sale) => sale.partnerId === seededPartnerId(code));
 
 const commissionOf = (sales: Sale[], customers: string[]) =>
   customers.map((c) => sales.find((s) => s.customerEmail === c)?.commissionCents);
+
+/** A $50 sale through this partner's link; the customer's email. */
+const sale = async (code: string, overrides: Record<string, unknown> = {}) =>
+  (await sell({ code }, overrides)).customer;
 
 test("a partner's rules: percent and the monthly tier", async () => {
   // Ana's seeded sales are all from last month (DEMO_NOW is the 15th): none this month yet.
@@ -51,7 +33,7 @@ test("a partner's rules: percent and the monthly tier", async () => {
   await addRule("ana", { percent: 40, minMonthlySales: 2 });
   // Both for her and any product, so equally specific: the highest tier reached wins. Sales 1 and
   // 2 (0 and 1 before them this month): 30% of $50. Sale 3: 40%.
-  const customers = [await sell("ana"), await sell("ana"), await sell("ana")];
+  const customers = [await sale("ana"), await sale("ana"), await sale("ana")];
   expect(commissionOf(await salesOf("ana"), customers)).toEqual([1500, 1500, 2000]);
 });
 
@@ -59,8 +41,8 @@ test("a capped rule stops paying for a customer once the cap is reached", async 
   await addRule("priya", { percent: 50, capPerCustomerCents: 3000 });
   const repeat = { email: `${crypto.randomUUID()}@buyer.test`, address: null };
   // One customer three times: $20, then the $10 left under the cap, then nothing.
-  for (const _ of [1, 2, 3]) await sell("priya", { amount_total: 4000, customer_details: repeat });
-  const other = await sell("priya", { amount_total: 4000 }); // another customer: $20 again
+  for (const _ of [1, 2, 3]) await sale("priya", { amount_total: 4000, customer_details: repeat });
+  const other = await sale("priya", { amount_total: 4000 }); // another customer: $20 again
   const sales = await salesOf("priya");
   expect(
     sales
@@ -112,17 +94,14 @@ test("a renewal pays the first sale's partner for their recurring months, once p
   // Paid for 3 months only: 95 days after the first sale, the next invoice earns nothing.
   await (
     await adminBus()
-  ).act("/admin", "changePartner", "Change partner", {
-    id: seededPartnerId("maya"),
-    recurringMonths: 3,
-  });
+  ).act("/admin", "changePartner", { id: seededPartnerId("maya"), recurringMonths: 3 });
   await stripeEvent("invoice.paid", invoice(2));
   expect(await renewals()).toEqual([725]);
 });
 
 test("commission is on the price, not the tax collected with it", async () => {
   // Leo, 20%: a $50 sale with $5 tax on top earns 20% of $50.
-  const customer = await sell("leo", {
+  const customer = await sale("leo", {
     amount_total: 5500,
     total_details: { amount_discount: 0, amount_shipping: 0, amount_tax: 500 },
   });

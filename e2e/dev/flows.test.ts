@@ -1,73 +1,59 @@
 // Partners, referral links, signup referrals, checkout attribution, and sales and refunds from
-// Stripe's webhook: the seeded people (apps/affiliates/demo.ts) in a browser, the shop's calls, and
-// Stripe's events, through both apps. Each check is a change from what the seed starts with.
+// Stripe's webhook: the seeded people (apps/affiliates/demo.ts), the shop's calls, and Stripe's
+// events, through the apps. No browser: people's actions are sent as their pages send them, and
+// what each did is read from the state stream of whoever did it, or the admin's (bus.ts). What a
+// page shows of it is pages.test.ts's.
 import { expect, test } from "vite-plus/test";
+import { adminBus, createAccount, sell, stripeEvent, watch, written } from "./bus.ts";
 import {
   AFFILIATES,
-  apply,
   checkoutVia,
   demoPartner,
   follow,
-  linksOf,
-  newBrowser,
-  open,
   paidSession,
-  partnerButton,
-  partnerMe,
-  partnerPage,
-  press,
-  saleOf,
-  salesOf,
-  seededPartner,
   seededPartnerId,
   SHOP,
   shop,
-  signInAs,
-  signUp,
-  stripeEvent,
-  userIdOf,
 } from "./helpers.ts";
 
 test("applying makes a pending partner; only an admin can approve", async () => {
-  const chris = await signInAs("chris@demo.test"); // a customer who never applied
-  await apply(chris);
-  expect((await partnerPage(chris)).status).toBe("pending");
+  const chris = await watch("chris@demo.test"); // a customer who never applied
+  await chris.act("/", "apply", { name: "Chris Park", acceptTerms: true });
+  const [applied] = (await chris.state()).partners();
+  expect(applied).toMatchObject({ email: "chris@demo.test", status: "pending" });
 
-  // Not an admin: the admin page says so. Signed out: it sends you to the shop's sign-in.
-  await open(chris.page, `${AFFILIATES}/admin`);
-  await chris.page.getByText("Admins only").waitFor();
-  const stranger = await newBrowser();
-  await open(stranger.page, `${AFFILIATES}/admin`);
-  expect(stranger.page.url()).toBe(
+  // Not an admin: the admin page refuses. Signed out: it sends you to the shop's sign-in.
+  expect((await chris.get("/admin")).status).toBe(403);
+  const stranger = await fetch(`${AFFILIATES}/admin`, { redirect: "manual" });
+  expect(stranger.status).toBe(302);
+  expect(stranger.headers.get("location")).toBe(
     `${SHOP}/?redirect=${encodeURIComponent(`${AFFILIATES}/admin`)}`,
   );
+  // Nor can they approve themselves.
+  await expect(
+    chris.act("/admin", "changePartner", { id: applied?.id, status: "active" }),
+  ).rejects.toThrow("403");
 
-  await partnerButton(chris.name, "Approve");
-  expect((await partnerPage(chris)).status).toBe("active");
+  await (await adminBus()).act("/admin", "changePartner", { id: applied?.id, status: "active" });
+  expect((await written()).partners().find((p) => p.id === applied?.id)?.status).toBe("active");
+  chris.close();
 });
 
-test("a referral link sends the visitor to the shop, sets the cookie and counts one click", async () => {
-  const ana = await seededPartner("ana");
-  const before = (await partnerMe(ana)).clicks;
+test("a referral link sends the visitor to the shop and sets the cookie", async () => {
   const first = await follow(`/r/ana?utm_source=youtube`);
   expect(first.status).toBe(302);
   expect(first.location).toBe(`${SHOP}/?utm_source=youtube`);
   expect(first.cookie).toMatch(/^affiliate_ref=[0-9a-f-]{36}$/);
-  await follow(`/r/ana`); // same visitor again: still one click
-  expect((await partnerMe(ana)).clicks).toBe(before + 1);
 });
 
-test("a short link counts its own clicks and sales", async () => {
-  const priya = await seededPartner("priya");
-  await open(priya.page, `${AFFILIATES}/`);
-  await priya.page.getByLabel("Goes to").fill("/pricing");
-  await priya.page.getByLabel("Campaign").fill("Newsletter");
-  await press(priya.page, priya.page.getByRole("button", { name: "Create link" }));
-  await priya.page.getByRole("cell", { name: "Newsletter" }).waitFor();
-  const link = (await linksOf(priya)).find((l) => l.campaign === "Newsletter");
+test("a short link goes where it says, and its sales are its own", async () => {
+  const priya = await watch(demoPartner("priya").email);
+  await priya.act("/", "createLink", { destination: "/pricing", campaign: "Newsletter" });
+  const link = (await priya.state()).links().find((l) => l.campaign === "Newsletter");
   if (!link) throw new Error("no link made");
+  priya.close();
 
-  const followed = await follow(new URL(link.url).pathname);
+  const followed = await follow(`/r/${link.slug}`);
   expect(followed.location).toBe(`${SHOP}/pricing`);
   const checkout = await shop().checkout({
     userId: null,
@@ -75,21 +61,23 @@ test("a short link counts its own clicks and sales", async () => {
     promoCode: null,
     ip: null,
   });
-  await stripeEvent("checkout.session.completed", paidSession(checkout.metadata));
-  expect((await linksOf(priya)).find((l) => l.campaign === "Newsletter")).toMatchObject({
-    clicks: 1,
-    sales: 1,
-  });
+  const session = paidSession(checkout.metadata);
+  await stripeEvent("checkout.session.completed", session);
+  const email = (session.customer_details as { email: string }).email;
+  expect((await written()).sales().filter((s) => s.customerEmail === email)).toEqual([
+    expect.objectContaining({ partnerId: seededPartnerId("priya"), linkId: link.id }),
+  ]);
 });
 
 test("a user who signs up through a referral link stays the partner's at checkout, without the cookie", async () => {
-  const leo = await seededPartner("leo");
-  const before = (await partnerMe(leo)).signups;
-  const buyer = await signUp("Buyer", { via: `/r/leo` });
-  const userId = await userIdOf(buyer);
-  // The shop published the sign-up, and the service, following it, recorded it
-  // (apps/shop/src/published.ts, apps/affiliates/queues/wakes.ts).
-  expect((await partnerMe(leo)).signups).toBe(before + 1);
+  const { cookie } = await follow(`/r/leo`);
+  // The shop publishes the sign-up to the hub, and the service, following it, records it
+  // (apps/shop/src/published.ts, apps/affiliates/queues/wakes.ts): one action, "Sign up".
+  const userId = await (await adminBus()).during("Sign up", () => createAccount("Buyer", cookie));
+  expect((await written()).referrals().find((r) => r.userId === userId)).toMatchObject({
+    partnerId: seededPartnerId("leo"),
+    source: "signup",
+  });
   const checkout = await shop().checkout({ userId, ref: null, promoCode: null, ip: null });
   expect(checkout.metadata).toMatchObject({
     affiliate_partner_id: seededPartnerId("leo"),
@@ -121,19 +109,17 @@ test("checkout without a referral uses the cookie, and nothing without either", 
 });
 
 test("a paid checkout becomes a sale once, on hold", async () => {
-  const priya = await seededPartner("priya");
-  const session = paidSession((await checkoutVia(priya)).metadata);
+  const session = paidSession((await checkoutVia({ code: "priya" })).metadata);
   await stripeEvent("checkout.session.completed", session);
   await stripeEvent("checkout.session.completed", session); // Stripe sending it again
   const email = (session.customer_details as { email: string }).email;
-  expect((await salesOf(priya.name)).filter((s) => s.customer === email)).toEqual([
+  expect((await written()).sales().filter((s) => s.customerEmail === email)).toEqual([
     expect.objectContaining({ status: "pending", commissionCents: 1000 }), // her 20% of $50
   ]);
 });
 
 test("a refund or dispute in full marks the sale refunded, even when it arrives first; a won dispute undoes it", async () => {
-  const leo = await seededPartner("leo");
-  const { metadata } = await checkoutVia(leo);
+  const { metadata } = await checkoutVia({ code: "leo" });
   const sale = paidSession(metadata);
   await stripeEvent("checkout.session.completed", sale);
   await stripeEvent("charge.refunded", {
@@ -155,25 +141,30 @@ test("a refund or dispute in full marks the sale refunded, even when it arrives 
   };
   await stripeEvent("charge.dispute.created", dispute);
   await stripeEvent("checkout.session.completed", early);
-  expect((await saleOf(leo.name, sale))?.status).toBe("refunded");
-  expect((await saleOf(leo.name, early))?.status).toBe("refunded");
+  const of = async (session: Record<string, unknown>) =>
+    (await written()).sales().find((s) => s.paymentIntent === session.payment_intent);
+  expect((await of(sale))?.status).toBe("refunded");
+  expect((await of(early))?.status).toBe("refunded");
 
   // The dispute is won: the sale earns its commission again, back through the hold period.
   await stripeEvent("charge.dispute.closed", { ...dispute, status: "won" });
-  expect(await saleOf(leo.name, early)).toMatchObject({
+  expect(await of(early)).toMatchObject({
     status: "pending",
     commissionCents: 1000,
-    notes: "",
+    refundedCents: 0,
   });
 });
 
 test("a partner buying for themselves is flagged", async () => {
-  const priya = await seededPartner("priya");
-  const session = paidSession((await checkoutVia(priya)).metadata, {
-    customer_details: { email: "PRIYA@demo.test", address: null },
-  });
-  await stripeEvent("checkout.session.completed", session);
-  expect((await saleOf(priya.name, session))?.notes).toBe("Flagged: the partner's own email");
+  const { customer } = await sell(
+    { code: "priya" },
+    { customer_details: { email: "PRIYA@demo.test", address: null } },
+  );
+  // Emails are kept lowercase.
+  expect(customer).toBe("PRIYA@demo.test");
+  expect(
+    (await written()).sales().find((s) => s.customerEmail === "priya@demo.test"),
+  ).toMatchObject({ fraudReason: "self_email" });
 });
 
 test("a suspended partner's referrals and links stop counting", async () => {
@@ -184,5 +175,5 @@ test("a suspended partner's referrals and links stop counting", async () => {
   expect(checkout.metadata).toEqual({});
   const session = paidSession({ affiliate_partner_id: ken, affiliate_source: "cookie" });
   await stripeEvent("checkout.session.completed", session);
-  expect(await saleOf(demoPartner("ken").name, session)).toBeUndefined();
+  expect((await written()).sales().filter((s) => s.partnerId === ken)).toEqual([]);
 });

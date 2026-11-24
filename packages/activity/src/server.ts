@@ -25,7 +25,7 @@ export type Sink = (event: ActivityEvent, viewers: Viewers) => Promise<void>;
  * state as Durable State writes it (@durable-streams/state): this thing, by its type and key, was
  * inserted, updated or deleted, with its value.
  */
-export type StateSink = (change: ChangeEvent, viewers: Viewers) => Promise<void>;
+export type StateSink = (changes: ChangeEvent[], viewers: Viewers) => Promise<void>;
 
 let app = "app";
 let sink: Sink = async () => {};
@@ -46,9 +46,9 @@ export function setupActivity(options: { app: string; sink: Sink; state?: StateS
  */
 export async function outcome(...changes: ChangeEvent[]) {
   const trace = current.getStore();
-  if (!trace) return;
+  if (!trace || changes.length === 0) return;
   try {
-    for (const change of changes) await stateSink(change, trace.viewers);
+    await stateSink(changes, trace.viewers);
   } catch (error) {
     console.error("activity: couldn't write an outcome", error);
   }

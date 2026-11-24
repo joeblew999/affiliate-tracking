@@ -9,11 +9,11 @@ import { hub } from "./hub.ts";
 setupActivity({
   app: "affiliates",
   sink: async (event, viewers) => {
-    await hub.append(viewers, event, event.type === "started");
+    await hub.append(viewers, [event], event.type === "started");
   },
   // What a step did (src/outcomes.ts), on the same viewers' state streams.
-  state: async (change, viewers) => {
-    await hub.append(viewers.map(stateStreamOf), change);
+  state: async (changes, viewers) => {
+    await hub.append(viewers.map(stateStreamOf), changes);
   },
 });
 
