@@ -7,8 +7,8 @@ It's an app of its own (the **service**). Your app (the **host**) keeps its user
 Stripe, and calls the service. This repo has both: the service, and an example shop as the host.
 A third worker, the **hub**, holds the streams they both write to and follow.
 
-Live demo: **https://shop.ubuntusoftware.net** (the shop) and
-**https://affiliates.shop.ubuntusoftware.net** (the service).
+Not deployed at the moment (its earlier deployment was removed on 2026-11-24, before the hub
+moved to D1): run it locally (Develop, below).
 
 Built with [Void](https://void.cloud) and [Vite+](https://viteplus.dev): Cloudflare Workers, D1,
 Drizzle and Better Auth, with React and [shadcn](https://ui.shadcn.com) for the pages. Rebuilt
@@ -193,8 +193,9 @@ every push.
 
 ## Deploy
 
-The apps run on Cloudflare account `7384af54e33b8a54ff240371ea368440`. Their addresses are set in
-each app's `void.config.ts` (the hub has none).
+Nothing of the example is deployed now. Each app's address is set in its `void.config.ts`
+(`shop.ubuntusoftware.net` and `affiliates.shop.ubuntusoftware.net`: put your own there); the
+hub gets a `workers.dev` address of its own.
 
 To deploy an app, in its folder (the hub, at the repo's root, first, then `examples/affiliates`
 or `examples/shop`):
@@ -206,7 +207,7 @@ void deploy --platform cloudflare
 ```
 
 Commit each app's `void.lock.json` after deploying: it records the app's database and other
-Cloudflare resources.
+Cloudflare resources. (The example's apps have none in the repo now: a first deploy writes them.)
 
 `vp run demo:production` replaces the live databases with the demo. Use it only on the demo site.
 On a demo site, set the service's `AFFILIATES_DEMO` (to anything): its admins then get a **Reset

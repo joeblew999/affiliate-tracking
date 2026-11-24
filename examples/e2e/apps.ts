@@ -62,16 +62,23 @@ const HUB_FILES = new Set([
 /** Where a copy's source is: the hub at the repo's root, anything else of the repo's in examples/. */
 const sourceOf = (name: string) => (name === "hub" ? ROOT : join(ROOT, "examples", name));
 
-/** Copy what a copy is made of, from its source: what's generated left out, and for the hub, all
- * but its own files. */
+/**
+ * Copy what a copy is made of, from its source: what's generated left out. The hub's own files one
+ * by one, since the rest of the repo (this copy included) is beside them at the root.
+ */
 function copyFiles(name: string, source: string, root: string) {
+  if (name === "hub") {
+    mkdirSync(root, { recursive: true });
+    for (const file of HUB_FILES)
+      cpSync(join(source, file), join(root, file), {
+        recursive: true,
+        filter: (path) => !GENERATED.has(basename(path)),
+      });
+    return;
+  }
   cpSync(source, root, {
     recursive: true,
-    filter: (path) => {
-      const top = relative(source, path).split("/")[0] ?? "";
-      if (GENERATED.has(top)) return false;
-      return name !== "hub" || top === "" || HUB_FILES.has(top);
-    },
+    filter: (path) => !GENERATED.has(relative(source, path).split("/")[0] ?? ""),
   });
 }
 

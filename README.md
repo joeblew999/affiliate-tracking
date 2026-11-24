@@ -218,7 +218,7 @@ test:dev`); the hub's correctness is the conformance suite's, not the example's.
 
 ## Status
 
-- The hub, its protocol and its subscriptions: done, and all 344 conformance tests pass (locally).
+- The hub, its protocol and its subscriptions: done, and all 344 conformance tests pass.
 - Not deployed yet. The **Deploy to Cloudflare** button: to come.
 - The client on npm: to come; until then it's `client.ts` and `bus.ts` here.
 - Timing it from around the world with cloudflare-ping: to come.
