@@ -10,8 +10,19 @@
     "noUnusedLocals": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "lib": ["ES2025"],
+    "jsx": "react-jsx",
+    "lib": ["ES2025", "DOM", "DOM.Iterable"],
     "types": ["void/env"]
   },
-  "include": ["src", "routes", "crons", "durable-objects", "middleware", "db", "scripts", "*.ts"]
+  "include": [
+    "src",
+    "routes",
+    "crons",
+    "durable-objects",
+    "middleware",
+    "db",
+    "scripts",
+    "pages",
+    "*.ts"
+  ]
 }

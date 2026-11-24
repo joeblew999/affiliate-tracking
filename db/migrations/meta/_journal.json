@@ -15,6 +15,13 @@
       "when": 1795507456176,
       "tag": "20261124080416_red_the_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1795508358510,
+      "tag": "20261124081918_closed_cyclops",
+      "breakpoints": true
     }
   ]
 }

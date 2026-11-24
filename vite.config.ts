@@ -2,9 +2,12 @@
 // projects. `vp dev` runs the hub; `vp run <task>` runs a task from anywhere.
 import { defineConfig } from "vite-plus";
 import { voidPlugin } from "void";
+import { voidReact } from "@void/react/plugin";
+import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  plugins: [voidPlugin()],
+  // The hub's console is Void pages, in React with shadcn (pages/, src/components/ui).
+  plugins: [voidPlugin(), voidReact(), tailwindcss()],
   environments: {
     void_worker: {
       // Found when the server starts, not on the first request that uses them (which reloads the

@@ -151,12 +151,34 @@ export const followed = follower({
 // `await followed.deal(wake)`: reads on, does the work for each event, acknowledges.
 ```
 
+**Or with no client at all.** Publishing is one request, and following can be one route: ask the
+hub to send you a stream's events, and answer 200.
+
+```ts
+// Once: "send me orders/paid". The answer has a secret the hub sends with every delivery.
+await fetch("https://durable-streams.<your-account>.workers.dev/v1/push/receipts", {
+  method: "PUT",
+  headers: { authorization: `Bearer ${env.HUB_KEY}`, "content-type": "application/json" },
+  body: JSON.stringify({ streams: ["orders/paid"], url: "https://emails.example.com/api/events" }),
+});
+
+// Your route: { delivery, stream, events, offset }, with the secret in `x-hub-secret`.
+// A 2xx acknowledges the batch; anything else, and the hub sends it again later.
+```
+
 A Worker the hub can't reach (local, behind a firewall) follows with a **pull-wake** subscription
 instead, or reads live (`?live=sse` or `long-poll`): it makes the connection, so it needs no
 address of its own.
 
 Until the client is on npm, take it from this repo (`client.ts` and `bus.ts`, with
 `@durable-streams/client` and `zod`).
+
+## The console
+
+The hub's own address is its console: sign in as one of its admins (the first time, "First time"
+sets your password). Per organization: its streams (open one to see its events, newest first,
+with each new one as it's written), who follows what and whether each has caught up, and its keys
+(make one per Worker, revoke one). Void pages with [shadcn](https://ui.shadcn.com), in `pages/`.
 
 ## The protocol, at `/v1/stream`
 
@@ -206,6 +228,10 @@ The hub is a [Void](https://void.cloud) app at this repo's root:
   write tells it where the stream now ends, with the write's bookmark; a waiting reader then reads
   from its own replica from that bookmark. A notice lost to a restart only delays a reader, which
   looks again when its wait runs out.
+- **Organizations are kept apart by address.** A Worker asks for `/v1/stream/orders/paid`; inside,
+  that is `/v1/o/<organization>/stream/orders/paid`, with the organization its key is of. Each
+  has its own streams, subscriptions and directory, so nothing of one is reachable from another
+  (`src/streams.ts`; `test/organizations.test.ts` tries).
 - **Subscriptions** are Durable Objects of their own: what each follows, how far it has
   acknowledged, and its wake (a lease, sent again if it runs out; a failed delivery tried again
   with backoff). Wakes are signed (Ed25519, the protocol's webhooks); a subscriber checks them
@@ -247,7 +273,10 @@ test:dev`); the hub's correctness is the conformance suite's, not the example's.
 
 ## Status
 
-- The hub, its protocol and its subscriptions: done, and all 344 conformance tests pass.
+- The hub, its protocol and its subscriptions: done, and all 344 conformance tests pass, with 4
+  more of the hub's own (organizations kept apart; delivery by one route).
+- Its console: streams, followers, keys. To come: the map of who follows what, one event's chain
+  across Workers, and the views an app shows in its own pages.
 - Deployed, used, removed and deployed again with `vp run deploy` and `vp run destroy`. The
   **Deploy to Cloudflare** button: to come.
 - The client on npm: to come; until then it's `client.ts` and `bus.ts` here.

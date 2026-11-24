@@ -811,7 +811,7 @@ export function createD1Streams<Env>(options: D1StreamsOptions<Env>) {
       normalizeContentType(freshMeta.contentType) === "application/json"
         ? formatJsonMessages(fragments)
         : concatBytes(fragments);
-    return reply(200, headers, body);
+    return reply(200, headers, body as BodyInit);
   }
 
   /**

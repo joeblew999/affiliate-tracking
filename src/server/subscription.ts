@@ -82,6 +82,8 @@ export type SubscriptionState = {
   };
   /** Where the streams are served: the address ("https://host/v1/stream") and its path part. */
   base: string;
+  /** The address given out (where a wake is answered, where the keys are), if not `base`. */
+  shown?: string;
   root: string;
   /** The server's key its wakes are signed with, and the secret its own tokens are signed with. */
   signing: SigningKey | null;
@@ -221,7 +223,7 @@ function serialize(state: SubscriptionState): Record<string, unknown> | null {
       signing: {
         alg: "ed25519",
         kid: state.signing?.public.kid,
-        jwks_url: `${state.base}/__ds/jwks.json`,
+        jwks_url: `${state.shown ?? state.base}/__ds/jwks.json`,
       },
     },
     wake_stream: record.wake_stream,
@@ -363,7 +365,7 @@ async function deliver(context: Context, options: SubscriptionOptions) {
     wake_id: state.wake_id,
     generation: state.generation,
     streams: streamInfos(state),
-    callback_url: `${state.base}/__ds/subscriptions/${encodeURIComponent(record.id)}/callback`,
+    callback_url: `${state.shown ?? state.base}/__ds/subscriptions/${encodeURIComponent(record.id)}/callback`,
     callback_token: state.token,
   });
   const init: RequestInit = {
@@ -442,7 +444,7 @@ const methods = {
     input: SubscriptionInput,
     configHash: string,
     links: NewLink[],
-    where: { base: string; root: string; signing: SigningKey },
+    where: { base: string; root: string; signing: SigningKey; shown?: string },
   ): Promise<
     | { created: boolean; subscription: Record<string, unknown> }
     | { error: { code: ErrorCode; message: string } }
@@ -485,6 +487,7 @@ const methods = {
       config_hash: configHash,
     };
     state.base = where.base;
+    state.shown = where.shown;
     state.root = where.root;
     state.signing = where.signing;
     state.token_secret = newTokenSecret();

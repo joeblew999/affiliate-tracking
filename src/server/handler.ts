@@ -28,6 +28,11 @@ import {
 export type StreamsOptions<Env> = {
   /** Where it's mounted: the path before a stream's own, such as "/v1/stream". */
   root: string;
+  /**
+   * The path subscribers are given (where a wake is answered, where the signing keys are), when
+   * it isn't `root`: an app that mounts these streams under one path and shows them at another.
+   */
+  shownRoot?: string;
   /** The protocol server for the streams themselves: src/server/d1's `createD1Streams()`. */
   streams: (request: Request, env: Env) => Promise<Response>;
   /** The app's three durable states (its `durable-objects/`), made from this package's. */
@@ -175,6 +180,7 @@ export function createStreams<Env>(options: StreamsOptions<Env>) {
       const result = await subscriptions.get(id).create(id, input, await configHash(input), links, {
         base,
         root,
+        shown: options.shownRoot ? `${new URL(base).origin}${options.shownRoot}` : undefined,
         signing: await signing.get("signing").key(),
       });
       if ("error" in result)

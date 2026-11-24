@@ -48,6 +48,8 @@ const HUB_FILES = new Set([
   "auth.ts",
   "bus.ts",
   "client.ts",
+  "components.json",
+  "pages",
   "crons",
   "db",
   "durable-objects",

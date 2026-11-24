@@ -60,7 +60,7 @@ if (import.meta.main) {
   // (`vp run key -- …` hands the `--` on too.)
   const [url, email, password, name, organization] = process.argv
     .slice(2)
-    .filter((arg) => arg !== "--");
+    .filter((arg: string) => arg !== "--");
   if (!url || !email || !password)
     throw new Error("vp run key -- <hub's address> <admin email> <password> [name] [organization]");
   console.log(await hubKey({ url, email, password, name, organization }));

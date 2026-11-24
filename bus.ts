@@ -14,19 +14,32 @@ import {
   type PublicJwk,
   type Wake,
 } from "./src/server/subscriber.ts";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { z } from "zod";
 import { STREAMS, type Hub } from "./client.ts";
 
 export type { Wake };
 
-/** An event on a followed stream: what happened, and what came with it (Carry). */
-const Published = z.object({
+/**
+ * An event on a followed stream, the same envelope for every one: what happened, the event that
+ * caused it, and what came with it (Carry). The causes are what make a chain across Workers
+ * something that can be shown: this event, who took it, what they published because of it.
+ */
+export const Published = z.object({
   /** The event's own id. */
   id: z.string(),
   type: z.string(),
   data: z.unknown(),
+  /** The event a follower was dealing with when it published this one; null for a first cause. */
+  causedBy: z.string().nullable().default(null),
+  /** When it was published (ms). */
+  at: z.number().optional(),
   carried: z.unknown().nullable(),
 });
+export type Published = z.infer<typeof Published>;
+
+/** The event the current work is for: what anything it publishes was caused by. */
+const dealing = new AsyncLocalStorage<string>();
 
 /**
  * What travels with an event, and how a follower's work for it runs. Each follower's part has an
@@ -57,7 +70,14 @@ const partOf = (eventId: string, subscription: string) => `${eventId}:${subscrip
 export function publisher(hub: Hub, carry: Carry = nothing) {
   return async (stream: string, type: string, data: unknown): Promise<void> => {
     const id = crypto.randomUUID();
-    const event: z.input<typeof Published> = { id, type, data, carried: carry.current() };
+    const event: z.input<typeof Published> = {
+      id,
+      type,
+      data,
+      causedBy: dealing.getStore() ?? null,
+      at: Date.now(),
+      carried: carry.current(),
+    };
     const { subscriptions } = await hub.append(stream, [event]);
     for (const subscription of subscriptions)
       await carry.waiting(partOf(id, subscription), `${type}: ${subscription}`);
@@ -166,7 +186,7 @@ export function follower(options: {
         }
         for (const raw of events) {
           const event = Published.parse(raw);
-          const work = () => one.handle(event.data);
+          const work = () => dealing.run(event.id, () => one.handle(event.data));
           if (event.carried === null) await work();
           else
             await carry.run(event.carried, partOf(event.id, wake.subscription_id), one.title, work);
