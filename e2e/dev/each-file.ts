@@ -13,7 +13,8 @@ declare global {
 const system = inject("system");
 if (system) {
   globalThis.apps = { ...system, now: () => systemNow(system) };
-  const { closeBrowsers, resetDemo, startTest } = await import("./helpers.ts");
+  const { closeBrowsers, startTest } = await import("./helpers.ts");
+  const { closeBus, resetDemo } = await import("./bus.ts");
   beforeAll(resetDemo);
   beforeEach(() => {
     startTest();
@@ -23,4 +24,5 @@ if (system) {
     });
   });
   afterAll(closeBrowsers);
+  afterAll(closeBus);
 }

@@ -7,6 +7,12 @@ export default defineEnv({
   // The host's site: where referral links send visitors (routes/r/[slug].ts), and where people sign
   // in (src/user.ts).
   HOST_SITE_URL: url(),
+  // Sent with every call to the hub (apps/hub: its middleware/01.workers.ts checks it). The same
+  // value is in the hub's env and every other worker's.
+  HUB_TOKEN: string(),
+  // This service's own address: where the hub wakes it when a stream it follows has something new
+  // (src/hub.ts).
+  AFFILIATES_SITE_URL: url().default("http://localhost:5174"),
   // The parent domain the referral cookie is set for, so the host's site receives it, e.g.
   // ".example.com". Unset locally: localhost shares cookies across ports.
   AFFILIATES_COOKIE_DOMAIN: string().optional(),

@@ -1,7 +1,13 @@
-// The control plane's streams are the shop's (apps/shop/routes/streams/[...path].ts). This app's
-// pages read them at their own address, and the request goes on to the shop as it is, sign-in
-// cookie included: the shop decides who may read what.
+// A page's read of a stream (the Activity pane, packages/activity). The streams are the hub's;
+// who is signed in is the shop's to say (middleware/01.user.ts asks it). So this app decides (your
+// own stream, or any if you're an admin: packages/activity's mayRead) and passes the read on to
+// the hub.
+import { mayRead } from "activity";
 import { defineHandler } from "void";
-import { toShop } from "../../src/user.ts";
+import { hub } from "../../src/hub.ts";
 
-export const GET = defineHandler((c) => toShop(c));
+export const GET = defineHandler((c) => {
+  const stream = c.req.param("path") ?? "";
+  if (!mayRead(c.get("shopUser"), stream)) return c.text("Not yours", 403);
+  return hub.read(c.req.raw, stream);
+});

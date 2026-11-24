@@ -173,6 +173,7 @@ export function createStreams<Env>(options: StreamsOptions<Env>) {
       await Promise.all(
         input.streams.map((stream) => directory.get(shardOf(stream)).follow(id, { stream })),
       );
+      await directory.get(ANY).enrol(id);
       return json(result.created ? 201 : 200, result.subscription);
     }
     if (request.method === "GET") {
@@ -186,6 +187,7 @@ export function createStreams<Env>(options: StreamsOptions<Env>) {
       const shards = new Set(was.streams.map(shardOf));
       if (was.pattern) shards.add(shardOf(was.pattern));
       await Promise.all([...shards].map((shard) => directory.get(shard).forget(id)));
+      await directory.get(ANY).strike(id);
       return new Response(null, { status: 204 });
     }
     return notAllowed();
@@ -378,6 +380,11 @@ export function createStreams<Env>(options: StreamsOptions<Env>) {
           if (tail > ZERO_OFFSET) await subscriptions.get(id).appended(path, tail);
         }),
       );
+    },
+
+    /** recheck(), for every subscription there is. */
+    async recheckAll(env: Env, origin: string): Promise<void> {
+      for (const id of await directory.get(ANY).enrolled()) await this.recheck(env, origin, id);
     },
   };
 }

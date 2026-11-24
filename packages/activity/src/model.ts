@@ -109,3 +109,26 @@ export function shown(actions: Map<string, Action>): Action[] {
   const old = new Set(all.filter((a) => a.state !== "running").slice(KEEP_FINISHED));
   return all.filter((a) => !old.has(a));
 }
+
+/** Who is signed in, as far as reading the control plane goes. */
+export type Reader = { id: string; role?: string | null };
+
+/**
+ * A viewer's state stream: the results of the actions that concern them, as changes of state
+ * (Durable State). Beside their stream of the actions themselves, which is named by the viewer
+ * alone.
+ */
+export const stateStreamOf = (viewer: string) => `state/${viewer}`;
+
+/**
+ * Whether a signed-in person may read a stream in their browser: their own two (their actions,
+ * named by their id, and their state stream), or any viewer's if they're an admin (everyone's
+ * actions, and a person's own while viewing the program as them). Never the streams' own control
+ * routes. An app's /streams route asks this, then passes the read on to the hub.
+ */
+export function mayRead(reader: Reader | null, stream: string): boolean {
+  if (reader === null) return false;
+  const viewer = stream.startsWith("state/") ? stream.slice("state/".length) : stream;
+  if (viewer === "" || viewer.includes("/") || viewer.startsWith("__ds")) return false;
+  return viewer === reader.id || reader.role === "admin";
+}

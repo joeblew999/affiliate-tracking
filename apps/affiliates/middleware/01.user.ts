@@ -6,7 +6,8 @@
 import { HTTPException } from "hono/http-exception";
 import { defineMiddleware } from "void";
 import { env } from "void/env";
-import { currentUser, signInUrl, toShop, type User } from "../src/user.ts";
+import { hub } from "../src/hub.ts";
+import { currentUser, signInUrl, type User } from "../src/user.ts";
 
 declare module "void" {
   interface CloudContextVariables {
@@ -23,22 +24,17 @@ declare module "void" {
 
 /**
  * Not for this app to say who's asking: the shop's Better Auth itself, referral links, the shop's
- * own calls, the payouts account's Stripe webhook, and the control plane's streams (the shop
- * decides who may read those).
+ * own calls, the payouts account's Stripe webhook, and the hub's wakes (signed).
  */
-const PUBLIC_PREFIXES = ["/api/auth/", "/r/", "/api/host/", "/api/stripe/", "/streams/"];
+const PUBLIC_PREFIXES = ["/api/auth/", "/r/", "/api/host/", "/api/stripe/", "/api/hub/"];
 const PAGES = new Set(["/", "/admin"]);
 
-/** A viewer's latest activity, from the shop (its /api/affiliates/recent). */
-async function recentActivity(c: Parameters<typeof toShop>[0], viewer: string) {
-  const res = await toShop(
-    c,
-    new Request(new URL(`/api/affiliates/recent?viewer=${encodeURIComponent(viewer)}`, c.req.url), {
-      headers: { authorization: `Bearer ${env.AFFILIATES_HOST_TOKEN}` },
-    }),
-  );
-  return res.ok ? ((await res.json()) as { events: unknown[]; offset: string }) : null;
-}
+/** A viewer's latest activity, from the hub; none if it can't be reached (the page still shows). */
+const recentActivity = (viewer: string) =>
+  hub.recent(viewer).catch((error: unknown) => {
+    console.error("hub: couldn't read recent activity", error);
+    return null;
+  });
 
 export default defineMiddleware(async (c, next) => {
   const path = c.req.path;
@@ -52,9 +48,9 @@ export default defineMiddleware(async (c, next) => {
   c.set("shared", {
     shopUrl: env.HOST_SITE_URL,
     viewer,
-    // Only for a page itself: asked of the shop, which has the streams.
+    // Only for a page itself.
     activity:
-      viewer && PAGES.has(path) && c.req.method === "GET" ? await recentActivity(c, viewer) : null,
+      viewer && PAGES.has(path) && c.req.method === "GET" ? await recentActivity(viewer) : null,
     user: user && {
       email: user.email,
       isAdmin: user.role === "admin",

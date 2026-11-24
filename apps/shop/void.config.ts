@@ -19,9 +19,13 @@ export default defineConfig({
   // plane's wrapper (src/activity.ts), which Void's scan of the app doesn't see.
   inference: { bindings: { email: true } },
   // AFFILIATES: the affiliate service (apps/affiliates), called through its client.
+  // HUB: the streams (apps/hub), through its client (src/hub.ts).
   cloudflare: {
     name: "shop",
-    services: [{ binding: "AFFILIATES", service: "affiliates" }],
+    services: [
+      { binding: "AFFILIATES", service: "affiliates" },
+      { binding: "HUB", service: "hub" },
+    ],
     // Deployed at (Cloudflare manages its DNS record and certificate):
     routes: [{ pattern: "shop.ubuntusoftware.net", custom_domain: true }],
     // Only there: no workers.dev address and no preview URLs (as set in Cloudflare).

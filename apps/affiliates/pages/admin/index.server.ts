@@ -27,6 +27,7 @@ import { addOrganiser, addVenue } from "../../src/payees.ts";
 import { shopUserByEmail } from "../../src/user.ts";
 import { now as clock } from "../../src/clock.ts";
 import { isDemo, resetDemo } from "../../src/demo-reset.ts";
+import { salesWritten } from "../../src/outcomes.ts";
 
 // The admin page: everything, for the host's admins only. ?partner=<id>: only that partner's sales
 // and payouts. ?links=<partner id>: that partner's short links too, for the dialog that shows them.
@@ -151,6 +152,7 @@ export const actions = {
       throw new HTTPException(409, {
         message: "Only a pending, approved or rejected sale (not a clawback) can be changed",
       });
+    await salesWritten([row.id]);
   }),
 
   // A one-off bonus: a sale of kind "bonus", approved straight away and paid with the partner's next
@@ -160,20 +162,24 @@ export const actions = {
       throw new HTTPException(404, { message: "No such active partner" });
     const currency = env.AFFILIATES_PAYOUT_CURRENCY.toLowerCase();
     const now = clock();
-    await db.insert(sales).values({
-      partnerId: body.partnerId,
-      kind: "bonus",
-      status: "approved",
-      amountCents: 0,
-      currency,
-      commissionCents: body.commissionCents,
-      grossCommissionCents: body.commissionCents,
-      payoutCurrency: currency,
-      payoutCents: body.commissionCents,
-      bonusNote: body.bonusNote,
-      createdAt: now,
-      approvedAt: now,
-    });
+    const [row] = await db
+      .insert(sales)
+      .values({
+        partnerId: body.partnerId,
+        kind: "bonus",
+        status: "approved",
+        amountCents: 0,
+        currency,
+        commissionCents: body.commissionCents,
+        grossCommissionCents: body.commissionCents,
+        payoutCurrency: currency,
+        payoutCents: body.commissionCents,
+        bonusNote: body.bonusNote,
+        createdAt: now,
+        approvedAt: now,
+      })
+      .returning({ id: sales.id });
+    await salesWritten([row?.id]);
   }),
 
   // A commission rule (src/commission.ts).

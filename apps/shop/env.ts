@@ -4,6 +4,9 @@ export default defineEnv({
   // Sent with every call to the affiliate service (its middleware/01.host-api.ts checks it). The
   // same value is in that app's env.
   AFFILIATES_HOST_TOKEN: string(),
+  // Sent with every call to the hub (apps/hub: its middleware/01.workers.ts checks it). The same
+  // value is in the hub's env and every other worker's.
+  HUB_TOKEN: string(),
   // Comma-separated emails that get the admin role when they sign up (auth.ts). Admins run the
   // affiliate program.
   ADMIN_EMAILS: string().default(""),

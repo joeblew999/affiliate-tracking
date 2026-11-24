@@ -5,6 +5,7 @@ import { partners, refundedPayments, sales } from "@schema";
 import { and, db, eq, inArray, isNull, lte, notExists, or } from "void/db";
 import { env } from "void/env";
 import { now as clock } from "./clock.ts";
+import { salesWritten } from "./outcomes.ts";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -41,5 +42,6 @@ export async function releaseHeldSales(now = clock()): Promise<number> {
       ),
     )
     .returning({ id: sales.id });
+  await salesWritten(released.map((sale) => sale.id));
   return released.length;
 }

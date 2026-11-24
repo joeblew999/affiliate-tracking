@@ -16,10 +16,10 @@ const ref = z.string().max(512).nullable();
 export const SignupInput = z.object({ userId, ref });
 
 /**
- * A user signed up on the host. Not a call: the host writes each one to a stream (Durable Streams,
- * packages/streams), and this service follows that stream with a subscription. So a sign-up is
- * kept in order whether or not this service is up, and it's this service that says how far it
- * has got.
+ * A user signed up on the host. Not a call: the host writes each one to a stream in the hub
+ * (apps/hub), and this service follows that stream with a subscription of its own (src/hub.ts).
+ * So a sign-up is kept in order whether or not this service is up, and it's this service that
+ * says how far it has got.
  */
 export const SIGNUPS_STREAM = "events/signups";
 export const SIGNUPS_SUBSCRIPTION = "affiliates-signups";

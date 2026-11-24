@@ -1,4 +1,4 @@
-// A wake from the shop's streams (routes/api/host/wake.ts): for each stream it says has something
+// A wake from the hub (routes/api/hub/wake.ts): for each stream it says has something
 // new, read on from what's acknowledged, deal with each event, then acknowledge up to there. If
 // anything fails the message is tried again (Void's queue), and the events not yet acknowledged
 // are read again, so dealing with an event twice has to be harmless.
@@ -6,7 +6,7 @@ import { acknowledge, readOn, type Wake } from "streams/subscriber";
 import { runStep } from "activity/server";
 import { defineQueue } from "../src/activity.ts";
 import { SignedUp, SIGNUPS_STREAM } from "../src/host-contract.ts";
-import { shopStreams, STREAMS } from "../src/hub.ts";
+import { hub, STREAMS } from "../src/hub.ts";
 import { recordSignupReferral } from "../src/referrals.ts";
 
 /** One event of a stream this service follows. */
@@ -28,19 +28,19 @@ async function deal(wake: Wake) {
   for (const stream of wake.streams) {
     if (!stream.has_pending) continue;
     const { events, offset } = await readOn<unknown>(
-      shopStreams,
+      hub.streams,
       `${STREAMS}/${stream.path}`,
       stream.acked_offset,
     );
     for (const event of events) await handle(stream.path, event, wake.subscription_id);
     acks.push({ stream: stream.path, offset });
   }
-  const outcome = await acknowledge(shopStreams, wake.callback_url, wake, acks);
+  const outcome = await acknowledge(hub.streams, wake.callback_url, wake, acks);
   // Read further than the subscription has yet heard the stream goes (a write it's still being
   // told of): acknowledge what the wake itself showed; the rest comes with the next wake.
   if (outcome === "ahead")
     await acknowledge(
-      shopStreams,
+      hub.streams,
       wake.callback_url,
       wake,
       wake.streams

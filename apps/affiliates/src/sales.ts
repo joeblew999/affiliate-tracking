@@ -10,6 +10,7 @@ import type Stripe from "stripe";
 import { db, eq } from "void/db";
 import { computeCommission, type CommissionItem } from "./commission.ts";
 import { selfReferralReason } from "./fraud.ts";
+import { salesWritten } from "./outcomes.ts";
 import { activePartner, partnerForPromotion } from "./partners.ts";
 import { settleReferral } from "./referrals.ts";
 import { ticketTerms } from "./events.ts";
@@ -106,6 +107,8 @@ export async function recordCheckoutSale(session: Stripe.Checkout.Session, event
   const organiser = eventId ? await recordOrganiserShare(session, sale, event) : null;
   const affiliate = await recordAffiliateSale(session, sale, event, lines);
   if (paymentIntent) await applyRefunds(paymentIntent);
+  // What was recorded, as it now stands, for whoever watches this happen (src/outcomes.ts).
+  await salesWritten([organiser, "saleId" in affiliate ? affiliate.saleId : null]);
   return { ...affiliate, organiserShare: organiser };
 }
 

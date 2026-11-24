@@ -7,6 +7,8 @@
     "typecheck": "tsc -p e2e && tsc -p ."
   },
   "devDependencies": {
+    "@durable-streams/client": "0.2.7",
+    "@durable-streams/state": "0.3.2",
     "@stripe/cli": "1.55.14",
     "@types/node": "26.6.6",
     "@void/edge": "catalog:",

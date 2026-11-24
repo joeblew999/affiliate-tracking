@@ -5,7 +5,6 @@
 import { createAuthClient } from "better-auth/client";
 import { chromium, type Browser, type BrowserContext, type Locator, type Page } from "playwright";
 import Stripe from "stripe";
-import { expect } from "vite-plus/test";
 import { affiliates } from "../../apps/affiliates/client.ts";
 import {
   customerOf,
@@ -240,16 +239,6 @@ export async function partnerButton(name: string, button: string): Promise<void>
   await press((await admin()).page, row.getByRole("button", { name: button, exact: true }));
 }
 
-/** Set a partner's renewals months, as an admin; done once the saved value comes back. */
-export async function setRenewalMonths(name: string, months: number): Promise<void> {
-  const label = `Months of renewals for ${name}`;
-  const { page } = await admin();
-  const input = (await partnerRow(name)).getByLabel(label);
-  await input.fill(String(months));
-  await act(page, () => input.blur());
-  expect(await (await partnerRow(name)).getByLabel(label).inputValue()).toBe(String(months));
-}
-
 export interface Partner extends Person {
   /** Their code: their referral link is /r/<code>. */
   code: string;
@@ -436,34 +425,6 @@ export async function runPayouts(): Promise<void> {
   await press(page, panel.getByRole("button", { name: "Run payouts" }));
   await pane.finished("Run payouts", { after: before });
 }
-/** A commission rule for one partner, added on the admin's Rules tab. */
-export async function addRule(
-  name: string,
-  rule: { percent: number; fromSales?: number; capPerCustomer?: string },
-): Promise<void> {
-  const panel = await adminTab(/^Rules/);
-  const form = panel.locator("form").first();
-  await form.getByPlaceholder("Percent").fill(String(rule.percent));
-  await form.getByLabel("Partner").selectOption({ label: name });
-  if (rule.fromSales)
-    await form.getByPlaceholder("From sales this month").fill(String(rule.fromSales));
-  if (rule.capPerCustomer)
-    await form.getByPlaceholder("Most per customer").fill(rule.capPerCustomer);
-  await press((await admin()).page, form.getByRole("button", { name: "Add rule" }));
-}
-
-/**
- * Put the demo back as it was (apps/affiliates/src/demo-reset.ts): the admin presses "Reset demo",
- * done once that action is. Before each test file (each-file.ts).
- */
-export async function resetDemo(): Promise<void> {
-  const page = await adminPage();
-  const pane = await activity(page);
-  const before = await pane.seen();
-  await press(page, page.getByRole("button", { name: "Reset demo" }));
-  await pane.finished("Reset demo", { after: before });
-}
-
 /** A one-off bonus, added on the admin's Rules tab. */
 export async function addBonus(name: string, amount: string, note: string): Promise<void> {
   const panel = await adminTab(/^Rules/);
@@ -503,7 +464,7 @@ export async function follow(path: string, userAgent = USER_AGENT) {
  * a ticket to this event (or none).
  */
 export async function checkoutVia(
-  partner: Partner | null,
+  partner: Pick<Partner, "code"> | null,
   { eventId = null as string | null } = {},
 ) {
   const { cookie } = partner ? await follow(`/r/${partner.code}`) : { cookie: null };
@@ -543,10 +504,11 @@ export async function inbox(): Promise<{ to: string; subject: string; text: stri
 }
 
 /**
- * A Stripe event, signed with the shop's webhook secret, sent to its Better Auth Stripe webhook
- * (which passes it on to the service); fails unless it's accepted.
+ * Send a Stripe event to the shop's Better Auth Stripe webhook (which passes it on to the
+ * service), signed with the shop's webhook secret; fails unless it's accepted. Accepted isn't
+ * dealt with: the shop queues it. See stripeEvent, and bus.ts's.
  */
-export async function stripeEvent(
+export async function sendStripeEvent(
   type: string,
   object: Record<string, unknown>,
   { daysAgo = 0 } = {},
@@ -566,16 +528,27 @@ export async function stripeEvent(
     payload,
     secret: globalThis.apps.webhookSecret,
   });
-  // The shop queues each event for the service: done once that webhook's action is, in the admin's
-  // control plane.
-  const pane = await activity(await adminPage());
-  const before = await pane.seen();
   const res = await fetch(`${SHOP}/api/auth/stripe/webhook`, {
     method: "POST",
     headers: { "stripe-signature": signature },
     body: payload,
   });
   if (!res.ok) throw new Error(`${type}: ${res.status} ${await res.text()}`);
+  return res;
+}
+
+/**
+ * A Stripe event sent (sendStripeEvent) and dealt with: done once that webhook's action is, in the
+ * admin's control plane, as their page shows it.
+ */
+export async function stripeEvent(
+  type: string,
+  object: Record<string, unknown>,
+  options: { daysAgo?: number } = {},
+): Promise<Response> {
+  const pane = await activity(await adminPage());
+  const before = await pane.seen();
+  const res = await sendStripeEvent(type, object, options);
   await pane.finished("Stripe webhook", { step: `Stripe ${type}`, after: before });
   return res;
 }
@@ -602,13 +575,6 @@ export function paidSession(
     metadata,
     ...overrides,
   };
-}
-
-/** A sale for this partner through their link, as Stripe reports it; the customer's email. */
-export async function sell(partner: Partner, overrides: Record<string, unknown> = {}) {
-  const session = paidSession((await checkoutVia(partner)).metadata, overrides);
-  await stripeEvent("checkout.session.completed", session);
-  return (session.customer_details as { email: string }).email;
 }
 
 /**

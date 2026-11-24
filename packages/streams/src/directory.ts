@@ -30,6 +30,7 @@ function tables(context: Context) {
   );
   sql.exec("CREATE TABLE IF NOT EXISTS patterns (id TEXT PRIMARY KEY, pattern TEXT NOT NULL)");
   sql.exec("CREATE TABLE IF NOT EXISTS streams (path TEXT PRIMARY KEY)");
+  sql.exec("CREATE TABLE IF NOT EXISTS subscriptions (id TEXT PRIMARY KEY)");
   return sql;
 }
 
@@ -74,6 +75,23 @@ const methods = {
     for (const row of sql.exec<{ id: string; pattern: string }>("SELECT id, pattern FROM patterns"))
       if (globMatch(row.pattern, name)) ids.add(row.id);
     return [...ids];
+  },
+
+  /** There is a subscription with this id. Kept in the "~" object only: the list of them all. */
+  enrol(context: Context, id: string): void {
+    tables(context).exec("INSERT OR IGNORE INTO subscriptions (id) VALUES (?)", id);
+  },
+
+  /** That subscription is gone (the "~" object). */
+  strike(context: Context, id: string): void {
+    tables(context).exec("DELETE FROM subscriptions WHERE id = ?", id);
+  },
+
+  /** Every subscription there is (the "~" object). */
+  enrolled(context: Context): string[] {
+    return [...tables(context).exec<{ id: string }>("SELECT id FROM subscriptions")].map(
+      (row) => row.id,
+    );
   },
 
   /** The streams here that a pattern covers. */

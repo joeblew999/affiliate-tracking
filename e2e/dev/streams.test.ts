@@ -1,6 +1,6 @@
-// The control plane's streams (apps/shop/durable-objects/streams.ts): what the shop's work is
-// written to, read in a browser (routes/streams/[...path].ts, and the service's route of the same
-// name, which passes the request on to the shop).
+// The control plane's streams, which the hub holds (apps/hub): what the apps' work is written to,
+// read in a browser at an app's own /streams (its routes/streams/[...path].ts decides who may,
+// and passes the read on to the hub).
 import { expect, test } from "vite-plus/test";
 import {
   activity,

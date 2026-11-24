@@ -5,6 +5,7 @@ sale, the partner earns commission, and they're paid through Stripe.
 
 It's an app of its own (the **service**). Your app (the **host**) keeps its users, sign-in and
 Stripe, and calls the service. This repo has both: the service, and an example shop as the host.
+A third worker, the **hub**, holds the streams they both write to and follow.
 
 Live demo: **https://shop.ubuntusoftware.net** (the shop) and
 **https://affiliates.shop.ubuntusoftware.net** (the service).
@@ -80,29 +81,31 @@ can't drift from the code. Only the clicks behind the charts are generated, from
   - The steps report themselves. Each app's code uses the wrappers in `packages/activity` (its
     `queues`, `defineQueue`, `defineScheduled`, `sendEmail`, and one middleware) rather than
     Void's own, so nothing in the apps announces anything by hand.
-  - The control plane itself is a stream of events per viewer, in the shop, where the users are
-    ([Durable Streams](https://github.com/durable-streams/durable-streams), mounted in the shop:
-    `apps/shop/durable-objects/streams.ts`). Each stream keeps its events in order. A page reads
-    its viewer's stream from the start, then stays connected for each new event, at its own
-    app's `/streams/<viewer>`. The shop's sign-in decides who may read which. The service's work
-    reaches the streams over the binding.
+  - The control plane itself is a stream of events per viewer, in the hub (below). A page starts
+    with its viewer's latest actions, then stays connected for each new event, at its own app's
+    `/streams/<viewer>`. That app knows who is signed in, decides who may read which
+    (`mayRead` in `packages/activity`), and passes the read on to the hub.
   - When an action finishes, the page reloads its data, so what it shows is what's saved.
+- **The hub: the streams, as a worker of their own** (`apps/hub`). It serves the
+  [Durable Streams](https://github.com/durable-streams/durable-streams) protocol at `/streams`,
+  and knows nothing about the other workers: no users, no stream names, no bindings to anyone.
+  A worker reaches it through a service binding, with `HUB_TOKEN`, using the client in
+  `apps/hub/client.ts`. It has no public address.
 - **Subscriptions: a worker told when a stream has something new.** `packages/streams` puts the
   protocol's subscriptions in front of the Durable Streams server, which doesn't have them on
   Cloudflare. A subscription follows streams by name or by a pattern, and keeps how far each
-  has been acknowledged. When a followed stream is written to, the subscriber is sent a signed
-  wake, reads on from where it had got to, and acknowledges. Unacknowledged, the wake is sent
-  again when its lease runs out; a delivery that fails is tried again; and what's due survives
-  a restart. It's built from Void's durable state (the subscription, with its alarm), a
-  directory of who follows what, and a wrapper round the server that tells subscribers of each
-  write.
+  has been acknowledged. A worker subscribes itself, giving its own address. When a followed
+  stream is written to, the hub sends a signed wake to that address; the worker checks the
+  signature, reads on from where it had got to, and acknowledges. Unacknowledged, the wake is
+  sent again when its lease runs out; a delivery that fails is tried again; and what's due
+  survives a restart. Once a day the hub checks no subscriber has been left behind
+  (`apps/hub/crons/daily.ts`).
 - **A new user is the first thing done this way.** The shop doesn't call the service at sign-up.
-  It publishes "signed-up" to a stream (`apps/shop/src/published.ts`), and the service, which
-  follows that stream, is woken (`apps/affiliates/routes/api/host/wake.ts`), reads on from where
-  it had got to, records the referral, and acknowledges (`apps/affiliates/queues/wakes.ts`). In
-  the Activity pane it's still one action, "Sign up", with the service's part as a step of it.
-  Once a day the shop checks each subscriber hasn't been left behind (`apps/shop/crons/daily.ts`).
-  - The plan, and what's still to do: `plans/2026-11-23-05-activity.md`.
+  It publishes "signed-up" to a stream (`apps/shop/src/published.ts`). The service follows that
+  stream (`apps/affiliates/src/hub.ts`), is woken (`apps/affiliates/routes/api/hub/wake.ts`),
+  reads on, records the referral, and acknowledges (`apps/affiliates/queues/wakes.ts`). In the
+  Activity pane it's still one action, "Sign up", with the service's part as a step of it.
+  - The plan, and what's still to do: `plans/2026-11-24-02-hub.md`.
 
 ## Where things are
 
@@ -114,9 +117,10 @@ can't drift from the code. Only the clicks behind the charts are generated, from
 | `apps/affiliates/routes` | What the host calls (`api/host/`), the host's sign-in passed through (`api/auth/`), and `r/`.  |
 | `apps/affiliates/src`    | The program's logic: commission, sales, refunds, payouts, stats.                               |
 | `apps/shop`              | The example host: sign-in, Stripe, and its calls to the service.                               |
+| `apps/hub`               | The hub: the streams, and nothing else.                                                        |
 | `packages/activity`      | The control plane: the Activity pane, and the wrappers that make the apps' work report itself. |
 | `packages/streams`       | Durable Streams for a Void app, with subscriptions, and the small Void app its tests run in.   |
-| `e2e`                    | The tests, run against both apps.                                                              |
+| `e2e`                    | The tests, run against the three apps.                                                         |
 | `scripts`                | Local setup, putting the demo on the live site, and screenshots.                               |
 | `plans`                  | The plans this was built to, by date.                                                          |
 
@@ -137,6 +141,7 @@ vp env on          # use the Node version in .node-version
 vp install
 vp run setup       # each app's local settings and database
 vp run dev         # the shop on http://localhost:5173, the service on http://localhost:5174
+                   # (and the hub on 5175, which nobody opens)
 ```
 
 `vp run demo` loads the demo into the local databases, replacing what's there. Or sign up on the
@@ -166,10 +171,11 @@ come from the database schema and the pages' loaders and actions.
   `STRIPE_TEST_PAYOUTS_KEY` (payouts). On GitHub, it runs from Actions → **Stripe end-to-end** →
   Run workflow (`.github/workflows/stripe.yml`), with those keys saved as repository secrets.
 
-The tests run against both apps, started once for the whole run (`e2e/apps.ts`), from a copy of
+The tests run against the three apps, started once for the whole run (`e2e/apps.ts`), from a copy of
 them with the demo fixtures, on free ports, so nothing reaches your local data or your
 `vp run dev`. The copy is kept in `.e2e/` between runs and brought up to date with your source
-at the start of each, so only the first run pays for copying, migrating and seeding. Before each test file the demo is put back as it was, by the admin pressing
+at the start of each, so only the first run pays for copying, migrating and seeding. Before each
+test file the demo is put back as it was, by the admin pressing
 **Reset demo** (a demo site's button: `apps/affiliates/src/demo-reset.ts`), so every file starts
 from exactly the fixtures without the apps starting again. The service's clock is pinned to the
 fixtures' instant (`DEMO_NOW`, by `AFFILIATES_NOW`; `apps/affiliates/src/clock.ts`), so "on
@@ -194,10 +200,10 @@ CI (`.github/workflows/ci.yml`) runs the first four on every push.
 
 ## Deploy
 
-Both apps run on Cloudflare account `7384af54e33b8a54ff240371ea368440`. Their addresses are set in
-each app's `void.config.ts`.
+The apps run on Cloudflare account `7384af54e33b8a54ff240371ea368440`. Their addresses are set in
+each app's `void.config.ts` (the hub has none).
 
-To deploy an app, in its folder (`apps/affiliates` or `apps/shop`):
+To deploy an app, in its folder (`apps/hub` first, then `apps/affiliates` or `apps/shop`):
 
 ```sh
 void cloudflare login                # once per machine
@@ -235,14 +241,15 @@ The example shop (`apps/shop`) does all of this:
      (`apps/shop/queues/stripe-events.ts`), so Stripe gets its answer at once.
    - At your checkout, ask the service what to add to it (`checkout()` in
      `apps/affiliates/client.ts`), as the shop's event page does.
-4. **Give your app the control plane** (see `apps/shop`): add `activity` (`packages/activity`) as
-   and `streams` (`packages/streams`) as dependencies; the streams and their subscriptions
-   (the four files in `durable-objects/`, `src/streams.ts`) and who may reach them
-   (`routes/streams/[...path].ts`); its setup and wrappers (`src/activity.ts`) used in
-   place of Void's `queues`, `defineQueue` and `sendEmail`; its middleware
-   (`middleware/00.activity.ts`); where the service's events arrive
-   (`routes/api/affiliates/activity.ts`); and the `ActivityPane` in your layout.
-5. **Point the service at your site:** set its `HOST_SITE_URL` to your site, and its
+4. **Give your app the control plane** (see `apps/shop`): deploy the hub (`apps/hub`) and bind
+   it (`{ binding: "HUB", service: "hub" }`), with the same `HUB_TOKEN` in the hub, the service
+   and your app. Add `activity` (`packages/activity`) and `hub` as dependencies; the hub's client
+   (`src/hub.ts`); the control plane's setup and wrappers (`src/activity.ts`), used in place of
+   Void's `queues`, `defineQueue` and `sendEmail`; its middleware (`middleware/00.activity.ts`);
+   where your pages read their stream (`routes/streams/[...path].ts`); and the `ActivityPane` in
+   your layout.
+5. **Point the service at your site:** set its `HOST_SITE_URL` to your site, its
+   `AFFILIATES_SITE_URL` to its own address (where the hub wakes it), and its
    `AFFILIATES_COOKIE_DOMAIN` to the parent domain. Give it the two Stripe accounts' keys:
    `STRIPE_SALES_KEY` (selling) and `STRIPE_PAYOUTS_KEY` (payouts).
 6. **In Stripe:**

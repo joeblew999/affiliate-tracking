@@ -8,6 +8,7 @@
 import { defineMiddleware, defineQueue as voidQueue, defineScheduled as voidScheduled } from "void";
 import { sendEmail as voidSendEmail } from "void/email";
 import { queues as voidQueues } from "void/queues";
+import type { ChangeEvent } from "@durable-streams/state";
 import type { ActivityEvent, Step, StepStatus } from "./model.ts";
 import { current, HEADER, type Trace, type Viewers } from "./trace.ts";
 
@@ -19,13 +20,38 @@ export type Traced<Body> = { body: Body; activity: Trace & { stepId: string } };
 /** Where events go: the control plane (the viewers' streams), directly or over a binding. */
 export type Sink = (event: ActivityEvent, viewers: Viewers) => Promise<void>;
 
+/**
+ * Where results go: each viewer's state stream (stateStreamOf, model.ts). A result is a change of
+ * state as Durable State writes it (@durable-streams/state): this thing, by its type and key, was
+ * inserted, updated or deleted, with its value.
+ */
+export type StateSink = (change: ChangeEvent, viewers: Viewers) => Promise<void>;
+
 let app = "app";
 let sink: Sink = async () => {};
+let stateSink: StateSink = async () => {};
 
-/** Set once, at the start of each app's code: its name, and where its events go. */
-export function setupActivity(options: { app: string; sink: Sink }) {
+/** Set once, at the start of each app's code: its name, and where its events and results go. */
+export function setupActivity(options: { app: string; sink: Sink; state?: StateSink }) {
   app = options.app;
   sink = options.sink;
+  if (options.state) stateSink = options.state;
+}
+
+/**
+ * What the current step did, for everyone its action concerns: written to their state streams
+ * before the step reads done, so whoever sees the action finish can read its result. Outside any
+ * action it's written for nobody. A failure to write is logged, never thrown: it mustn't undo the
+ * work, which is already saved.
+ */
+export async function outcome(...changes: ChangeEvent[]) {
+  const trace = current.getStore();
+  if (!trace) return;
+  try {
+    for (const change of changes) await stateSink(change, trace.viewers);
+  } catch (error) {
+    console.error("activity: couldn't write an outcome", error);
+  }
 }
 
 /** Report an event. A failure to report is logged, never thrown: it mustn't undo the work. */
@@ -111,7 +137,9 @@ function words(text: string) {
 function titleOf(url: URL) {
   const actionName = [...url.searchParams.keys()][0];
   if (actionName && !url.searchParams.get(actionName)) return words(actionName);
-  const path = url.pathname.replace(/^\/api\/(auth|host|affiliates)\//, "").replace(/\/email$/, "");
+  const path = url.pathname
+    .replace(/^\/api\/(auth|host|affiliates|hub)\//, "")
+    .replace(/\/email$/, "");
   return words(path) || "Request";
 }
 

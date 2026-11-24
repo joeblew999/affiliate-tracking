@@ -1,10 +1,10 @@
-// Both apps for the tests, from the demo fixtures (apps/affiliates/demo.ts): started once for the
+// The apps for the tests (the hub, the service and the shop), from the demo fixtures (apps/affiliates/demo.ts): started once for the
 // whole run.
 //
 // The tests' copy of the apps is kept between runs, in .e2e/<suite>/ (ignored; inside the repo so
 // Vite serves the linked packages): its database, and what Vite and Void worked out the first
 // time. startSystem(), once per run, brings the copy up to date with the source as it is now,
-// then starts both apps from it and stops them at the end. So a run tests the code as it is, and
+// then starts the apps from it and stops them at the end. So a run tests the code as it is, and
 // only the first run (and CI, which has no copy) pays for copying, migrating and seeding.
 // The copy is made again when the installed packages change. To start over by hand, delete .e2e/.
 //
@@ -36,9 +36,15 @@ import { stripVTControlCharacters } from "node:util";
 import { DEMO_NOW, HOLD_DAYS } from "../apps/affiliates/demo.ts";
 
 const ROOT = join(import.meta.dirname, "..");
-const APPS = ["affiliates", "shop"] as const;
+const APPS = ["hub", "affiliates", "shop"] as const;
 
-/** What an app makes when it runs, left out of its copy (as Void's test helpers leave it out). */
+/** The apps with a database to migrate and seed (the hub has none). */
+const WITH_DATABASE = new Set<(typeof APPS)[number]>(["affiliates", "shop"]);
+
+/**
+ * Left out of an app's copy: what it makes when it runs (as Void's test helpers leave it out), and
+ * its record of what's deployed (void.lock.json), which is about the live site, not this copy.
+ */
 const GENERATED = new Set([
   ".cloudflare",
   ".env",
@@ -47,6 +53,7 @@ const GENERATED = new Set([
   ".wrangler",
   "dist",
   "node_modules",
+  "void.lock.json",
 ]);
 
 /** The run's two apps: where they are, and what the tests need to call them. Plain values, so
@@ -148,7 +155,10 @@ function copyApp(app: (typeof APPS)[number], dir: string, id: string): string {
   const config = join(root, "void.config.ts");
   writeFileSync(
     config,
-    readFileSync(config, "utf8").replace(/(name|service): "(affiliates|shop)"/g, `$1: "$2-${id}"`),
+    readFileSync(config, "utf8").replace(
+      /(name|service): "(affiliates|shop|hub)"/g,
+      `$1: "$2-${id}"`,
+    ),
   );
   return root;
 }
@@ -301,31 +311,43 @@ export async function startSystem(
   const clockFrom = Date.now();
   // The service's clock settings (src/clock.ts) for this run.
   const clock = { AFFILIATES_NOW: DEMO_NOW, AFFILIATES_NOW_FROM: String(clockFrom) };
-  const [shopPort, affiliatesPort] = [await freePort(), await freePort()];
+  const hubToken = randomBytes(32).toString("hex");
+  const [shopPort, affiliatesPort, hubPort] = [
+    await freePort(),
+    await freePort(),
+    await freePort(),
+  ];
   const shop = `http://127.0.0.1:${shopPort}`;
   const affiliates = `http://127.0.0.1:${affiliatesPort}`;
   const { migrated } = kept ? refresh(dir) : { migrated: false };
-  const roots = Object.fromEntries(
-    await Promise.all(
-      APPS.map(async (app) => {
-        const root = copyApp(app, dir, "e2e");
-        if (!kept) {
-          // Void's generated types and config (the shop's seed reads its Better Auth schema), as
-          // after a fresh clone.
-          await run(root, ["exec", "void", "prepare"]);
-          await run(root, ["run", "db:migrate"]);
-          await run(root, ["run", "db:seed"], clock);
-        } else if (migrated) await run(root, ["run", "db:migrate"]);
-        return [app, root] as const;
-      }),
-    ),
-  ) as Record<(typeof APPS)[number], string>;
+  const roots = Object.fromEntries(APPS.map((app) => [app, copyApp(app, dir, "e2e")])) as Record<
+    (typeof APPS)[number],
+    string
+  >;
+  // The hub starts every run with nothing stored (Void keeps an app's local durable objects in
+  // its .void/v3): an earlier run's streams are no use to this one, and its subscribers gave
+  // addresses (that run's ports) nobody answers at now.
+  rmSync(join(roots.hub, ".void", "v3"), { recursive: true, force: true });
+  if (!kept)
+    // Void's generated types and config, as after a fresh clone. One app after another: the shop
+    // reads the service's (it imports its client), so the service's must be there first.
+    for (const app of APPS) await run(roots[app], ["exec", "void", "prepare"]);
+  await Promise.all(
+    APPS.filter((app) => WITH_DATABASE.has(app)).map(async (app) => {
+      if (!kept || migrated) await run(roots[app], ["run", "db:migrate"]);
+      if (!kept) await run(roots[app], ["run", "db:seed"], clock);
+    }),
+  );
   writeFileSync(stamp, packages);
+  writeFileSync(join(roots.hub, ".env"), envFile({ HUB_TOKEN: hubToken }));
   writeFileSync(
     join(roots.affiliates, ".env"),
     envFile({
       AFFILIATES_HOST_TOKEN: hostToken,
+      HUB_TOKEN: hubToken,
       HOST_SITE_URL: shop,
+      // Where the hub wakes the service.
+      AFFILIATES_SITE_URL: affiliates,
       AFFILIATES_IP_SALT: secret,
       AFFILIATES_HOLD_DAYS: String(HOLD_DAYS),
       // A demo site: the tests put the demo back between files (dev/each-file.ts).
@@ -337,12 +359,14 @@ export async function startSystem(
     join(roots.shop, ".env"),
     envFile({
       AFFILIATES_HOST_TOKEN: hostToken,
+      HUB_TOKEN: hubToken,
       AFFILIATES_SITE_URL: affiliates,
       STRIPE_WEBHOOK_SECRET: webhookSecret,
       EMAIL_LINK_SECRET: secret, // any long random value for the run
     }),
   );
   const servers = await Promise.all([
+    serve(roots.hub, hubPort, {}, log),
     serve(roots.affiliates, affiliatesPort, env, log),
     serve(roots.shop, shopPort, env, log),
   ]);

@@ -16,13 +16,12 @@ import {
   REF_COOKIE,
   SignedUp,
   SIGNUPS_STREAM,
-  SIGNUPS_SUBSCRIPTION,
   SignupInput,
   StripeEventInput,
   StripeEventOutput,
 } from "./src/host-contract.ts";
 
-export { REF_COOKIE, OnSaleInput, OnSaleOutput, SignedUp, SIGNUPS_STREAM, SIGNUPS_SUBSCRIPTION };
+export { REF_COOKIE, OnSaleInput, OnSaleOutput, SignedUp, SIGNUPS_STREAM };
 export type { Event } from "./src/host-contract.ts";
 
 /** What the host says of a user who signed up (the data of its "signed-up" event). */

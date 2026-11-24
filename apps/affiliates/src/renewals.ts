@@ -9,6 +9,7 @@ import type Stripe from "stripe";
 import { and, asc, db, eq, or } from "void/db";
 import { env } from "void/env";
 import { computeCommission } from "./commission.ts";
+import { salesWritten } from "./outcomes.ts";
 import { applyRefunds } from "./refunds.ts";
 import { idOf, invoicePaymentIntent } from "./stripe.ts";
 
@@ -127,5 +128,6 @@ export async function recordRenewal(invoice: Stripe.Invoice, event: Stripe.Event
     .returning({ id: sales.id });
   if (!row) return { recorded: false, reason: "already recorded" };
   if (paymentIntent) await applyRefunds(paymentIntent);
+  await salesWritten([row.id]);
   return { recorded: true, saleId: row.id };
 }

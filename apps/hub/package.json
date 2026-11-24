@@ -1,0 +1,25 @@
+{
+  "name": "hub",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./client": "./client.ts"
+  },
+  "scripts": {
+    "dev": "vp dev",
+    "postinstall": "void prepare",
+    "typecheck": "tsc"
+  },
+  "dependencies": {
+    "@durable-streams/server-cloudflare": "0.1.1",
+    "hono": "catalog:",
+    "streams": "workspace:*",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plus": "catalog:",
+    "void": "catalog:"
+  }
+}
