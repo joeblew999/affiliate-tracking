@@ -59,26 +59,31 @@ whichever Worker it ran, live.
 ```sh
 git clone https://github.com/joeblew999/cloudflare-durable-streams
 cd cloudflare-durable-streams
-vp install                    # Vite+ (https://viteplus.dev): curl -fsSL https://vite.plus | bash
-void cloudflare login         # once per machine
-void secret put HUB_TOKEN     # the token every caller sends (any long random value)
-void deploy --platform cloudflare
+vp install                                            # Vite+: curl -fsSL https://vite.plus | bash
+void cloudflare login                                 # once per machine
+echo "HUB_TOKEN=$(openssl rand -hex 32)" > production.env   # the token every caller sends; never committed
+vp run deploy -- .                                    # the hub
 ```
 
-Void creates what the hub uses (its D1 database with read replication, and its Durable
-Objects), applies the database's migrations, and deploys it at
-`https://durable-streams.<your-account>.workers.dev`. Commit the `void.lock.json` it writes.
+`vp run deploy` connects the app to your Cloudflare account, syncs `production.env` as its
+secrets, and runs `void deploy`. Void creates what the hub uses (its D1 database with read
+replication, and its Durable Objects), applies the database's migrations, and deploys it at
+`https://durable-streams.<your-account>.workers.dev`.
 
-Deploying and removing are one command each:
+Removing it is one command too:
 
 ```sh
-vp run deploy -- .         # the hub alone (without `-- .`: the hub, then the example's two apps)
 vp run destroy             # lists every Worker, queue and database this repo deploys
 vp run destroy -- --yes    # removes them from Cloudflare; what's in the databases is lost
 ```
 
 Void deploys, and never removes a direct Cloudflare deployment itself, so `destroy` is Cloudflare's
-`wrangler` (a dev dependency here), told the names Void gave things (`scripts/`).
+`wrangler` (a dev dependency here), told the names Void gave things (`scripts/`). Deploy, destroy
+and deploy again all work from nothing (done 2026-11-24). Without `-- .`, `vp run deploy` also
+deploys the example's two apps after the hub.
+
+Void's `void.lock.json` records what your account has deployed (your database's ID), so it's
+yours alone and not in the repo: your first deploy writes it, and `destroy` removes it.
 
 **A Deploy to Cloudflare button is the goal:** one click, and the hub is in your account.
 Cloudflare's button deploys from a Wrangler config in the repo, and a Void app writes its own when
@@ -230,7 +235,8 @@ test:dev`); the hub's correctness is the conformance suite's, not the example's.
 ## Status
 
 - The hub, its protocol and its subscriptions: done, and all 344 conformance tests pass.
-- Not deployed yet. The **Deploy to Cloudflare** button: to come.
+- Deployed, used, removed and deployed again with `vp run deploy` and `vp run destroy`. The
+  **Deploy to Cloudflare** button: to come.
 - The client on npm: to come; until then it's `client.ts` and `bus.ts` here.
 - Timing it from around the world with cloudflare-ping: to come.
 - A stream only grows. For long-lived ones (a control plane's), streams by day, each with a

@@ -11,3 +11,6 @@ package-lock.json
 .screens
 .demo
 .e2e/
+production.env
+# Void's record of what one account has deployed: each developer's own, written by their deploy.
+void.lock.json

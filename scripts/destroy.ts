@@ -46,5 +46,5 @@ for (const { app, worker, database, queues } of all) {
   if (database) wrangler(`database ${database}`, ["d1", "delete", database, "-y"]);
   // Void's record of what was deployed: about resources that are gone now.
   const lock = join(app, "void.lock.json");
-  if (app !== "." && existsSync(lock)) rmSync(lock);
+  if (existsSync(lock)) rmSync(lock);
 }
