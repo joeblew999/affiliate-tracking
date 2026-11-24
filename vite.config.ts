@@ -22,6 +22,8 @@ export default defineConfig({
   },
   // typeAware + typeCheck: `vp check` type-checks too (as in void-fbtee's root config).
   lint: { options: { typeAware: true, typeCheck: true } },
+  // Void's record of each app's resources is Void's to write, in its own style, at every install.
+  fmt: { ignorePatterns: ["**/void.lock.json"] },
   run: {
     tasks: {
       // The hub's local .env and database, and the example's. Once per clone, and after pulling
