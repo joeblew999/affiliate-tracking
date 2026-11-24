@@ -34,7 +34,8 @@
     "vite": "catalog:",
     "vite-plus": "catalog:",
     "vitest": "catalog:",
-    "void": "catalog:"
+    "void": "catalog:",
+    "wrangler": "^4.166.0"
   },
   "packageManager": "pnpm@12.18.0"
 }

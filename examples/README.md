@@ -197,7 +197,8 @@ Nothing of the example is deployed now. Each app's address is set in its `void.c
 (`shop.ubuntusoftware.net` and `affiliates.shop.ubuntusoftware.net`: put your own there); the
 hub gets a `workers.dev` address of its own.
 
-To deploy an app, in its folder (the hub, at the repo's root, first, then `examples/affiliates`
+`vp run deploy` deploys the hub, then the service, then the shop; `vp run destroy -- --yes`
+removes all three from Cloudflare (the repo's README). To deploy one app by hand, in its folder (the hub, at the repo's root, first, then `examples/affiliates`
 or `examples/shop`):
 
 ```sh

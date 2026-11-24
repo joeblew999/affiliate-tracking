@@ -69,6 +69,17 @@ Void creates what the hub uses (its D1 database with read replication, and its D
 Objects), applies the database's migrations, and deploys it at
 `https://durable-streams.<your-account>.workers.dev`. Commit the `void.lock.json` it writes.
 
+Deploying and removing are one command each:
+
+```sh
+vp run deploy -- .         # the hub alone (without `-- .`: the hub, then the example's two apps)
+vp run destroy             # lists every Worker, queue and database this repo deploys
+vp run destroy -- --yes    # removes them from Cloudflare; what's in the databases is lost
+```
+
+Void deploys, and never removes a direct Cloudflare deployment itself, so `destroy` is Cloudflare's
+`wrangler` (a dev dependency here), told the names Void gave things (`scripts/`).
+
 **A Deploy to Cloudflare button is the goal:** one click, and the hub is in your account.
 Cloudflare's button deploys from a Wrangler config in the repo, and a Void app writes its own when
 it builds, so the button isn't here yet (see Status).

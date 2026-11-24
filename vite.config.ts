@@ -37,6 +37,12 @@ export default defineConfig({
         ],
         cache: false,
       },
+      // Everything to Cloudflare, with Void: the hub, then the example's service, then its shop
+      // (scripts/deploy.ts). `vp run deploy -- .` for the hub alone. Needs `void cloudflare login`.
+      deploy: { command: "vpx scripts/deploy.ts", cache: false },
+      // Everything this repo deploys, removed from Cloudflare: Workers, queues, databases
+      // (scripts/destroy.ts). Lists what it would remove; `vp run destroy -- --yes` removes it.
+      destroy: { command: "vpx scripts/destroy.ts", cache: false },
       // The example's demo data in its two apps' local databases (it resets them): the people in
       // examples/affiliates/demo.ts as shop accounts, and 90 days of the program.
       demo: {
