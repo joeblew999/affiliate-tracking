@@ -57,7 +57,10 @@ export async function hubKey(request: KeyRequest): Promise<string> {
 }
 
 if (import.meta.main) {
-  const [url, email, password, name, organization] = process.argv.slice(2);
+  // (`vp run key -- …` hands the `--` on too.)
+  const [url, email, password, name, organization] = process.argv
+    .slice(2)
+    .filter((arg) => arg !== "--");
   if (!url || !email || !password)
     throw new Error("vp run key -- <hub's address> <admin email> <password> [name] [organization]");
   console.log(await hubKey({ url, email, password, name, organization }));
