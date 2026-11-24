@@ -1,7 +1,7 @@
 // A wake from the hub (routes/api/hub/wake.ts): what's new on the streams the shop follows is
 // read, dealt with and acknowledged (src/followed.ts). If anything fails the message is tried again
 // (Void's queue), and the events not yet acknowledged are read again.
-import type { Wake } from "activity/bus";
+import type { Wake } from "hub/bus";
 import { defineQueue } from "../src/activity.ts";
 import { followed } from "../src/followed.ts";
 

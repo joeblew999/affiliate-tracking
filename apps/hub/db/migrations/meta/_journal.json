@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1795504271020,
+      "tag": "20261124071111_fat_zarek",
+      "breakpoints": true
+    }
+  ]
+}

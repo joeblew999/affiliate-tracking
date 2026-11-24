@@ -12,16 +12,16 @@
           "class_name": "StreamDirectoryDurableObject"
         },
         {
+          "name": "STREAM_NOTIFIER",
+          "class_name": "StreamNotifierDurableObject"
+        },
+        {
           "name": "STREAM_SIGNING",
           "class_name": "StreamSigningDurableObject"
         },
         {
           "name": "STREAM_SUBSCRIPTIONS",
           "class_name": "StreamSubscriptionsDurableObject"
-        },
-        {
-          "name": "STREAMS",
-          "class_name": "StreamsDurableObject"
         }
       ]
     },
@@ -31,19 +31,19 @@
         "new_sqlite_classes": ["StreamDirectoryDurableObject"]
       },
       {
+        "tag": "void-durable-stream-notifier-v1",
+        "new_sqlite_classes": ["StreamNotifierDurableObject"]
+      },
+      {
         "tag": "void-durable-stream-signing-v1",
         "new_sqlite_classes": ["StreamSigningDurableObject"]
       },
       {
         "tag": "void-durable-stream-subscriptions-v1",
         "new_sqlite_classes": ["StreamSubscriptionsDurableObject"]
-      },
-      {
-        "tag": "void-durable-streams-v1",
-        "new_sqlite_classes": ["StreamsDurableObject"]
       }
     ],
     "compatibility_date": "2026-02-24"
   },
-  "text": "{\n  \"name\": \"streams-app\",\n  \"durable_objects\": {\n    \"bindings\": [\n      {\n        \"name\": \"STREAM_DIRECTORY\",\n        \"class_name\": \"StreamDirectoryDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_SIGNING\",\n        \"class_name\": \"StreamSigningDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_SUBSCRIPTIONS\",\n        \"class_name\": \"StreamSubscriptionsDurableObject\"\n      },\n      {\n        \"name\": \"STREAMS\",\n        \"class_name\": \"StreamsDurableObject\"\n      }\n    ]\n  },\n  \"migrations\": [\n    {\n      \"tag\": \"void-durable-stream-directory-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamDirectoryDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-signing-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamSigningDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-subscriptions-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamSubscriptionsDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-streams-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamsDurableObject\"\n      ]\n    }\n  ],\n  \"compatibility_date\": \"2026-02-24\"\n}\n"
+  "text": "{\n  \"name\": \"streams-app\",\n  \"durable_objects\": {\n    \"bindings\": [\n      {\n        \"name\": \"STREAM_DIRECTORY\",\n        \"class_name\": \"StreamDirectoryDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_NOTIFIER\",\n        \"class_name\": \"StreamNotifierDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_SIGNING\",\n        \"class_name\": \"StreamSigningDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_SUBSCRIPTIONS\",\n        \"class_name\": \"StreamSubscriptionsDurableObject\"\n      }\n    ]\n  },\n  \"migrations\": [\n    {\n      \"tag\": \"void-durable-stream-directory-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamDirectoryDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-notifier-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamNotifierDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-signing-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamSigningDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-subscriptions-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamSubscriptionsDurableObject\"\n      ]\n    }\n  ],\n  \"compatibility_date\": \"2026-02-24\"\n}\n"
 }

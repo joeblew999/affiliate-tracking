@@ -123,6 +123,19 @@ export const runStep = <T>(trace: Trace, id: string, name: string, work: () => P
 /** The action the current work belongs to, to send along with something another app will handle. */
 export const currentTrace = (): Trace | null => current.getStore() ?? null;
 
+/**
+ * The control plane's part in the hub's events (hub/bus, its Carry): each event carries the
+ * action it's part of; each subscriber woken is a step of that action, waiting until the
+ * subscriber runs it. So an action that publishes stays running until every follower has done
+ * its part.
+ */
+export const carried = {
+  current: currentTrace,
+  waiting,
+  run: (trace: unknown, id: string, name: string, work: () => Promise<void>) =>
+    runStep(trace as Trace, id, name, work),
+};
+
 /** "bookEvent" → "Book event"; "sign-up/email" → "Sign up". */
 function words(text: string) {
   const spaced = text

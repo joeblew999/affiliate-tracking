@@ -82,27 +82,37 @@ can't drift from the code. Only the clicks behind the charts are generated, from
     `queues`, `defineQueue`, `defineScheduled`, `sendEmail`, and one middleware) rather than
     Void's own, so nothing in the apps announces anything by hand.
   - The control plane itself is a stream of events per viewer, in the hub (below). A page starts
-    with its viewer's latest actions, then stays connected for each new event, at its own app's
+    with its viewer's actions so far, then stays connected for each new event, at its own app's
     `/streams/<viewer>`. That app knows who is signed in, decides who may read which
     (`mayRead` in `packages/activity`), and passes the read on to the hub.
   - When an action finishes, the page reloads its data, so what it shows is what's saved.
 - **The hub: the streams, as a worker of their own** (`apps/hub`). It serves the
   [Durable Streams](https://github.com/durable-streams/durable-streams) protocol at `/streams`,
-  and knows nothing about the other workers: no users, no stream names, no bindings to anyone.
-  A worker reaches it through a service binding, with `HUB_TOKEN`, using the client in
-  `apps/hub/client.ts`. It has no public address.
+  and nothing else: a worker makes a stream, writes to it, reads it and follows it with the
+  protocol's own requests. It knows nothing about the other workers: no users, no stream names,
+  no bindings to anyone. A worker reaches it through a service binding, with `HUB_TOKEN`, using
+  `hub/client` (`apps/hub/client.ts`, which reads with the official `@durable-streams/client`).
+  It has no public address.
+  - **The streams are in the hub's D1, with read replicas** (`packages/streams/src/d1`): any of
+    its Workers, anywhere, reads a stream from the nearest replica, and writes go to the primary.
+    Every answer carries a D1 bookmark, which the hub's client sends back, so no worker reads
+    older than what it has seen (Void's read replication and bookmarks). Live readers wait on a
+    small notifier per stream. The protocol's own conformance suite checks it.
 - **Subscriptions: a worker told when a stream has something new.** `packages/streams` puts the
   protocol's subscriptions in front of the Durable Streams server, which doesn't have them on
   Cloudflare. A subscription follows streams by name or by a pattern, and keeps how far each
   has been acknowledged. A worker subscribes itself, giving its own address. When a followed
   stream is written to, the hub sends a signed wake to that address; the worker checks the
-  signature, reads on from where it had got to, and acknowledges. Unacknowledged, the wake is
+  signature, reads on from where it had got to, and acknowledges. Publishing and following are
+  `hub/bus` (`apps/hub/bus.ts`). A write's answer also names the subscriptions it woke (the
+  `Stream-Subscriptions` header, the one thing the hub adds to the protocol), so the control plane
+  shows each follower's part as a step of the action that published. Unacknowledged, the wake is
   sent again when its lease runs out; a delivery that fails is tried again; and what's due
   survives a restart. Once a day the hub checks no subscriber has been left behind
   (`apps/hub/crons/daily.ts`).
 - **A new user is the first thing done this way.** The shop doesn't call the service at sign-up.
   It publishes "signed-up" to a stream (`apps/shop/src/published.ts`). The service follows that
-  stream (`apps/affiliates/src/hub.ts`), is woken (`apps/affiliates/routes/api/hub/wake.ts`),
+  stream (`apps/affiliates/src/followed.ts`), is woken (`apps/affiliates/routes/api/hub/wake.ts`),
   reads on, records the referral, and acknowledges (`apps/affiliates/queues/wakes.ts`). In the
   Activity pane it's still one action, "Sign up", with the service's part as a step of it.
   - The plan, and what's still to do: `plans/2026-11-24-02-hub.md`.
@@ -119,7 +129,7 @@ can't drift from the code. Only the clicks behind the charts are generated, from
 | `apps/shop`              | The example host: sign-in, Stripe, and its calls to the service.                               |
 | `apps/hub`               | The hub: the streams, and nothing else.                                                        |
 | `packages/activity`      | The control plane: the Activity pane, and the wrappers that make the apps' work report itself. |
-| `packages/streams`       | Durable Streams for a Void app, with subscriptions, and the small Void app its tests run in.   |
+| `packages/streams`       | Durable Streams on D1 for a Void app, with subscriptions, and the Void app its tests run in.   |
 | `e2e`                    | The tests, run against the three apps.                                                         |
 | `scripts`                | Local setup, putting the demo on the live site, and screenshots.                               |
 | `plans`                  | The plans this was built to, by date.                                                          |
@@ -249,7 +259,8 @@ The example shop (`apps/shop`) does all of this:
 4. **Give your app the control plane** (see `apps/shop`): deploy the hub (`apps/hub`) and bind
    it (`{ binding: "HUB", service: "hub" }`), with the same `HUB_TOKEN` in the hub, the service
    and your app. Add `activity` (`packages/activity`) and `hub` as dependencies; the hub's client
-   (`src/hub.ts`); the control plane's setup and wrappers (`src/activity.ts`), used in place of
+   and what you publish (`src/hub.ts`); what you follow (`src/followed.ts`), woken at
+   `routes/api/hub/wake.ts` and dealt with in `queues/wakes.ts`; the control plane's setup and wrappers (`src/activity.ts`), used in place of
    Void's `queues`, `defineQueue` and `sendEmail`; its middleware (`middleware/00.activity.ts`);
    where your pages read their stream (`routes/streams/[...path].ts`); and the `ActivityPane` in
    your layout.

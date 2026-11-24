@@ -1,6 +1,6 @@
 // The package's Void app (../app) under `vp dev`, for the tests: started, stopped, and started
 // again with what it had saved.
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { rmSync } from "node:fs";
 import { createServer, type AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -16,7 +16,7 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-/** Forget what earlier runs saved: Void's local state (the streams and subscriptions). */
+/** Forget what earlier runs saved: Void's local state (the streams' D1, and the subscriptions). */
 export function emptyApp(): void {
   rmSync(join(APP, ".void", "v3"), { recursive: true, force: true });
 }
@@ -26,8 +26,17 @@ export interface App {
   stop: () => Promise<void>;
 }
 
-/** Start the app; ready once it says where it's listening. `port`: the same address as before. */
+/**
+ * Start the app, its database migrated (Void applies migrations by hand in development: `void db
+ * migrate`); ready once it says where it's listening. `port`: the same address as before.
+ */
 export async function startApp(port?: number): Promise<App> {
+  const migrated = spawnSync("vp", ["exec", "void", "db", "migrate"], {
+    cwd: APP,
+    encoding: "utf8",
+  });
+  if (migrated.status !== 0)
+    throw new Error(`the app's migrations failed:\n${migrated.stdout}${migrated.stderr}`);
   const at = port ?? (await freePort());
   const url = `http://127.0.0.1:${at}`;
   const child: ChildProcess = spawn(

@@ -29,9 +29,9 @@ declare module "void" {
 const PUBLIC_PREFIXES = ["/api/auth/", "/r/", "/api/host/", "/api/stripe/", "/api/hub/"];
 const PAGES = new Set(["/", "/admin"]);
 
-/** A viewer's latest activity, from the hub; none if it can't be reached (the page still shows). */
+/** A viewer's activity, from the hub; none if it can't be reached (the page still shows). */
 const recentActivity = (viewer: string) =>
-  hub.recent(viewer).catch((error: unknown) => {
+  hub.read(viewer).catch((error: unknown) => {
     console.error("hub: couldn't read recent activity", error);
     return null;
   });

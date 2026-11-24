@@ -6,8 +6,7 @@
     ".": "./src/model.ts",
     "./server": "./src/server.ts",
     "./pane": "./src/pane.tsx",
-    "./trace": "./src/trace.ts",
-    "./bus": "./src/bus.ts"
+    "./trace": "./src/trace.ts"
   },
   "scripts": {
     "typecheck": "tsc"
@@ -16,8 +15,6 @@
     "@durable-streams/client": "0.2.7",
     "@durable-streams/state": "0.3.2",
     "@void/react": "catalog:",
-    "hub": "workspace:*",
-    "streams": "workspace:*",
     "void": "catalog:",
     "zod": "catalog:"
   },

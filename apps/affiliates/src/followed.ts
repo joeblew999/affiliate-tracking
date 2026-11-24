@@ -1,7 +1,8 @@
 // What this service follows of the host's, over the hub (src/hub.ts), and what it does with each
 // event. The hub wakes it at routes/api/hub/wake.ts, and queues/wakes.ts reads on and acknowledges
-// (packages/activity's bus).
-import { follower, follows } from "activity/bus";
+// (hub/bus).
+import { carried } from "activity/server";
+import { follower, follows } from "hub/bus";
 import { env } from "void/env";
 import { SIGNUPS_STREAM, SignupInput, STRIPE_STREAM, StripeEventInput } from "./host-contract.ts";
 import { hub } from "./hub.ts";
@@ -11,6 +12,8 @@ import { stripeEvent } from "./stripe-events.ts";
 export const followed = follower({
   hub,
   wakeUrl: new URL("/api/hub/wake", env.AFFILIATES_SITE_URL).href,
+  // Each event's part is a step of the action it came from.
+  carry: carried,
   subscriptions: {
     "affiliates-signups": follows({
       stream: SIGNUPS_STREAM,

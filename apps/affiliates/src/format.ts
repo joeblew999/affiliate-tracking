@@ -1,11 +1,15 @@
 // Money and dates for the pages. Amounts are in a currency's minor units (cents); Intl knows how
-// many decimals each currency has.
+// many decimals each currency has. One locale and time zone, as the shop's (src/events.ts there):
+// a page is made on the server and then in the browser, and the two have to read the same, whatever
+// the visitor's own locale and time zone.
+const LOCALE = "en-US";
+
 export function money(cents: number, currency: string): string {
   const code = currency.toUpperCase();
   const digits =
     new Intl.NumberFormat("en", { style: "currency", currency: code }).resolvedOptions()
       .maximumFractionDigits ?? 2;
-  return new Intl.NumberFormat(undefined, { style: "currency", currency: code }).format(
+  return new Intl.NumberFormat(LOCALE, { style: "currency", currency: code }).format(
     cents / 10 ** digits,
   );
 }
@@ -21,7 +25,7 @@ export function minorUnits(amount: string, currency: string): number {
 }
 
 export function date(ms: number): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(ms);
+  return new Intl.DateTimeFormat(LOCALE, { dateStyle: "medium", timeZone: "UTC" }).format(ms);
 }
 
 /** The message of an error from the service's API ({ error }), or of anything else thrown. */

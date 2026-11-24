@@ -1,7 +1,8 @@
 // What the shop follows of the affiliate service's, over the hub (src/hub.ts), and what it does
 // with each event. The hub wakes it at routes/api/hub/wake.ts, and queues/wakes.ts reads on and
-// acknowledges (packages/activity's bus).
-import { follower, follows } from "activity/bus";
+// acknowledges (hub/bus).
+import { carried } from "activity/server";
+import { follower, follows } from "hub/bus";
 import { DEMO_RESET_STREAM, DemoReset, ON_SALE_STREAM, OnSale } from "affiliates/client";
 import { env } from "void/env";
 import { queues } from "./activity.ts";
@@ -11,6 +12,8 @@ import { hub } from "./hub.ts";
 export const followed = follower({
   hub,
   wakeUrl: new URL("/api/hub/wake", env.SHOP_SITE_URL).href,
+  // Each event's part is a step of the action it came from.
+  carry: carried,
   subscriptions: {
     "shop-on-sale": follows({
       stream: ON_SALE_STREAM,

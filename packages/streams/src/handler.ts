@@ -1,7 +1,7 @@
-// Durable Streams with subscriptions, for a Void app: the protocol's own server
-// (@durable-streams/server-cloudflare, which has no subscriptions) with the reserved subscription
-// routes in front of it (PROTOCOL.md, section 6), and every write told to the subscriptions that
-// follow the stream.
+// Durable Streams with subscriptions, for a Void app: the protocol's server for the streams
+// themselves (streams/d1: every stream in the app's D1, with read replicas) with the reserved
+// subscription routes in front of it (PROTOCOL.md, section 6), and every write told to the
+// subscriptions that follow the stream.
 //
 // Mounted at a root, such as /v1/stream: streams are at <root>/<path>, and the subscription
 // routes at <root>/__ds/. Who may call any of it is for the app's route to decide before this.
@@ -10,6 +10,8 @@ import { ANY, shardOf, type DirectoryMethods } from "./directory.ts";
 import { relative } from "./glob.ts";
 import { sha256Hex } from "./keys.ts";
 import type { SigningMethods } from "./signing.ts";
+import { SESSION_HEADER } from "./d1/server.ts";
+import { SUBSCRIPTIONS_HEADER } from "./subscriber.ts";
 import {
   DEFAULT_LEASE_MS,
   MAX_LEASE_MS,
@@ -26,7 +28,7 @@ import {
 export type StreamsOptions<Env> = {
   /** Where it's mounted: the path before a stream's own, such as "/v1/stream". */
   root: string;
-  /** The protocol server: `createStreamsHandler()` from @durable-streams/server-cloudflare. */
+  /** The protocol server for the streams themselves: streams/d1's `createD1Streams()`. */
   streams: (request: Request, env: Env) => Promise<Response>;
   /** The app's three durable states (its `durable-objects/`), made from this package's. */
   subscriptions: DurableStateApi<SubscriptionMethods>;
@@ -130,17 +132,26 @@ async function bodyOf(request: Request): Promise<unknown> {
 }
 
 /**
- * The streams: `handle` for a route that catches everything under the root, and the same things
- * for the app's own code to do without a request (append, subscribe, recheck).
+ * The streams: `handle` for a route that catches everything under the root, and the daily check
+ * (recheck) for the app's own code to run without a request.
  */
 export function createStreams<Env>(options: StreamsOptions<Env>) {
   const root = `/${relative(options.root)}`;
   const control = `${root}/__ds`;
   const { subscriptions, directory, signing } = options;
 
-  /** Where a stream ends now; a stream that isn't there ends at the start. */
+  /**
+   * Where a stream ends now; a stream that isn't there ends at the start. From the primary, where
+   * the server has replicas (streams/d1: a replica may not have the latest write yet).
+   */
   async function tailOf(base: string, path: string, env: Env): Promise<string> {
-    const head = await options.streams(new Request(`${base}/${path}`, { method: "HEAD" }), env);
+    const head = await options.streams(
+      new Request(`${base}/${path}`, {
+        method: "HEAD",
+        headers: { [SESSION_HEADER]: "first-primary" },
+      }),
+      env,
+    );
     return (head.ok && head.headers.get("stream-next-offset")) || ZERO_OFFSET;
   }
 
@@ -308,59 +319,21 @@ export function createStreams<Env>(options: StreamsOptions<Env>) {
     return { response, subscribers };
   }
 
-  const JSON_TYPE = { "content-type": "application/json" };
-
   return {
-    /** Any request under the root, from a route that catches them all. */
+    /**
+     * Any request under the root, from a route that catches them all. A write's answer also says
+     * which subscriptions were told of it (SUBSCRIPTIONS_HEADER), for a writer that wants to
+     * know; any other client ignores it.
+     */
     async handle(request: Request, env: Env): Promise<Response> {
       const url = new URL(request.url);
       if (url.pathname === control || url.pathname.startsWith(`${control}/`))
         return controlRoute(request, env, url);
-      return (await stream(request, env)).response;
-    },
-
-    /**
-     * From the app's own code: add events to a JSON stream, making the stream if it isn't there.
-     * `origin` is the address the app is served at. Answers with where the stream now ends, and
-     * the subscriptions that were told.
-     */
-    async append(env: Env, origin: string, path: string, events: unknown) {
-      const url = `${origin}${root}/${relative(path)}`;
-      const add = () =>
-        stream(
-          new Request(url, { method: "POST", headers: JSON_TYPE, body: JSON.stringify(events) }),
-          env,
-        );
-      let added = await add();
-      if (added.response.status === 404) {
-        await stream(new Request(url, { method: "PUT", headers: JSON_TYPE }), env);
-        added = await add();
-      }
-      if (!added.response.ok)
-        throw new Error(`stream ${path}: ${added.response.status} ${await added.response.text()}`);
-      return {
-        offset: added.response.headers.get("stream-next-offset") ?? ZERO_OFFSET,
-        subscribers: added.subscribers,
-      };
-    },
-
-    /**
-     * From the app's own code: make sure a subscription is there (the same request as its PUT).
-     * Answers whether it was made now.
-     */
-    async subscribe(env: Env, origin: string, id: string, input: Record<string, unknown>) {
-      const response = await controlRoute(
-        new Request(`${origin}${control}/subscriptions/${encodeURIComponent(id)}`, {
-          method: "PUT",
-          headers: JSON_TYPE,
-          body: JSON.stringify(input),
-        }),
-        env,
-        new URL(`${origin}${control}/subscriptions/${encodeURIComponent(id)}`),
-      );
-      if (!response.ok)
-        throw new Error(`subscription ${id}: ${response.status} ${await response.text()}`);
-      return response.status === 201;
+      const { response, subscribers } = await stream(request, env);
+      if (subscribers.length === 0) return response;
+      const told = new Response(response.body, response);
+      told.headers.set(SUBSCRIPTIONS_HEADER, subscribers.map(encodeURIComponent).join(","));
+      return told;
     },
 
     /**

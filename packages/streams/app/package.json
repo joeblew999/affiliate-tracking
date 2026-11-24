@@ -5,10 +5,11 @@
   "scripts": {
     "dev": "vp dev",
     "postinstall": "void prepare",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "db:migrate": "void db migrate",
+    "db:generate": "void db generate"
   },
   "dependencies": {
-    "@durable-streams/server-cloudflare": "0.1.1",
     "streams": "workspace:*"
   },
   "devDependencies": {

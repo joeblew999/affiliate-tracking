@@ -1,0 +1,18 @@
+durable-object-streams
+Copyright 2025-2026 Tom Beckenham
+
+This product includes software ported from the Durable Streams project
+(https://github.com/durable-streams/durable-streams), Copyright the
+Durable Streams contributors, licensed under the Apache License 2.0:
+
+- Protocol flow and storage semantics ported from the reference server
+  (packages/server: server.ts, store.ts, cursor.ts), rewritten for
+  Cloudflare Workers Request/Response and Durable Object SQLite.
+- Protocol constants ported from @durable-streams/client (constants.ts).
+
+Per-file attribution is carried in the source file headers under src/.
+
+packages/streams/src/d1/ (2026-11-24): constants.ts, json.ts, producer.ts and cursor.ts are
+copied from @durable-streams/server-cloudflare 0.1.1 (Apache-2.0, LICENSE-durable-streams-server-cloudflare);
+store.ts and server.ts port its store.ts and stream-object.ts from one Durable Object per stream
+to Cloudflare D1 (read replicas, sessions and bookmarks).

@@ -332,9 +332,9 @@ export async function startSystem(
     (typeof APPS)[number],
     string
   >;
-  // The hub starts every run with nothing stored (Void keeps an app's local durable objects in
-  // its .void/v3): an earlier run's streams are no use to this one, and its subscribers gave
-  // addresses (that run's ports) nobody answers at now.
+  // The hub starts every run with nothing stored (Void keeps an app's local D1 and durable
+  // objects in its .void/v3): an earlier run's streams are no use to this one, and its subscribers
+  // gave addresses (that run's ports) nobody answers at now. Its database is migrated again below.
   rmSync(join(roots.hub, ".void", "v3"), { recursive: true, force: true });
   if (!kept)
     // Void's generated types and config, as after a fresh clone. One app after another: the shop
@@ -346,6 +346,8 @@ export async function startSystem(
       if (!kept) await run(roots[app], ["run", "db:seed"], clock);
     }),
   );
+  // The hub's streams' tables, in its emptied D1 (Void applies migrations by hand in development).
+  await run(roots.hub, ["run", "db:migrate"]);
   writeFileSync(stamp, packages);
   writeFileSync(join(roots.hub, ".env"), envFile({ HUB_TOKEN: hubToken }));
   writeFileSync(

@@ -6,6 +6,10 @@
       {
         "binding": "AFFILIATES",
         "service": "affiliates"
+      },
+      {
+        "binding": "HUB",
+        "service": "hub"
       }
     ],
     "routes": [
@@ -23,6 +27,10 @@
       {
         "binding": "AFFILIATES",
         "service": "affiliates"
+      },
+      {
+        "binding": "HUB",
+        "service": "hub"
       }
     ],
     "routes": [
@@ -31,6 +39,8 @@
         "custom_domain": true
       }
     ],
+    "workers_dev": false,
+    "preview_urls": false,
     "compatibility_date": "2026-02-24",
     "account_id": "7384af54e33b8a54ff240371ea368440",
     "d1_databases": [
@@ -41,8 +51,6 @@
         "migrations_dir": "./db/migrations"
       }
     ],
-    "workers_dev": false,
-    "preview_urls": false,
     "durable_objects": {
       "bindings": [
         {
@@ -98,5 +106,5 @@
       "__VOID_EMAIL_FROM": "Example shop <events@shop.ubuntusoftware.net>"
     }
   },
-  "text": "{\n  \"name\": \"shop\",\n  \"services\": [\n    {\n      \"binding\": \"AFFILIATES\",\n      \"service\": \"affiliates\"\n    }\n  ],\n  \"routes\": [\n    {\n      \"pattern\": \"shop.ubuntusoftware.net\",\n      \"custom_domain\": true\n    }\n  ],\n  \"compatibility_date\": \"2026-02-24\",\n  \"account_id\": \"7384af54e33b8a54ff240371ea368440\",\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"shop-db\",\n      \"database_id\": \"ff970b5b-47a1-4176-b6b1-ddbb57699b8a\",\n      \"migrations_dir\": \"./db/migrations\"\n    }\n  ],\n  \"workers_dev\": false,\n  \"preview_urls\": false,\n  \"durable_objects\": {\n    \"bindings\": [\n      {\n        \"name\": \"STREAMS\",\n        \"class_name\": \"StreamsDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_DIRECTORY\",\n        \"class_name\": \"StreamDirectoryDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_SIGNING\",\n        \"class_name\": \"StreamSigningDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_SUBSCRIPTIONS\",\n        \"class_name\": \"StreamSubscriptionsDurableObject\"\n      },\n      {\n        \"name\": \"RECENT_ACTIONS\",\n        \"class_name\": \"RecentActionsDurableObject\"\n      }\n    ]\n  },\n  \"migrations\": [\n    {\n      \"tag\": \"void-durable-streams-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamsDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-directory-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamDirectoryDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-signing-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamSigningDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-subscriptions-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamSubscriptionsDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-recent-actions-v1\",\n      \"new_sqlite_classes\": [\n        \"RecentActionsDurableObject\"\n      ]\n    }\n  ],\n  \"send_email\": [\n    {\n      \"name\": \"SEND_EMAIL\"\n    }\n  ],\n  \"vars\": {\n    \"__VOID_EMAIL_FROM\": \"Example shop <events@shop.ubuntusoftware.net>\"\n  }\n}\n"
+  "text": "{\n  \"name\": \"shop\",\n  \"services\": [\n    {\n      \"binding\": \"AFFILIATES\",\n      \"service\": \"affiliates\"\n    },\n    {\n      \"binding\": \"HUB\",\n      \"service\": \"hub\"\n    }\n  ],\n  \"routes\": [\n    {\n      \"pattern\": \"shop.ubuntusoftware.net\",\n      \"custom_domain\": true\n    }\n  ],\n  \"workers_dev\": false,\n  \"preview_urls\": false,\n  \"compatibility_date\": \"2026-02-24\",\n  \"account_id\": \"7384af54e33b8a54ff240371ea368440\",\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"shop-db\",\n      \"database_id\": \"ff970b5b-47a1-4176-b6b1-ddbb57699b8a\",\n      \"migrations_dir\": \"./db/migrations\"\n    }\n  ],\n  \"durable_objects\": {\n    \"bindings\": [\n      {\n        \"name\": \"STREAMS\",\n        \"class_name\": \"StreamsDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_DIRECTORY\",\n        \"class_name\": \"StreamDirectoryDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_SIGNING\",\n        \"class_name\": \"StreamSigningDurableObject\"\n      },\n      {\n        \"name\": \"STREAM_SUBSCRIPTIONS\",\n        \"class_name\": \"StreamSubscriptionsDurableObject\"\n      },\n      {\n        \"name\": \"RECENT_ACTIONS\",\n        \"class_name\": \"RecentActionsDurableObject\"\n      }\n    ]\n  },\n  \"migrations\": [\n    {\n      \"tag\": \"void-durable-streams-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamsDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-directory-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamDirectoryDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-signing-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamSigningDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-stream-subscriptions-v1\",\n      \"new_sqlite_classes\": [\n        \"StreamSubscriptionsDurableObject\"\n      ]\n    },\n    {\n      \"tag\": \"void-durable-recent-actions-v1\",\n      \"new_sqlite_classes\": [\n        \"RecentActionsDurableObject\"\n      ]\n    }\n  ],\n  \"send_email\": [\n    {\n      \"name\": \"SEND_EMAIL\"\n    }\n  ],\n  \"vars\": {\n    \"__VOID_EMAIL_FROM\": \"Example shop <events@shop.ubuntusoftware.net>\"\n  }\n}\n"
 }

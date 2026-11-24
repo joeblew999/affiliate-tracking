@@ -9,5 +9,5 @@ import { hub } from "../../src/hub.ts";
 export const GET = defineHandler((c) => {
   const stream = c.req.param("path") ?? "";
   if (!mayRead(c.get("shopUser"), stream)) return c.text("Not yours", 403);
-  return hub.read(c.req.raw, stream);
+  return hub.pass(c.req.raw, stream);
 });

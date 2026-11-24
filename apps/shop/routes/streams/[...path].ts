@@ -11,5 +11,5 @@ export const GET = defineHandler((c) => {
   const user = getUser();
   if (!mayRead(user ? { id: user.id, role: user.role } : null, stream))
     return c.text("Not yours", 403);
-  return hub.read(c.req.raw, stream);
+  return hub.pass(c.req.raw, stream);
 });

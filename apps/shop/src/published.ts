@@ -6,11 +6,10 @@
 // publish() from anywhere: the event goes onto the shop's queue (queues/published.ts) first, so
 // what's publishing never waits on the hub or fails because of it, and a failed write is tried
 // again.
-import { publishNow } from "activity/bus";
 import { SIGNUPS_STREAM, STRIPE_STREAM, type Signup } from "affiliates/client";
 import type Stripe from "stripe";
 import { queues } from "./activity.ts";
-import { hub } from "./hub.ts";
+import { publishNow } from "./hub.ts";
 
 /** What the shop publishes: the stream it goes to, what it's called, and what it says. */
 export type Published =
@@ -22,4 +21,4 @@ export type Published =
 export const publish = (event: Published) => queues.published.send(event);
 
 /** Write an event to its stream now (the queue's consumer). */
-export const write = ({ stream, type, data }: Published) => publishNow(hub, stream, type, data);
+export const write = ({ stream, type, data }: Published) => publishNow(stream, type, data);

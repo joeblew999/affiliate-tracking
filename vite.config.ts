@@ -23,8 +23,13 @@ export default defineConfig({
       "demo:production": { command: "vpx scripts/demo-production.ts", cache: false },
       // Both apps: the shop on http://localhost:5173, the affiliate service on http://localhost:5174.
       dev: { command: "vp run -r --parallel dev", cache: false },
-      // Chromium for the browser tests (once per machine).
-      "install:browser": { command: "playwright install --with-deps chromium", cache: false },
+      // Chromium for the browser tests, inside the repo (node_modules), not the machine's cache:
+      // PLAYWRIGHT_BROWSERS_PATH=0, which the test projects below set too. Again after
+      // `vp install` brings a new Playwright.
+      "install:browser": {
+        command: "PLAYWRIGHT_BROWSERS_PATH=0 playwright install --with-deps chromium",
+        cache: false,
+      },
       // The tests (e2e/dev/), against both apps started fresh for the run (e2e/apps.ts), so they
       // never touch your own local data or your `vp run dev`. Cached as Void's own repo caches its
       // tests: with none of the files the run reads changed, it replays the last result at once.
@@ -62,6 +67,8 @@ export default defineConfig({
       {
         test: {
           name: "dev",
+          // The browser install:browser put in node_modules.
+          env: { PLAYWRIGHT_BROWSERS_PATH: "0" },
           include: ["e2e/dev/*.test.ts"],
           globalSetup: ["e2e/dev/setup.ts"],
           setupFiles: ["e2e/dev/each-file.ts"],
@@ -88,6 +95,8 @@ export default defineConfig({
       {
         test: {
           name: "stripe",
+          // The browser install:browser put in node_modules.
+          env: { PLAYWRIGHT_BROWSERS_PATH: "0" },
           include: ["e2e/stripe/*.test.ts"],
           globalSetup: ["e2e/stripe/setup.ts"],
           setupFiles: ["e2e/dev/each-file.ts"],

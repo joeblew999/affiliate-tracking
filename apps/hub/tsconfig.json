@@ -13,5 +13,5 @@
     "lib": ["ES2025"],
     "types": ["void/env"]
   },
-  "include": ["src", "routes", "crons", "durable-objects", "middleware", "*.ts"]
+  "include": ["src", "routes", "crons", "durable-objects", "middleware", "db", "*.ts"]
 }

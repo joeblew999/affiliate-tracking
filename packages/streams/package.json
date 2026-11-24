@@ -4,7 +4,9 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./subscriber": "./src/subscriber.ts"
+    "./subscriber": "./src/subscriber.ts",
+    "./d1": "./src/d1/index.ts",
+    "./d1/schema": "./src/d1/schema.ts"
   },
   "scripts": {
     "typecheck": "tsc && tsc -p test"

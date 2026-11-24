@@ -1,11 +1,25 @@
-// A subscriber's side (PROTOCOL.md, section 7.1): checking a wake really is from the server,
-// reading a stream on from where it was acknowledged, and acknowledging. For a Void app that is
-// woken at a route: the route checks the wake and queues it, and the queue's consumer does the
-// reading, the work and the acknowledging. `fetch` here is however the app reaches the server:
-// the runtime's, or a service binding's.
+// A subscriber's side (PROTOCOL.md, section 7.1): checking a wake really is from the server, and
+// acknowledging. Reading the stream on from where it was acknowledged is the protocol's ordinary
+// read (@durable-streams/client). For a Void app that is woken at a route: the route checks the
+// wake and queues it, and the queue's consumer does the reading, the work and the acknowledging.
+// `fetch` here is however the app reaches the server: the runtime's, or a service binding's.
 import { fromBase64url, type PublicJwk } from "./keys.ts";
 
 export type { PublicJwk };
+
+/**
+ * On a write's answer: the subscriptions told of it, their ids comma-separated (each URI-encoded).
+ * Not the protocol's own: the one header the server adds to it (handler.ts), for a writer that
+ * wants to know who will be woken. Any other client ignores it.
+ */
+export const SUBSCRIPTIONS_HEADER = "stream-subscriptions";
+
+/** The subscriptions a write's answer says were told of it. */
+export const toldOf = (response: Response): string[] =>
+  (response.headers.get(SUBSCRIPTIONS_HEADER) ?? "")
+    .split(",")
+    .filter(Boolean)
+    .map(decodeURIComponent);
 
 /** A wake, as the server sends it. */
 export type Wake = {
@@ -69,27 +83,6 @@ export async function serverKeys(fetch: Fetch, root: string): Promise<PublicJwk[
   const response = await fetch(`${root}/__ds/jwks.json`);
   if (!response.ok) throw new Error(`streams keys: ${response.status} ${await response.text()}`);
   return ((await response.json()) as { keys: PublicJwk[] }).keys;
-}
-
-/**
- * A JSON stream's events after `offset`, up to where it ends now, and that end (the offset to
- * acknowledge once they're dealt with). `url` is the stream's address.
- */
-export async function readOn<Event>(
-  fetch: Fetch,
-  url: string,
-  offset: string,
-): Promise<{ events: Event[]; offset: string }> {
-  const events: Event[] = [];
-  let at = offset;
-  for (;;) {
-    const response = await fetch(`${url}?offset=${encodeURIComponent(at)}`);
-    if (!response.ok) throw new Error(`stream ${url}: ${response.status} ${await response.text()}`);
-    events.push(...((await response.json()) as Event[]));
-    at = response.headers.get("stream-next-offset") ?? at;
-    // The server gives a long stream in parts; it says when this was the last of them.
-    if (response.headers.get("stream-up-to-date") === "true") return { events, offset: at };
-  }
 }
 
 /**

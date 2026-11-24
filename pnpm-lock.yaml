@@ -153,9 +153,6 @@ importers:
       shadcn:
         specifier: 4.23.0
         version: 4.23.0(supports-color@10.2.2)
-      streams:
-        specifier: workspace:*
-        version: link:../../packages/streams
       stripe:
         specifier: 'catalog:'
         version: 23.2.0(@types/node@26.6.6)
@@ -196,9 +193,9 @@ importers:
 
   apps/hub:
     dependencies:
-      '@durable-streams/server-cloudflare':
-        specifier: 0.1.1
-        version: 0.1.1
+      '@durable-streams/client':
+        specifier: 0.2.7
+        version: 0.2.7
       hono:
         specifier: 'catalog:'
         version: 4.13.19
@@ -312,15 +309,9 @@ importers:
       '@void/react':
         specifier: 'catalog:'
         version: 1.11.0(@voidzero-dev/vite-plus-core@1.6.0(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(typescript@7.0.2)(yaml@2.9.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(void@1.11.0(@types/node@26.6.6)(@voidzero-dev/vite-plus-core@1.6.0(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(typescript@7.0.2)(yaml@2.9.1))(arktype@2.2.10)(kysely@0.29.9)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(valibot@1.5.0(typescript@7.0.2))(vitest@5.1.0)(workerd@1.20261116.1)(zod@4.6.7))
-      hub:
-        specifier: workspace:*
-        version: link:../../apps/hub
       react:
         specifier: '*'
         version: 19.3.1
-      streams:
-        specifier: workspace:*
-        version: link:../streams
       void:
         specifier: 'catalog:'
         version: 1.11.0(@types/node@26.6.6)(@voidzero-dev/vite-plus-core@1.6.0(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(typescript@7.0.2)(yaml@2.9.1))(arktype@2.2.10)(kysely@0.29.9)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(valibot@1.5.0(typescript@7.0.2))(vitest@5.1.0)(workerd@1.20261116.1)(zod@4.6.7)
@@ -362,9 +353,6 @@ importers:
 
   packages/streams/app:
     dependencies:
-      '@durable-streams/server-cloudflare':
-        specifier: 0.1.1
-        version: 0.1.1
       streams:
         specifier: workspace:*
         version: link:..
@@ -749,9 +737,6 @@ packages:
     resolution: {integrity: sha512-oxWbPEo8NO1Ruv9UgUVu3OswdE2z5ERhjccaujlpwe4tWuVd+Y/kdx+HtrkOnwN+bnRHTlxKYUNY8JTyrnhKew==}
     engines: {node: '>=18.0.0'}
     hasBin: true
-
-  '@durable-streams/server-cloudflare@0.1.1':
-    resolution: {integrity: sha512-zWH8d/YVrJWqqtWFsnJJInAVxi4NseC1k5AYyEftALydGtA3S7wPFI8dEPoMHJ1Fg3I04M7iSYPiSZk7uzCYMw==}
 
   '@durable-streams/server-conformance-tests@0.3.7':
     resolution: {integrity: sha512-1hf14EuaTgLEgIxa5LBLl7623N87RV5zccLFpfCQhCioI3pYRX07k9XyIzAUFIT42U693HD4FUF+Lz9W+GQXVA==}
@@ -4068,10 +4053,12 @@ packages:
   yuku-core@0.19.0:
     resolution: {integrity: sha512-kYK9e1XdfirNhkipzW0wmMcSWcVF/CWnuugodfVYRCUwvoBefweL9HzB96OiKEhsx78V5WbUxbJqlizMX869Qg==}
     engines: {node: '>=14.18.0'}
+    deprecated: 'Yuku is now one package with one core. Use "yuku" instead: https://yuku.fyi/javascript/. Existing installs keep working but get no more fixes.'
 
   yuku-parser@0.19.0:
     resolution: {integrity: sha512-XrBh9ZiQK5mJVRxZBAvD6LwRyAYrK3MFtH3+onyuxFL5hFD44EC3QOmIC1FjTj6H2MMwq46/NAI+NZxLZPZgxg==}
     engines: {node: '>=14.18.0'}
+    deprecated: 'Yuku is now one package with one core. Use "yuku" instead: https://yuku.fyi/javascript/. Existing installs keep working but get no more fixes.'
 
   zod@4.6.6:
     resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
@@ -4484,8 +4471,6 @@ snapshots:
   '@durable-streams/client@0.2.7':
     dependencies:
       '@microsoft/fetch-event-source': 2.0.1
-
-  '@durable-streams/server-cloudflare@0.1.1': {}
 
   '@durable-streams/server-conformance-tests@0.3.7(@types/node@26.6.6)(@vitest/browser-preview@5.1.0)(@vitest/ui@5.1.0)(@voidzero-dev/vite-plus-core@1.6.0(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(typescript@7.0.2)(yaml@2.9.1))':
     dependencies:

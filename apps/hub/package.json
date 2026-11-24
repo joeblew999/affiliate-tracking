@@ -3,15 +3,18 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./client": "./client.ts"
+    "./client": "./client.ts",
+    "./bus": "./bus.ts"
   },
   "scripts": {
     "dev": "vp dev",
     "postinstall": "void prepare",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "db:migrate": "void db migrate",
+    "db:generate": "void db generate"
   },
   "dependencies": {
-    "@durable-streams/server-cloudflare": "0.1.1",
+    "@durable-streams/client": "0.2.7",
     "hono": "catalog:",
     "streams": "workspace:*",
     "zod": "catalog:"

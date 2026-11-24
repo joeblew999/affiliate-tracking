@@ -106,7 +106,7 @@ export type SubscriptionState = {
 };
 
 /** What the subscription's object can reach: the streams' own Durable Objects. */
-export type StreamsBindings = Record<string, unknown> & { STREAMS: DurableObjectNamespace };
+export type StreamsBindings = Record<string, unknown>;
 
 type Context = DurableStateContext<SubscriptionState, StreamsBindings>;
 
@@ -341,6 +341,11 @@ async function acknowledge(context: Context, token: string, request: WakeRequest
 
 export type SubscriptionOptions = {
   /**
+   * The streams server (streams/d1's createD1Streams), which a pull-wake's wake events are written
+   * to its wake stream through.
+   */
+  write: (env: StreamsBindings, request: Request) => Promise<Response>;
+  /**
    * How a wake reaches a webhook: the runtime's fetch unless the app has a better way to the
    * subscriber, such as a service binding.
    */
@@ -401,23 +406,25 @@ async function deliver(context: Context, options: SubscriptionOptions) {
 }
 
 /** Write the waiting wake events to the wake stream (pull-wake), which the app has to have made. */
-async function writeWakeEvents(context: Context) {
+async function writeWakeEvents(context: Context, options: SubscriptionOptions) {
   const state = context.state;
   const events = state.wake_events;
   state.wake_events = [];
   state.wake_events_at = null;
   const wakeStream = state.record?.wake_stream;
   if (!wakeStream || events.length === 0) return;
-  const url = `${state.base}/${wakeStream}`;
-  const streams = context.env.STREAMS;
-  const stream = streams.get(streams.idFromName(new URL(url).pathname));
-  const response = await stream.fetch(url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(
-      events.map((event) => ({ type: "wake", subscription_id: state.record?.id, ...event })),
-    ),
-  });
+  const url = new URL(`${state.base}/${wakeStream}`);
+  // To the streams server as a request for the stream's own path (it serves streams at their path).
+  const response = await options.write(
+    context.env,
+    new Request(new URL(url.pathname, url.origin), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(
+        events.map((event) => ({ type: "wake", subscription_id: state.record?.id, ...event })),
+      ),
+    }),
+  );
   if (response.status === 404) console.warn("streams: wake stream does not exist", wakeStream);
   else if (!response.ok) {
     // Kept, and tried again in a second.
@@ -619,7 +626,7 @@ export type SubscriptionMethods = typeof methods;
  * subscription, by its id.
  */
 export function subscriptionState(
-  options: SubscriptionOptions = {},
+  options: SubscriptionOptions,
 ): DurableStateDefinition<SubscriptionState, StreamsBindings, SubscriptionMethods> {
   return {
     initialState,
@@ -629,7 +636,7 @@ export function subscriptionState(
       const state = context.state;
       if (!state.record) return;
       if (state.wake_events_at !== null && state.wake_events_at <= Date.now())
-        await writeWakeEvents(context);
+        await writeWakeEvents(context, options);
       // Nobody acknowledged in time: the wake is over, and if there's still work, a new one starts.
       if (state.lease_until !== null && state.lease_until <= Date.now()) {
         endWake(state);
